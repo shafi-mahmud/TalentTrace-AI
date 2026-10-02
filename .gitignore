@@ -1,0 +1,38 @@
+# Environment & Secrets (BID N7 Page 18, Section 11.4 Page 31)
+.env
+*.env
+*.pem
+*.key
+
+# Candidate Data & Privacy (BID N13, N14 Page 19, CN5 Page 33)
+data/
+uploads/
+recordings/
+transcripts/
+*.pdf
+*.docx
+*.mp3
+*.wav
+*.mp4
+*.webm
+
+# Database Persistence (BID N26 Page 20, D5 Page 22)
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Jupyter & VS Code
+.ipynb_checkpoints/
+.vscode/
+
+# Node / Frontend
+node_modules/
+dist/
