@@ -14,6 +14,7 @@ from app.rag.contracts import (
     PolicyChunkMetadata,
     chunk_sha256,
 )
+from app.rag.embeddings import BGEEmbeddingService, BGETokenCounter
 
 
 class TokenCounter(Protocol):
@@ -26,7 +27,7 @@ class TokenCounter(Protocol):
 class ChunkingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    chunk_size_tokens: int = Field(default=700, strict=True, ge=500, le=800)
+    chunk_size_tokens: int = Field(default=700, strict=True, ge=400, le=800)
     overlap_tokens: int = Field(default=75, strict=True, ge=50, le=100)
 
     @model_validator(mode="after")
@@ -88,6 +89,26 @@ def chunk_company_policy(
     return tuple(
         _create_chunk(source, draft, index)
         for index, draft in enumerate(drafts)
+    )
+
+
+def chunk_company_policy_for_semantic_retrieval(
+    source: CompanyPolicySource,
+    *,
+    embedding_service: BGEEmbeddingService | None = None,
+) -> tuple[PolicyChunk, ...]:
+    """Prepare cited policy chunks at 400 BGE tokens with up to 50 overlap.
+
+    Only the service's tokenizer is used; no vectors are generated. An injected
+    service can share an already loaded backend or use a fake tokenizer in tests.
+    Headings count toward the budget. Counts exclude model special tokens, leaving
+    room below BGE's 512-token limit. The lexical demo never calls this helper.
+    """
+
+    return chunk_company_policy(
+        source,
+        BGETokenCounter(embedding_service),
+        ChunkingConfig(chunk_size_tokens=400, overlap_tokens=50),
     )
 
 

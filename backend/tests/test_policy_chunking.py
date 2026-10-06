@@ -6,9 +6,14 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from app.rag import chunking, contracts
-from app.rag.chunking import ChunkingConfig, chunk_company_policy
+from app.rag import chunking, contracts, embeddings, retrieval
+from app.rag.chunking import (
+    ChunkingConfig,
+    chunk_company_policy,
+    chunk_company_policy_for_semantic_retrieval,
+)
 from app.rag.contracts import CompanyPolicySource
+from app.rag.embeddings import BGEEmbeddingService, BGETokenCounter
 
 
 SOURCE_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -336,7 +341,7 @@ def test_chunk_and_metadata_outputs_are_immutable() -> None:
         chunk.metadata.chunk_index = 99
 
 
-def test_foundation_has_no_database_network_embedding_or_llm_imports() -> None:
+def test_foundation_has_no_database_network_ml_library_or_llm_imports() -> None:
     forbidden_roots = {
         "asyncpg",
         "groq",
@@ -363,3 +368,206 @@ def test_foundation_has_no_database_network_embedding_or_llm_imports() -> None:
                 imported_roots.add(node.module.partition(".")[0])
 
     assert imported_roots.isdisjoint(forbidden_roots)
+
+
+class SyntheticSubwordTokenizer:
+    """Three synthetic token IDs per word, deliberately unlike whitespace count."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[bool, bool]] = []
+
+    def encode(
+        self, text: str, *, add_special_tokens: bool, truncation: bool
+    ) -> list[int]:
+        self.calls.append((add_special_tokens, truncation))
+        count = len(text.split()) * 3 + (2 if add_special_tokens else 0)
+        return list(range(count))
+
+
+class TokenizerOnlyBackend:
+    def __init__(self) -> None:
+        self.tokenizer = SyntheticSubwordTokenizer()
+
+    def encode(self, *args: object, **kwargs: object) -> object:
+        pytest.fail("Semantic chunking must not generate embeddings.")
+
+
+def semantic_source(*, heading: str = "Security", words: int = 900) -> CompanyPolicySource:
+    data = source_data()
+    data["text"] = f"# {heading}\n\n{repeated_words('control', words)}"
+    return CompanyPolicySource.model_validate(data)
+
+
+def shared_overlap(previous: str, following: str) -> str:
+    """Find the longest common word suffix/prefix for unique synthetic body words."""
+    before, after = previous.split(), following.split()
+    overlap = ""
+    for size in range(1, min(len(before), len(after)) + 1):
+        if before[-size:] == after[:size]:
+            overlap = " ".join(before[-size:])
+    return overlap
+
+
+def test_semantic_config_is_valid_without_changing_generic_defaults() -> None:
+    config = ChunkingConfig(chunk_size_tokens=400, overlap_tokens=50)
+    assert (config.chunk_size_tokens, config.overlap_tokens) == (400, 50)
+    assert ChunkingConfig().model_dump() == {
+        "chunk_size_tokens": 700,
+        "overlap_tokens": 75,
+    }
+
+
+@pytest.mark.parametrize(
+    "invalid_config",
+    [
+        {"chunk_size_tokens": 399},
+        {"chunk_size_tokens": 801},
+        {"overlap_tokens": 49},
+        {"overlap_tokens": 101},
+    ],
+)
+def test_chunking_bounds_are_not_broadened_unnecessarily(
+    invalid_config: dict[str, int],
+) -> None:
+    with pytest.raises(ValidationError):
+        ChunkingConfig(**invalid_config)
+
+
+def test_default_semantic_helper_uses_bge_counter_and_400_50(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = TokenizerOnlyBackend()
+    monkeypatch.setattr(embeddings, "_load_bge_backend", lambda: backend)
+    observed = []
+    original_chunker = chunk_company_policy
+
+    def capture(source, counter, config):
+        observed.append((type(counter), config.model_dump()))
+        return original_chunker(source, counter, config)
+
+    monkeypatch.setattr(chunking, "chunk_company_policy", capture)
+    chunks = chunk_company_policy_for_semantic_retrieval(semantic_source())
+
+    assert chunks
+    assert observed == [(BGETokenCounter, {
+        "chunk_size_tokens": 400,
+        "overlap_tokens": 50,
+    })]
+    assert backend.tokenizer.calls
+    assert all(call == (False, False) for call in backend.tokenizer.calls)
+
+
+def test_semantic_chunks_follow_tokenizer_budget_and_are_deterministic() -> None:
+    backend = TokenizerOnlyBackend()
+    service = BGEEmbeddingService(backend_factory=lambda: backend)
+    counter = BGETokenCounter(service)
+    source = semantic_source()
+
+    first = chunk_company_policy_for_semantic_retrieval(source, embedding_service=service)
+    second = chunk_company_policy_for_semantic_retrieval(source, embedding_service=service)
+
+    assert len(first) > 2
+    assert first == second
+    assert [item.metadata.chunk_index for item in first] == list(range(len(first)))
+    assert [item.metadata.citation_id for item in first] == [
+        item.metadata.citation_id for item in second
+    ]
+    for item in first:
+        assert item.metadata.token_count == counter.count_tokens(item.text)
+        assert item.metadata.token_count == len(item.text.split()) * 3
+        assert 0 < item.metadata.token_count <= 400
+        assert item.metadata.token_count + 2 < embeddings.BGE_MAX_SEQUENCE_TOKENS
+        assert item.metadata.collection == "company_policy"
+        assert item.metadata.heading_paths == (("Security",),)
+
+
+def test_heading_context_consumes_semantic_token_budget() -> None:
+    backend = TokenizerOnlyBackend()
+    service = BGEEmbeddingService(backend_factory=lambda: backend)
+    counter = BGETokenCounter(service)
+    heading = " ".join(f"section{i}" for i in range(15))
+    source = semantic_source(heading=heading, words=200)
+
+    chunks = chunk_company_policy_for_semantic_retrieval(source, embedding_service=service)
+
+    prefix, body = chunks[0].text.split("\n\n", 1)
+    assert prefix == f"Heading: {heading}"
+    assert chunks[0].metadata.token_count == (
+        counter.count_tokens(prefix) + counter.count_tokens(body)
+    )
+    assert counter.count_tokens(prefix) > 0
+    assert chunks[0].metadata.token_count <= 400
+    assert all(item.metadata.heading_paths == ((heading,),) for item in chunks)
+    body_words = set(repeated_words("control", 200).split())
+    assert body_words.issubset(set(" ".join(item.text for item in chunks).split()))
+
+
+def test_semantic_overlap_is_positive_and_at_most_50_tokenizer_tokens() -> None:
+    backend = TokenizerOnlyBackend()
+    service = BGEEmbeddingService(backend_factory=lambda: backend)
+    counter = BGETokenCounter(service)
+    chunks = chunk_company_policy_for_semantic_retrieval(
+        semantic_source(), embedding_service=service
+    )
+
+    overlap_counts = [
+        counter.count_tokens(shared_overlap(previous.text, following.text))
+        for previous, following in zip(chunks, chunks[1:])
+    ]
+    assert overlap_counts
+    assert all(0 < count <= 50 for count in overlap_counts)
+    # Three-token word boundaries cannot make exactly 50 tokens of overlap.
+    assert all(count < 50 for count in overlap_counts)
+
+
+def test_small_semantic_sections_combine_and_keep_their_headings() -> None:
+    data = source_data()
+    data["text"] = "# Purpose\n\nSynthetic hiring principles.\n\n# Scope\n\nSynthetic engineering policy."
+    source = CompanyPolicySource.model_validate(data)
+    backend = TokenizerOnlyBackend()
+    service = BGEEmbeddingService(backend_factory=lambda: backend)
+
+    chunks = chunk_company_policy_for_semantic_retrieval(source, embedding_service=service)
+
+    assert len(chunks) == 1
+    assert chunks[0].metadata.heading_paths == (("Purpose",), ("Scope",))
+    assert "Heading: Purpose" in chunks[0].text
+    assert "Heading: Scope" in chunks[0].text
+    assert chunks[0].metadata.token_count <= 400
+
+
+def test_lexical_demo_keeps_explicit_500_50_and_never_loads_bge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_load():
+        pytest.fail("The lexical demo must not load BGE.")
+
+    monkeypatch.setattr(embeddings, "_load_bge_backend", unexpected_load)
+    observed = []
+
+    def capture(source, counter, config):
+        observed.append((type(counter), config.model_dump()))
+        return chunk_company_policy(source, counter, config)
+
+    monkeypatch.setattr(retrieval, "chunk_company_policy", capture)
+    retriever = retrieval.create_demo_company_policy_retriever()
+
+    assert isinstance(retriever, retrieval.DeterministicLexicalCompanyPolicyRetriever)
+    assert observed == [(retrieval.WhitespaceTokenCounter, {
+        "chunk_size_tokens": 500,
+        "overlap_tokens": 50,
+    })]
+
+
+@pytest.mark.parametrize("invalid_count", [-1, 1.5, True, "50", None])
+def test_invalid_counter_results_remain_rejected(invalid_count: object) -> None:
+    class InvalidCounter:
+        def count_tokens(self, text: str):
+            return invalid_count
+
+    with pytest.raises(ValueError, match="non-negative integer"):
+        chunk_company_policy(
+            semantic_source(),
+            InvalidCounter(),
+            ChunkingConfig(chunk_size_tokens=400, overlap_tokens=50),
+        )
