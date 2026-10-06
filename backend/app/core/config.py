@@ -1,17 +1,23 @@
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
+class ConfigurationError(RuntimeError):
+    """Raised when application configuration cannot be used safely."""
+
+
 class Settings(BaseSettings):
     app_name: str = "TalentTrace AI"
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
-    database_url: str | None = None
+    database_url: SecretStr | None = None
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"]
     )
@@ -20,7 +26,25 @@ class Settings(BaseSettings):
         env_file=REPOSITORY_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.database_url is None:
+            return
+
+        database_url = self.database_url.get_secret_value()
+        try:
+            scheme = urlsplit(database_url).scheme.lower()
+        except ValueError:
+            raise ConfigurationError(
+                "DATABASE_URL must be a valid postgresql+asyncpg URL."
+            ) from None
+
+        if scheme != "postgresql+asyncpg":
+            raise ConfigurationError(
+                "DATABASE_URL must use the postgresql+asyncpg scheme."
+            )
 
 
 settings = Settings()
