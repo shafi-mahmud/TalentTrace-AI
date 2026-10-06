@@ -21,6 +21,7 @@ from app.schemas.job_description import JobDescriptionGenerationRequest
 DEMO_POLICY_PATH = Path(__file__).resolve().parent / "demo_company_policy.md"
 DEMO_POLICY_SOURCE_ID = UUID("6c3edcb7-1a63-4fee-b535-b6155efdbf42")
 DEMO_POLICY_TITLE = "Synthetic Demo Company Policy"
+DEMO_POLICY_SOURCE_VERSION = "synthetic-demo-v1"
 MAX_DEMO_RETRIEVAL_RESULTS = 4
 
 _TERM_PATTERN = re.compile(r"[a-z0-9]+")
@@ -144,6 +145,19 @@ class DeterministicLexicalCompanyPolicyRetriever:
         return selected
 
 
+def load_demo_company_policy_source() -> CompanyPolicySource:
+    """Load only the fixed, explicitly synthetic demo policy source."""
+    try:
+        return CompanyPolicySource(
+            source_id=DEMO_POLICY_SOURCE_ID,
+            source_version=DEMO_POLICY_SOURCE_VERSION,
+            title=DEMO_POLICY_TITLE,
+            text=DEMO_POLICY_PATH.read_text(encoding="utf-8"),
+        )
+    except (OSError, ValueError):
+        raise PolicyRetrievalError("Synthetic company-policy context is unavailable.") from None
+
+
 def create_demo_company_policy_retriever(
     *,
     top_k: int = MAX_DEMO_RETRIEVAL_RESULTS,
@@ -151,13 +165,7 @@ def create_demo_company_policy_retriever(
     """Build the explicitly synthetic, non-vector demo retriever."""
 
     try:
-        policy_text = DEMO_POLICY_PATH.read_text(encoding="utf-8")
-        source = CompanyPolicySource(
-            source_id=DEMO_POLICY_SOURCE_ID,
-            source_version="synthetic-demo-v1",
-            title=DEMO_POLICY_TITLE,
-            text=policy_text,
-        )
+        source = load_demo_company_policy_source()
         chunks = chunk_company_policy(
             source,
             WhitespaceTokenCounter(),
