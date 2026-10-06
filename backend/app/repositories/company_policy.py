@@ -7,6 +7,7 @@ from numbers import Real
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -19,6 +20,7 @@ from app.rag.contracts import (
     chunk_sha256,
 )
 from app.rag.embeddings import BGE_EMBEDDING_DIMENSION, BGE_MODEL_NAME
+from app.rag.retrieval import PolicyRetrievalError, RetrievedPolicyChunk
 
 
 class PolicyPersistenceError(ValueError):
@@ -45,7 +47,7 @@ def _validate_embedding(values: Sequence[float]) -> list[float]:
 
 
 class CompanyPolicyRepository:
-    """Write a complete prepared source version, without retrieval or model calls.
+    """Persist prepared versions and query one explicit version, without model calls.
 
     Existing versions are never overwritten. Re-ingestion violates the unique
     constraint and rolls back; a changed document needs a new source_version.
@@ -53,6 +55,95 @@ class CompanyPolicyRepository:
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
+
+    async def find_nearest_chunks(
+        self,
+        document_id: UUID,
+        query_vector: Sequence[float],
+        *,
+        top_k: int = 4,
+    ) -> tuple[RetrievedPolicyChunk, ...]:
+        """Exact cosine search in one company-policy document, never all versions.
+
+        No embeddings or arbitrary JSON metadata are returned. This is a vector
+        query boundary, not request-to-embedding orchestration or a JD retriever.
+        """
+        if not isinstance(document_id, UUID):
+            raise PolicyRetrievalError("A valid company-policy document UUID is required.")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 5:
+            raise PolicyRetrievalError("top_k must be an integer between 1 and 5.")
+        try:
+            vector = _validate_embedding(query_vector)
+        except PolicyPersistenceError:
+            raise PolicyRetrievalError("Query vector must be finite, normalized and have 384 dimensions.") from None
+
+        source_query = select(
+            KnowledgeDocument.source, KnowledgeDocument.source_version,
+            KnowledgeDocument.title, KnowledgeDocument.content_sha256,
+        ).where(
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.knowledge_type == COMPANY_POLICY_COLLECTION,
+        )
+        distance = KnowledgeChunk.embedding.cosine_distance(vector)
+        chunk_query = select(
+            KnowledgeChunk.citation_id, KnowledgeChunk.chunk_index,
+            KnowledgeChunk.chunk_sha256, KnowledgeChunk.chunk_text,
+            KnowledgeChunk.token_count, KnowledgeChunk.chunk_metadata,
+        ).where(
+            KnowledgeChunk.document_id == document_id,
+            KnowledgeChunk.knowledge_type == COMPANY_POLICY_COLLECTION,
+            KnowledgeChunk.embedding_model == BGE_MODEL_NAME,
+            # Zero/corrupt stored vectors have no usable cosine distance.
+            distance >= 0, distance <= 2,
+        ).order_by(
+            distance.asc(), KnowledgeChunk.chunk_index.asc(),
+            KnowledgeChunk.citation_id.asc(),
+        ).limit(top_k)
+        try:
+            async with self._session_factory() as session:
+                source_row = (await session.execute(source_query)).mappings().one_or_none()
+                if source_row is None:
+                    raise PolicyRetrievalError("Company-policy document was not found.")
+                rows = (await session.execute(chunk_query)).mappings().all()
+        except PolicyRetrievalError:
+            raise
+        except Exception:
+            # Keep driver, connection and session-construction failures controlled
+            # too. This catch covers only database I/O, not input/output validation.
+            raise PolicyRetrievalError("Company-policy database retrieval failed.") from None
+        if not rows:
+            raise PolicyRetrievalError("No usable company-policy chunks are available for this document.")
+        try:
+            source = PolicySourceMetadata(
+                source_id=source_row["source"], source_version=source_row["source_version"],
+                title=source_row["title"], content_sha256=source_row["content_sha256"],
+            )
+            results = []
+            fingerprint = hashlib.sha256(source.source_version.encode("utf-8")).hexdigest()[:16]
+            for row in rows:
+                metadata = row["chunk_metadata"]
+                if not isinstance(metadata, dict) or set(metadata) != {"heading_paths"}:
+                    raise ValueError("Invalid stored metadata.")
+                chunk = PolicyChunk(
+                    text=row["chunk_text"],
+                    metadata=PolicyChunkMetadata(
+                        citation_id=row["citation_id"], source_id=source.source_id,
+                        source_version=source.source_version,
+                        source_content_sha256=source.content_sha256,
+                        chunk_index=row["chunk_index"], chunk_sha256=row["chunk_sha256"],
+                        token_count=row["token_count"], heading_paths=metadata["heading_paths"],
+                    ),
+                )
+                expected = (
+                    f"policy:{source.source_id.hex}:{fingerprint}:"
+                    f"{source.content_sha256[:16]}:{chunk.metadata.chunk_index:04d}"
+                )
+                if chunk.metadata.citation_id != expected or chunk.metadata.chunk_sha256 != chunk_sha256(chunk.text):
+                    raise ValueError("Invalid stored chunk identity.")
+                results.append(RetrievedPolicyChunk(source=source, chunk=chunk))
+            return tuple(results)
+        except (ValueError, TypeError, KeyError):
+            raise PolicyRetrievalError("Stored company-policy context is invalid.") from None
 
     async def save_source_version(
         self,
