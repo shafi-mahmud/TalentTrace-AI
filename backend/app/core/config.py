@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "TalentTrace AI"
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
+    database_url: str | None = None
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"]
     )
