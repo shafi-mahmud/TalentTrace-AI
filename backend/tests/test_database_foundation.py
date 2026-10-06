@@ -134,9 +134,15 @@ def test_malformed_database_url_does_not_leak_credentials() -> None:
     assert "private-test-password" not in str(captured_error.value)
 
 
-def test_shared_base_has_no_tables() -> None:
+def test_knowledge_models_use_shared_base() -> None:
+    from app.db.models import KnowledgeChunk, KnowledgeDocument
+
     assert issubclass(base_module.Base, DeclarativeBase)
-    assert dict(base_module.Base.metadata.tables) == {}
+    assert KnowledgeDocument.metadata is base_module.Base.metadata
+    assert KnowledgeChunk.metadata is base_module.Base.metadata
+    assert set(base_module.Base.metadata.tables) == {
+        "knowledge_documents", "knowledge_chunks",
+    }
 
 
 def test_engine_factory_requires_url_only_when_called() -> None:
@@ -168,6 +174,7 @@ def test_engine_factory_is_lazy_and_uses_asyncpg(
         assert engine.dialect.name == "postgresql"
         assert engine.dialect.driver == "asyncpg"
         assert engine.echo is False
+        assert engine.sync_engine.hide_parameters is True
         assert connection_attempted is False
     finally:
         asyncio.run(engine.dispose())
@@ -209,11 +216,14 @@ def test_database_modules_import_without_connecting(
 
     monkeypatch.setattr(asyncpg, "connect", fail_if_connected)
 
-    importlib.reload(base_module)
+    # Do not reload Base: existing ORM classes must keep the same registry.
+    importlib.import_module("app.db.models")
     importlib.reload(session_module)
 
     assert connection_attempted is False
     assert not any(
         isinstance(value, AsyncEngine) for value in vars(session_module).values()
     )
-    assert dict(base_module.Base.metadata.tables) == {}
+    assert set(base_module.Base.metadata.tables) == {
+        "knowledge_documents", "knowledge_chunks",
+    }

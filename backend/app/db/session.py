@@ -21,6 +21,7 @@ def create_database_engine(configuration: Settings | None = None) -> AsyncEngine
         return create_async_engine(
             active_settings.database_url.get_secret_value(),
             echo=False,
+            hide_parameters=True,
         )
     except ArgumentError:
         raise ConfigurationError(
