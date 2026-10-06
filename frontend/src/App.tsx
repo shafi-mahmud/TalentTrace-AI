@@ -211,6 +211,23 @@ function App() {
               </button>
             </div>
 
+            <aside className="knowledge-source" aria-labelledby="knowledge-source-title">
+              <div className="knowledge-source-heading">
+                <h3 id="knowledge-source-title">Company Policy Knowledge Source</h3>
+                <span className="demo-badge">Demo policy source</span>
+              </div>
+              <p className="knowledge-source-name">Synthetic Demo Company Policy</p>
+              <dl className="knowledge-source-metadata">
+                <div><dt>Status:</dt><dd>Loaded server-side</dd></div>
+                <div><dt>Retrieval:</dt><dd>Deterministic lexical demo</dd></div>
+              </dl>
+              <p className="knowledge-source-explanation">
+                Relevant policy sections are retrieved automatically when you generate a job description.
+                Recruiters do not need to upload the company policy for each request.
+              </p>
+              <p className="knowledge-source-flow">Knowledge source → Retrieval → Generated grounded JD</p>
+            </aside>
+
             <form onSubmit={handleSubmit} noValidate>
               <fieldset disabled={isGenerating}>
                 <legend className="sr-only">Job description requirements</legend>

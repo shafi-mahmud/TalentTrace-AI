@@ -76,6 +76,22 @@ h1 { margin: 0; color: #1a3934; font-size: clamp(27px, 4vw, 36px); font-weight: 
 .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 24px; border-bottom: 1px solid #e9eeeb; }
 .card-header h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.3px; }
 .card-header p { margin: 5px 0 0; font-size: 13px; color: #697b72; }
+.knowledge-source {
+  margin: 20px 24px 0;
+  padding: 16px;
+  border: 1px solid #d4e2d9;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+.knowledge-source-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.knowledge-source-heading h3 { margin: 0; font-size: 13px; color: #284d3a; }
+.knowledge-source-name { margin: 12px 0 10px; font-size: 13px; font-weight: 600; color: #3f6049; }
+.knowledge-source-metadata { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; font-size: 11px; line-height: 1.7; color: #486956; }
+.knowledge-source-metadata div { display: flex; flex-wrap: wrap; gap: 4px; }
+.knowledge-source-metadata dt { font-weight: 600; }
+.knowledge-source-metadata dd { margin: 0; }
+.knowledge-source-explanation { margin: 12px 0 0; font-size: 12px; line-height: 1.7; color: #61766a; }
+.knowledge-source-flow { margin: 12px 0 0; font-size: 11px; line-height: 1.7; font-weight: 600; color: #2e6753; }
 form { padding: 24px; }
 fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
 .field { margin-bottom: 22px; min-width: 0; }
@@ -160,6 +176,7 @@ fieldset:disabled { opacity: 0.65; }
   .page-intro { padding: 28px 0 24px; }
   .page-description { font-size: 14px; }
   .card-header, form, .result-content { padding: 20px; }
+  .knowledge-source { margin-left: 20px; margin-right: 20px; }
   .form-card .card-header { align-items: flex-start; flex-direction: column; }
   .optional-fields { grid-template-columns: 1fr; gap: 0; }
   .empty-result { padding: 32px 20px; }
