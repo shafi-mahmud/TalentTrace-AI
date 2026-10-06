@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, SecretStr, StringConstraints
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: SecretStr | None = None
+    company_policy_document_id: UUID | None = None
     groq_api_key: SecretStr | None = None
     llm_model: LLMModelName = "openai/gpt-oss-120b"
     cors_origins: list[str] = Field(

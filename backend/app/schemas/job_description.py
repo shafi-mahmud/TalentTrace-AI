@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.rag.contracts import CitationId, Heading, PolicyTitle
+from app.rag.contracts import CitationId, Heading, PolicyTitle, RetrievalMode
 
 
 class EmploymentType(str, Enum):
@@ -223,9 +223,7 @@ class JobDescriptionGenerationResponse(BaseModel):
 
     status: Literal["draft"] = "draft"
     human_review_required: Literal[True] = True
-    retrieval_mode: Literal["deterministic_lexical_demo"] = (
-        "deterministic_lexical_demo"
-    )
+    retrieval_mode: RetrievalMode
     provider: Literal["groq"] = "groq"
     model: ModelName
     job_description: GeneratedJobDescriptionDraft

@@ -39,7 +39,9 @@ def test_application_imports_without_database_url(
 ) -> None:
     connection_attempted = False
     original_settings = config_module.settings
-    no_database_settings = Settings(_env_file=None, database_url=None)
+    no_database_settings = Settings(
+        _env_file=None, database_url=None, company_policy_document_id=None,
+    )
 
     async def fail_if_connected(*args: object, **kwargs: object) -> None:
         nonlocal connection_attempted
@@ -55,6 +57,7 @@ def test_application_imports_without_database_url(
 
         assert main_module.settings is no_database_settings
         assert main_module.settings.database_url is None
+        assert main_module.settings.company_policy_document_id is None
         assert main_module.app is not None
         assert connection_attempted is False
     finally:

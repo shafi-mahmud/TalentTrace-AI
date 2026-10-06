@@ -48,6 +48,8 @@ def draft_with_citation(citation_id: str) -> GeneratedJobDescriptionDraft:
 
 
 class FakeRetriever:
+    retrieval_mode = "semantic_bge_pgvector"
+
     def __init__(
         self,
         context: tuple[RetrievedPolicyChunk, ...],
@@ -100,7 +102,7 @@ def test_workflow_retrieves_generates_and_validates_trusted_citation() -> None:
     assert events == ["retrieve", "generate"]
     assert response.status == "draft"
     assert response.human_review_required is True
-    assert response.retrieval_mode == "deterministic_lexical_demo"
+    assert response.retrieval_mode == "semantic_bge_pgvector"
     assert response.grounding_citations[0].citation_id == citation_id
     assert response.grounding_citations[0].source_title == (
         "Trusted Synthetic Test Policy"
@@ -110,7 +112,7 @@ def test_workflow_retrieves_generates_and_validates_trusted_citation() -> None:
         "retrieve_policy_context",
         "generate_draft",
         "validate_draft",
-    }.issubset(graph_nodes)
+    } == graph_nodes.difference({"__start__", "__end__"})
 
 
 def test_workflow_rejects_fabricated_model_citation() -> None:
@@ -143,3 +145,25 @@ def test_public_grounding_metadata_comes_from_retrieval_not_generation() -> None
     assert response.grounding_citations[0].heading_paths == (
         context[0].chunk.metadata.heading_paths
     )
+
+
+@pytest.mark.parametrize("mode", ["deterministic_lexical_demo", "semantic_bge_pgvector"])
+def test_response_mode_comes_from_retriever(mode) -> None:
+    context = retrieved_context()
+    retriever = FakeRetriever(context, [])
+    retriever.retrieval_mode = mode
+    workflow = JobDescriptionWorkflow(
+        retriever, FakeGenerator(draft_with_citation(context[0].chunk.metadata.citation_id), []),
+    )
+    assert asyncio.run(workflow.generate(request_contract())).retrieval_mode == mode
+
+
+def test_response_rejects_an_unknown_retrieval_mode() -> None:
+    context = retrieved_context()
+    retriever = FakeRetriever(context, [])
+    retriever.retrieval_mode = "unknown-mode"
+    workflow = JobDescriptionWorkflow(
+        retriever, FakeGenerator(draft_with_citation(context[0].chunk.metadata.citation_id), []),
+    )
+    with pytest.raises(GenerationProviderError):
+        asyncio.run(workflow.generate(request_contract()))

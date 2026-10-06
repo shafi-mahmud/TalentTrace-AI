@@ -36,7 +36,7 @@ function isGenerationResponse(
     value.status === "draft" &&
     value.human_review_required === true &&
     value.provider === "groq" &&
-    value.retrieval_mode === "deterministic_lexical_demo" &&
+    value.retrieval_mode === "semantic_bge_pgvector" &&
     typeof value.model === "string" &&
     typeof draft.title === "string" &&
     typeof draft.summary === "string" &&

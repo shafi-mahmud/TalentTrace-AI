@@ -14,6 +14,7 @@ from app.rag.contracts import (
     CompanyPolicySource,
     PolicyChunk,
     PolicySourceMetadata,
+    RetrievalMode,
 )
 from app.schemas.job_description import JobDescriptionGenerationRequest
 
@@ -77,6 +78,8 @@ class RetrievedPolicyChunk(BaseModel):
 class CompanyPolicyRetriever(Protocol):
     """Replaceable interface for company-policy retrieval implementations."""
 
+    retrieval_mode: RetrievalMode
+
     async def retrieve(
         self,
         request: JobDescriptionGenerationRequest,
@@ -93,6 +96,8 @@ class WhitespaceTokenCounter:
 
 class DeterministicLexicalCompanyPolicyRetriever:
     """Rank demo policy chunks by deterministic lexical overlap."""
+
+    retrieval_mode: RetrievalMode = "deterministic_lexical_demo"
 
     def __init__(
         self,

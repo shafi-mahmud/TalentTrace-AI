@@ -31,7 +31,7 @@ export interface PolicyGroundingCitation {
 export interface JobDescriptionGenerationResponse {
   status: "draft";
   human_review_required: true;
-  retrieval_mode: "deterministic_lexical_demo";
+  retrieval_mode: "semantic_bge_pgvector";
   provider: "groq";
   model: string;
   job_description: GeneratedJobDescriptionDraft;

@@ -12,6 +12,7 @@ from app.agents.jd.errors import (
 from app.agents.jd.workflow import get_job_description_workflow
 from app.agents.jd import workflow as workflow_module
 from app.api.routers import job_descriptions
+from app.core.config import Settings
 from app.main import app
 from app.rag.retrieval import PolicyRetrievalError
 from app.schemas.job_description import (
@@ -39,6 +40,7 @@ def valid_request_data() -> dict[str, object]:
 
 def successful_response() -> JobDescriptionGenerationResponse:
     return JobDescriptionGenerationResponse(
+        retrieval_mode="semantic_bge_pgvector",
         model="openai/gpt-oss-120b",
         job_description=GeneratedJobDescriptionDraft(
             title="Backend Engineer",
@@ -117,7 +119,7 @@ def test_valid_request_returns_structured_draft_with_grounding() -> None:
     body = response.json()
     assert body["status"] == "draft"
     assert body["human_review_required"] is True
-    assert body["retrieval_mode"] == "deterministic_lexical_demo"
+    assert body["retrieval_mode"] == "semantic_bge_pgvector"
     assert body["provider"] == "groq"
     assert body["model"] == "openai/gpt-oss-120b"
     assert body["job_description"]["policy_citation_ids"] == [CITATION_ID]
@@ -230,16 +232,23 @@ def test_generation_failures_are_sanitized(
     assert "policy" not in response.text.casefold()
 
 
-def test_policy_loading_failure_is_sanitized_before_workflow_construction(
+def test_semantic_construction_failure_is_sanitized_before_workflow_construction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     private_details = r"PRIVATE_POLICY_DETAIL D:\private\company-policy.md"
 
-    def fail_policy_loading() -> None:
+    def fail_policy_loading(**kwargs: Any) -> None:
         raise PolicyRetrievalError(private_details)
 
+    monkeypatch.setattr(workflow_module, "settings", Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://synthetic:synthetic@localhost/demo",
+        company_policy_document_id="11111111-1111-4111-8111-111111111111",
+    ))
+    monkeypatch.setattr(workflow_module, "create_database_engine", lambda _: object())
+    monkeypatch.setattr(workflow_module, "create_database_session_factory", lambda _: object())
     monkeypatch.setattr(
-        workflow_module, "create_demo_company_policy_retriever", fail_policy_loading
+        workflow_module, "SemanticCompanyPolicyRetriever", fail_policy_loading
     )
     monkeypatch.setattr(
         job_descriptions, "get_job_description_workflow", get_job_description_workflow

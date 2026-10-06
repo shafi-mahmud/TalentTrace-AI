@@ -6,7 +6,12 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
-from app.agents.jd.errors import GenerationProviderError
+from app.agents.jd.errors import (
+    GenerationProviderError,
+    MissingGenerationConfigurationError,
+)
+from app.core.config import ConfigurationError, settings
+from app.db.session import create_database_engine, create_database_session_factory
 from app.integrations.llm.groq import (
     GroqJobDescriptionGenerator,
     JobDescriptionGenerationResult,
@@ -15,8 +20,10 @@ from app.integrations.llm.groq import (
 from app.rag.retrieval import (
     CompanyPolicyRetriever,
     RetrievedPolicyChunk,
-    create_demo_company_policy_retriever,
 )
+from app.rag.embeddings import BGEEmbeddingService
+from app.rag.semantic_retrieval import SemanticCompanyPolicyRetriever
+from app.repositories.company_policy import CompanyPolicyRepository
 from app.schemas.job_description import (
     GeneratedJobDescriptionDraft,
     JobDescriptionGenerationRequest,
@@ -115,6 +122,7 @@ class JobDescriptionWorkflow:
         ]
         try:
             response = JobDescriptionGenerationResponse(
+                retrieval_mode=self._retriever.retrieval_mode,
                 provider=state["provider"],
                 model=state["model"],
                 job_description=state["generated_draft"],
@@ -129,9 +137,24 @@ class JobDescriptionWorkflow:
 
 @lru_cache(maxsize=1)
 def get_job_description_workflow() -> JobDescriptionWorkflow:
-    """Build the reusable demo workflow without checkpointing or persistence."""
+    """Build the semantic workflow lazily; never select a policy implicitly."""
 
+    if settings.database_url is None or settings.company_policy_document_id is None:
+        raise MissingGenerationConfigurationError(
+            "Semantic job-description generation is not configured."
+        )
+    try:
+        engine = create_database_engine(settings)
+    except ConfigurationError:
+        raise MissingGenerationConfigurationError(
+            "Semantic job-description generation is not configured."
+        ) from None
+    repository = CompanyPolicyRepository(create_database_session_factory(engine))
     return JobDescriptionWorkflow(
-        retriever=create_demo_company_policy_retriever(),
-        generator=GroqJobDescriptionGenerator(),
+        retriever=SemanticCompanyPolicyRetriever(
+            repository=repository,
+            embedding_service=BGEEmbeddingService(),
+            document_id=settings.company_policy_document_id,
+        ),
+        generator=GroqJobDescriptionGenerator(configuration=settings),
     )

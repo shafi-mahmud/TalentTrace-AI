@@ -21,6 +21,10 @@ interface FormValues {
   location: string;
 }
 
+const RETRIEVAL_LABELS = {
+  semantic_bge_pgvector: "Semantic BGE + exact pgvector cosine",
+} as const;
+
 const EMPTY_FORM: FormValues = {
   job_title: "",
   role_summary: "",
@@ -96,7 +100,7 @@ function PolicyGrounding({ result }: { result: JobDescriptionGenerationResponse 
         <dl className="generation-metadata">
           <div><dt>Provider</dt><dd>Groq</dd></div>
           <div><dt>Model</dt><dd>{result.model}</dd></div>
-          <div><dt>Retrieval</dt><dd>Deterministic lexical demo</dd></div>
+          <div><dt>Retrieval</dt><dd>{RETRIEVAL_LABELS[result.retrieval_mode]}</dd></div>
         </dl>
         <h4>Citation IDs</h4>
         <ul className="technical-citations">
@@ -218,8 +222,8 @@ function App() {
               </div>
               <p className="knowledge-source-name">Synthetic Demo Company Policy</p>
               <dl className="knowledge-source-metadata">
-                <div><dt>Status:</dt><dd>Loaded server-side</dd></div>
-                <div><dt>Retrieval:</dt><dd>Deterministic lexical demo</dd></div>
+                <div><dt>Status:</dt><dd>Server-side demo source</dd></div>
+                <div><dt>Retrieval:</dt><dd>Semantic BGE + pgvector</dd></div>
               </dl>
               <p className="knowledge-source-explanation">
                 Relevant policy sections are retrieved automatically when you generate a job description.

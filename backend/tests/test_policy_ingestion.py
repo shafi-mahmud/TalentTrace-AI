@@ -253,8 +253,12 @@ BGEEmbeddingService._get_backend = forbidden
 from app.rag.ingestion import ingest_company_policy_source as ingest
 import app.rag.seed_demo_policy as seed
 seed.seed_demo_policy = forbidden
+import app.core.config as config
+config.settings = config.Settings(_env_file=None, database_url=None, company_policy_document_id=None)
 from app.main import app
 import sys
+assert config.settings.database_url is None
+assert config.settings.company_policy_document_id is None
 assert 'sentence_transformers' not in sys.modules
 assert 'torch' not in sys.modules
 assert app is not None

@@ -1,4 +1,4 @@
-"""Standalone semantic policy adapter; the JD workflow still uses lexical retrieval."""
+"""Semantic company-policy retrieval for one explicitly configured document."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from app.rag.embeddings import EmbeddingService
+from app.rag.contracts import RetrievalMode
 from app.rag.retrieval import PolicyRetrievalError, RetrievedPolicyChunk
 from app.repositories.company_policy import CompanyPolicyRepository
 from app.schemas.job_description import JobDescriptionGenerationRequest
@@ -45,6 +46,8 @@ def build_policy_search_query(request: JobDescriptionGenerationRequest) -> str:
 
 class SemanticCompanyPolicyRetriever:
     """Request -> local query embedding -> one explicit document's exact search."""
+
+    retrieval_mode: RetrievalMode = "semantic_bge_pgvector"
 
     def __init__(
         self,

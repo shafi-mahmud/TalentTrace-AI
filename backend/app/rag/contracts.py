@@ -16,6 +16,7 @@ from pydantic import (
 
 
 COMPANY_POLICY_COLLECTION = "company_policy"
+RetrievalMode = Literal["deterministic_lexical_demo", "semantic_bge_pgvector"]
 MAX_POLICY_TEXT_LENGTH = 500_000
 
 SourceVersion = Annotated[
