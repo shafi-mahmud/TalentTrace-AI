@@ -1,0 +1,83 @@
+import { createElement as h } from "react";
+import type { ReactNode } from "react";
+import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
+import type { ChatMessage, RecruiterChatResponse } from "../types/recruiterChat";
+import type { JobDescriptionGenerationResponse } from "../types/jobDescription";
+
+export function replyToChatMessage(reply: RecruiterChatResponse): ChatMessage {
+  return { role: "assistant", text: reply.assistant_message,
+    ...(reply.status === "clarification" ? { missingFields: reply.missing_fields } : {}),
+    ...(reply.status === "jd_generated" ? { jobDescriptionResult: reply.job_description_result } : {}),
+  };
+}
+
+export function RecruiterChatPage({ children }: { children: ReactNode }) {
+  return h("div", { className: "app-shell chat-page" },
+    h("header", { className: "site-header" },
+      h("a", { className: "brand", href: "/", "aria-label": "TalentTrace AI home" },
+        h("span", { className: "brand-mark", "aria-hidden": true }, "T"), "TalentTrace AI"),
+      h("span", { className: "workspace-label" }, "Recruiter workspace")),
+    h("main", null,
+      h("div", { className: "page-intro" },
+        h("h1", null, "Job description assistant"),
+        h("p", { className: "page-description" }, "Describe the role, create a draft and review it in one conversation.")),
+      h("aside", { className: "chat-policy-source", "aria-label": "Company Policy Knowledge Source" },
+        h("span", { className: "demo-badge" }, "Demo policy source"),
+        h("span", null, "Synthetic Demo Company Policy"),
+        h("span", null, "Server-side grounding · Semantic BGE + pgvector")),
+      children));
+}
+
+function resultList(title: string, items: string[], skills = false) {
+  return h("section", { className: "result-section", "aria-label": title },
+    h("h3", null, title), h("ul", { className: skills ? "skill-list" : undefined },
+      ...items.map((item, index) => h("li", { key: index }, item))));
+}
+
+function DraftMessage({ result }: { result: JobDescriptionGenerationResponse }) {
+  const draft = result.job_description;
+  const sources = new Map<string, Set<string>>();
+  for (const citation of result.grounding_citations) {
+    const sections = sources.get(citation.source_title) ?? new Set<string>();
+    for (const path of citation.heading_paths) {
+      const section = path[path.length - 1];
+      if (section && section !== citation.source_title) sections.add(section);
+    }
+    sources.set(citation.source_title, sections);
+  }
+  return h("div", { className: "chat-draft" },
+    h("div", { className: "draft-notice" }, h("span", { className: "draft-badge" }, "Draft"),
+      h("span", {className: "review-badge"}, "Human review required"), h("span", {className: "grounded-badge"}, "Policy grounded"),
+      h("p", null, "This draft has not been approved, saved, or published.")),
+    h("article", { className: "job-description" },
+      h("h2", { className: "generated-title" }, draft.title),
+      h("section", { className: "result-section" }, h("h3", null, "Summary"), h("p", null, draft.summary)),
+      resultList("Responsibilities", draft.responsibilities), resultList("Required Skills", draft.required_skills, true),
+      draft.preferred_skills.length ? resultList("Preferred Skills", draft.preferred_skills) : null,
+      resultList("Qualifications", draft.qualifications)),
+    h("details", { className: "grounding-section", "aria-label": "Policy Grounding" }, h("summary", null, "Policy Grounding · Sources and citations"),
+      h("div", { className: "grounding-header" }, h("h3", null, "Policy Grounding"), h("span", { className: "demo-badge" }, "Demo policy source")),
+      h("p", { className: "grounding-description" }, "Grounded in synthetic company policy for this demo."),
+      h("ul", { className: "policy-sources" }, ...Array.from(sources, ([title, sections]) =>
+        h("li", { key: title }, h("h4", null, title), h("ul", { className: "policy-sections", "aria-label": "Referenced policy sections" },
+          ...Array.from(sections, section => h("li", { key: section }, section)))))),
+      h("details", { className: "technical-details" }, h("summary", null, "Technical details"),
+        h("dl", { className: "generation-metadata" },
+          ...[["Provider", "Groq"], ["Model", result.model], ["Retrieval", "Semantic BGE + exact pgvector cosine"]].map(([label, value]) =>
+            h("div", { key: label }, h("dt", null, label), h("dd", null, value)))),
+        h("h4", null, "Citation IDs"), h("ul", { className: "technical-citations" },
+          ...result.grounding_citations.map(citation => h("li", { key: citation.citation_id },
+            h("span", null, citation.source_title), h("code", null, citation.citation_id)))))),
+  );
+}
+
+// All recruiter/provider content renders as escaped React text, never raw HTML.
+export function ChatMessageView({ message }: { message: ChatMessage }) {
+  return h("div", { className: `chat-message chat-${message.role}` },
+    h("strong", null, message.role === "recruiter" ? "You" : "TalentTrace AI"),
+    h("p", null, message.text),
+    message.missingFields?.length ? h("ul", { "aria-label": "Information needed" },
+      ...message.missingFields.map(field => h("li", { key: field }, MISSING_FIELD_LABELS[field]))) : null,
+    message.role === "assistant" && message.jobDescriptionResult
+      ? h(DraftMessage, { result: message.jobDescriptionResult }) : null);
+}

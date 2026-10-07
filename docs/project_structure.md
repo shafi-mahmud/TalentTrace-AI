@@ -2,7 +2,7 @@
 
 ## Implemented — current foundation
 
-- `frontend/` is a React, Vite, and TypeScript application with a recruiter-facing Job Description form, a synthetic company-policy knowledge-source panel, and a generated draft view with policy citations and a human-review notice.
+- `frontend/` is a React, Vite, and TypeScript application with a chat-first recruiter Job Description screen, inline generated drafts, policy citations, human-review notices.
 - `backend/` is a modular FastAPI application. It currently provides centralized settings, CORS configuration, automatic OpenAPI documentation, and `GET /api/v1/health`.
 - `backend/app/db/` provides one shared SQLAlchemy `DeclarativeBase` and lazy factories for an async PostgreSQL engine and sessions. `DATABASE_URL` is optional during application import, is stored as a secret value when configured, and must use the `postgresql+asyncpg` scheme. SQL parameter values are hidden in engine diagnostics; importing the models or application does not connect to PostgreSQL.
 - `backend/app/db/models/knowledge.py` implements the Database Design v1.3 `KnowledgeDocument` and `KnowledgeChunk` relationship as `knowledge_documents` and `knowledge_chunks`. Each document records one source version, collection (`knowledge_type`), title, and content hash; `source` is an opaque UUID, not a path. Each chunk retains its citation, index, hash, text, token count, heading paths, BGE model identity, and `Vector(384)` embedding. JSONB holds only heading-path metadata. A composite foreign key requires each chunk and its parent document to have the same collection. Unique constraints protect source versions, citations, and document/chunk indexes.
@@ -72,6 +72,51 @@ decision to preserve BGE-small while deferring model benchmarks.
 **Implemented and verified:** the checkpoint foundation. **Planned:** wiring
 the existing JD workflow into that foundation; the JD workflow is not yet
 checkpointed, and JD approval/revision is not implemented.
+
+## Implemented — recruiter chatbot JD creation slice
+
+- `POST /api/v1/recruiter-chat` accepts a bounded, plain-text recruiter message
+  through `schemas/recruiter_chat.py`. The replaceable interpreter in
+  `integrations/llm/recruiter_chat.py` uses the existing Groq configuration and
+  official async client with strict structured output to extract requirements;
+  it never generates the final JD or receives company policy or server secrets
+  in its prompt. Provider calls use an explicit timeout and no automatic retries.
+- `services/recruiter_chat.py` validates copied source evidence for each extracted
+  value after Unicode/whitespace normalization. It allows narrow enum mappings
+  and terminal punctuation/finite leading-verb normalization, while preserving source-backed role
+  purpose rather than inventing polished prose. Negated/ambiguous clauses,
+  unsupported list items and years without explicit experience context trigger
+  clarification before generation; invalid items are never silently filtered.
+  It applies the existing `JobDescriptionGenerationRequest` validation. Only a
+  complete valid request invokes the existing `get_job_description_workflow()`.
+  Its semantic Company Policy retrieval, generation and citation validation are
+  reused unchanged. The chatbot is an interface/orchestrator, not a fifth graph.
+- The React recruiter screen is chat-first: distinct messages appear in a scrollable
+  conversation with the composer anchored below it and a demo-load button.
+  Generated JD sections, draft/human-review notices and grouped policy grounding
+  appear inline in the assistant message; technical citation IDs remain collapsible.
+  Clarification stays in the conversation. The manual structured form and separate
+  result panel are not part of this screen; the structured JD API remains unchanged.
+  Generation remains an unapproved draft; errors use fixed public messages.
+- Posting is unavailable in this increment; there is no backend MCP client or publication action.
+- This first slice is single-turn: each submitted instruction is independent.
+  After clarification, edit and resend the complete instruction. Conversation
+  display exists only in page memory. Bounded input accepts multiline text, tabs,
+  comparisons and job descriptions involving resume/transcript processing.
+  React renders messages as escaped text. Input rejects unsafe control characters,
+  unknown request fields and obvious emails, phone-like contacts, named candidate/
+  applicant patterns and CV/resume submission/possessive patterns. These heuristics
+  are not comprehensive personal-data detection; enter only job requirements.
+  Evidence checks are not full semantic verification. Conservative clause negation
+  may ask for clarification on legitimate mixed-polarity wording; copied phrases
+  cannot prove every requirement is correctly classified or fully extracted.
+  Human review remains required.
+- Automated tests mock Groq and retrieval/generation boundaries; an API test runs
+  the existing JD graph with those boundaries replaced. The chat interpreter/provider
+  schema and full grounded JD API path passed live verification on 07 Oct 2026. The project owner confirmed manual chat-first UI verification. Existing
+  BGE query-length limits still apply to extracted requirements.
+- **Planned:** persisted JD approval/revision, multi-turn state, persistent conversation history and
+  authentication/authorization. The JD LangGraph remains unchanged.
 
 ## Implemented — standalone MCP job-publishing foundation
 
