@@ -73,12 +73,24 @@ decision to preserve BGE-small while deferring model benchmarks.
 the existing JD workflow into that foundation; the JD workflow is not yet
 checkpointed, and JD approval/revision is not implemented.
 
+## Implemented — standalone MCP job-publishing foundation
+
+- `job-publishing-mcp/` contains a TalentTrace-owned official Python MCP SDK v2
+  stdio server with one `publish_job` tool, a strict `JobCircular` contract and
+  an async Discord webhook adapter. Credentials stay server-side; mentions are
+  disabled, oversized payloads are rejected and provider failures are sanitized.
+- Mocked tests verify the adapter and MCP protocol. **Implemented and live
+  verified — 07 Oct 2026:** MCP-to-Discord publication used synthetic job data,
+  returned confirmed external publication metadata and visibly appeared in the
+  `#job-openings` demo channel. Backend MCP client/chatbot integration, JD approval
+  enforcement and other destinations remain planned. No JD workflow or frontend
+  integration is included. See [job-publishing MCP](../job-publishing-mcp/README.md).
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.
 - Other ORM business models, a production Docker Compose PostgreSQL service, and other repositories remain planned. The disposable database used for the successful live validation does not implement the production service.
 - A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
 - Background processing and concrete external integration implementations remain planned; their current packages are architectural boundaries only.
-- `job-publishing-mcp/` marks the boundary for a future lightweight, TalentTrace-owned MCP server for approved job publishing. It is not implemented.
 
-Authentication, business-data persistence, human approval/revision, the remaining hiring workflows, and other external integrations remain planned work.
+Authentication, business-data persistence, human approval/revision, the remaining hiring workflows, backend MCP client/chatbot integration, and additional external publishing destinations remain planned work.
