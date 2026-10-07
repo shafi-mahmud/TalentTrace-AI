@@ -40,11 +40,22 @@
 
 **Limitations:** exact search is bounded to one explicit company-policy document (default top-k 4), without approximate indexing or a relevance threshold. Full labeled requests exceeding BGE's 512-token limit fail safely rather than being truncated. Citations prove traceability to retrieved context, not that every generated claim is correct. Automated frontend response tests and the production build passed; manual browser/visual validation was not performed in this increment.
 
+## Implemented — local external policy preload
+
+Local operator-driven PDF/DOCX/TXT/Markdown policy preload is now implemented
+through `backend/app/rag/policy_files.py` and the explicit
+`python -m app.rag.ingest_policy_file` CLI. It reuses the existing validated
+source, BGE-small chunking/embeddings and repository pipeline, without a schema
+migration, JD graph change or automatic policy selection. See
+[local Company Policy ingestion](company_policy_ingestion.md) for limits,
+safe commands, source/version/document UUID semantics and the documented
+decision to preserve BGE-small while deferring model benchmarks.
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.
 - Other ORM business models, a production Docker Compose PostgreSQL service, other repositories, and a LangGraph PostgreSQL checkpointer remain planned. The disposable database used for the successful live validation does not implement the production service.
-- Production/private policy ingestion, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
+- A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
 - Background processing and concrete external integration implementations remain planned; their current packages are architectural boundaries only.
 - `job-publishing-mcp/` marks the boundary for a future lightweight, TalentTrace-owned MCP server for approved job publishing. It is not implemented.
 
