@@ -24,11 +24,24 @@
   proof passed. Business/RAG tables and data fingerprints remained unchanged.
   All 35 focused tests and 50 backend tests on this branch passed.
 
+## Implemented — standalone MCP job-publishing foundation
+
+- `job-publishing-mcp/` contains a TalentTrace-owned official Python MCP SDK v2
+  stdio server with one `publish_job` tool, a strict `JobCircular` contract and
+  an async Discord webhook adapter. Credentials stay server-side; mentions are
+  disabled, oversized payloads are rejected and provider failures are sanitized.
+- Mocked tests verify the adapter and MCP protocol. **Implemented and live
+  verified — 07 Oct 2026:** MCP-to-Discord publication used synthetic job data,
+  returned confirmed external publication metadata and visibly appeared in the
+  `#job-openings` demo channel. Backend MCP client/chatbot integration, JD approval
+  enforcement and other destinations remain planned. No JD workflow or frontend
+  integration is included. See [job-publishing MCP](../job-publishing-mcp/README.md).
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains exactly four planned LangGraph workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. They are Python modules inside the FastAPI modular monolith, not separate microservices. Checkpoint infrastructure is implemented; business workflow integration remains planned on this infrastructure branch.
 - ORM business models, `KnowledgeDocument` and `KnowledgeChunk`, an Alembic migration environment and revisions, pgvector, a PostgreSQL Docker service, repositories, persistence and retrieval behavior remain planned on this infrastructure branch. The checkpoint database is provisioned separately; Docker Compose automation and business workflow persistence integration remain planned.
 - `backend/app/rag/`, background work, and integration packages are reserved for later incremental tasks.
-- `job-publishing-mcp/` marks the boundary for a future lightweight, TalentTrace-owned MCP server for approved job publishing. It is not implemented.
+- Integration of the standalone job-publishing MCP server into approved JD publishing remains planned; its current implementation is described above.
 
 The skeleton and checkpoint foundation establish application structure and reusable state persistence. Hiring workflows, authentication, business persistence, workflow-specific AI orchestration, and external integrations remain planned on this branch.
