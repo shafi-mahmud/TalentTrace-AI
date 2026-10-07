@@ -187,6 +187,101 @@ checkpointed, and JD approval/revision is not implemented.
   and additional publishing destinations remain planned. No CV data is sent
   through the JD workflow or MCP publishing by this link feature.
 
+## Implemented - native batch CV intake foundation
+
+- **CV Intake** is a separate top-level frontend mode; JD Assistant remains the
+  default chat-first experience. Recruiters enter a demo Job Reference, select
+  1-20 PDF/DOCX files, remove selections and see controlled upload status.
+- `POST /api/v1/cv-uploads` accepts bounded multipart UploadFile parts, validates
+  reference syntax, extension/MIME, PDF signatures and DOCX ZIP structure, then
+  streams files to private ignored local storage. Responses contain UUID batch/
+  upload IDs and sizes only. A failed batch cleans up its own stored files.
+- `CV_UPLOAD_ROOT` defaults to ignored `data/cv_uploads/`; no files are web-served.
+  No candidate data is logged, sent to JD/RAG/MCP or stored in candidate tables.
+  This is trusted local-demo intake, without authentication or production
+  retention/deletion controls. Reference association is not database integrity.
+- The external Google Form/Drive demo remains separate and already verified.
+  Automatic Drive import, screening/scoring,
+  candidate persistence and Docker volume integration remain **Planned**.
+  See [native CV ingestion](cv_ingestion.md) for limits, storage and security caveats.
+
+## Implemented - primary CV digital-text extraction (#647488)
+
+- **Extract text** in CV Intake processes a stored batch through
+  `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/extract`. A synchronous
+  service runs in the threadpool and preserves all originals.
+- PyMuPDF extracts PDF text with 1-based page evidence. python-docx preserves
+  paragraph/table interleaving with ordered body-text blocks. Internal immutable
+  evidence is held only in memory; public responses and frontend state contain
+  metadata only, never extracted CV text or private paths.
+- PDFs need at least 80 alphanumeric characters overall and at least 50% of pages
+  with 20 alphanumeric characters each to pass the explicit digital-text heuristic.
+  Otherwise **OCR required** is shown; a separate fallback action is described
+  below. Insufficient text is not evidence of missing qualifications. DOCX does
+  not route to OCR.
+- Per-file parser failures are sanitized; other files remain independently
+  processable. Storage validation and document/text limits are enforced. See
+  [CV ingestion](cv_ingestion.md) for exact limits and heuristic limitations.
+- Candidate persistence, screening/scoring, background processing, automatic Drive import, authorization
+  and production retention/deletion remain **Planned**. This is not a new agent or
+  LangGraph workflow and does not send CVs to JD/RAG/MCP.
+
+## Implemented - CV OCR fallback (#647491)
+
+- **Run OCR** calls `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/ocr`.
+  It reuses safe private lookup and primary extraction. Only `ocr_required` PDFs
+  qualify; digital PDFs, failed PDFs and DOCX bypass OCR. No eligible PDFs is a
+  successful no-op without installation checks.
+- PyMuPDF integrated Tesseract performs English full-page OCR at 300 DPI on
+  low-text pages, preserving meaningful digital pages where possible. Immutable
+  internal evidence records page number and `digital`/`ocr` source. Output is
+  extraction evidence, not verified candidate truth.
+- Public API/UI show metadata only. No raw OCR text, file/tessdata paths, original
+  filenames, sidecars or candidate records are returned/persisted. Originals stay
+  unchanged. OCR failures are per-file; missing English data is sanitized 503
+  `ocr_not_configured`. A shared PDF lock serializes native work in the threadpool.
+- Limits: 25 pages/document, 100 eligible PDF pages/batch, 25 million rendered
+  pixels/page and 500,000 output characters/document. See [CV ingestion](cv_ingestion.md)
+  for exact routing, success checks, setup and limitations.
+- **System dependency:** Tesseract English language data; optional lazy
+  `OCR_TESSDATA_PATH`, otherwise local discovery. No new Python dependencies.
+  **Real local OCR was manually verified by the project owner on 07 Oct 2026**:
+  synthetic image-only PDF -> `ocr_required` -> Tesseract 5.4.0.20240606 ->
+  `ocr_extracted`; 31 focused OCR tests were reported passed. The earlier dependency
+  blocker was resolved; English data/version were detected in the profile increment.
+- Candidate persistence, screening/scoring, automatic Drive
+  import, background processing, authentication and production retention/deletion
+  remain **Planned**. No new workflow/agent was added.
+
+## Implemented - source-backed candidate profile extraction (#647493)
+
+- `schemas/candidate_profile.py` separates private source/evidence/provider contracts
+  from public profiles, and contact identity from qualifications. Every public fact
+  has a server-derived page/block and digital/OCR locator; full text/quotes stay private.
+- `services/candidate_profile.py` reuses stored-batch validation, primary extraction
+  and OCR fallback, then validates every returned fact. Unknown sources, absent
+  quotations and invented/inferred values fail the whole file. Skills are deduplicated
+  in source order. Failed source extraction is `source_unavailable`, not missing skills.
+- `integrations/llm/candidate_profile.py` provides the replaceable extractor interface
+  and Groq strict JSON implementation: existing key/model, 30-second timeout, zero
+  retries, temperature 0 and one sequential call per usable CV. Input limits are
+  40,000 characters and 400 units; no silent truncation. This is not a new workflow.
+- `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/candidate-profiles` accepts
+  stored identity only. Missing provider setup is sanitized 503; individual provider/
+  grounding failures are `parsing_failed`. Other files continue; originals stay unchanged.
+- CV Intake uses `api/candidateProfiles.ts`, `types/candidateProfile.ts` and
+  `components/candidateProfilesPresentation.ts` for an Extract candidate profiles
+  action and compact Contact/Education/Work history/Skills results. Focused backend
+  and lightweight frontend tests cover contracts, grounding, source routing and safe UI.
+- **Privacy:** this feature sends CV-derived text to external Groq. Synthetic/sample
+  data only; no authentication or production provider governance exists. Text/evidence
+  is not persisted; profiles stay in request/component memory. CVs do not enter JD,
+  RAG or MCP. Repeated processing may repeat extraction/OCR/provider calls.
+- Grounding confirms textual support, not verified candidate truth. Candidate
+  persistence, screening LangGraph, semantic job matching, hard exclusion, scoring/
+  ranking, background workers, authentication and production consent/retention remain
+  **Planned**. Future merit evaluation must exclude contact identity.
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.

@@ -225,3 +225,18 @@ fieldset:disabled { opacity: 0.65; }
 .publication-success dt { color: #61766a; font-size: 11px; }
 .publication-success dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .chat-composer { position: sticky; bottom: 0; }
+
+.workspace-modes { display: flex; gap: 8px; max-width: 1040px; margin: 18px auto 0; padding: 0 24px; }
+.workspace-modes button { border: 1px solid #d4e2d9; border-radius: 8px; padding: 10px 18px; background: #fff; color: #365d44; font: inherit; cursor: pointer; }
+.workspace-modes button[aria-pressed="true"] { background: #365d44; color: #fff; }
+.cv-intake-card { padding: 24px; margin-bottom: 32px; }
+.cv-selected-files { list-style: none; padding: 0; margin: 20px 0; }
+.cv-selected-files li { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e4ece6; padding: 12px 0; }
+.cv-local-name { display: block; overflow-wrap: anywhere; font-size: 14px; }
+.cv-selected-files small { color: #61766a; }
+.cv-upload-success { background: #edf6ef; padding: 18px; border-radius: 8px; margin-top: 24px; overflow-wrap: anywhere; }
+.cv-upload-success h2 { font-size: 18px; }
+@media (max-width: 520px) {
+  .workspace-modes { padding: 0 16px; }
+  .cv-intake-card { padding: 16px; }
+}

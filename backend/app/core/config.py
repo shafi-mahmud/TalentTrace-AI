@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: SecretStr | None = None
     application_form_url: SecretStr | None = None
+    cv_upload_root: Path = REPOSITORY_ROOT / "data" / "cv_uploads"
+    ocr_tessdata_path: Path | None = None
     langgraph_checkpoint_database_url: SecretStr | None = None
     company_policy_document_id: UUID | None = None
     groq_api_key: SecretStr | None = None

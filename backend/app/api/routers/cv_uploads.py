@@ -1,0 +1,143 @@
+"""Trusted local-demo multipart intake, with bounded parser input and safe errors."""
+from uuid import UUID
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
+from starlette.exceptions import HTTPException
+from starlette.formparsers import MultiPartException
+
+from app.core.config import settings
+from app.schemas.cv_upload import CvUploadResponse, JobReference
+from app.schemas.cv_extraction import CvExtractionResponse
+from app.schemas.cv_ocr import CvOcrResponse
+from app.services.cv_ocr import CvOcrService, OcrNotConfigured
+from app.schemas.candidate_profile import CandidateProfilesResponse
+from app.services.candidate_profile import CandidateProfileService
+from app.integrations.llm.candidate_profile import CandidateParserNotConfigured
+from app.services.cv_extraction import CvExtractionError, CvExtractionService, PUBLIC_ERRORS as EXTRACTION_ERRORS
+from app.services.cv_upload import CvUploadError, CvUploadService, PUBLIC_ERRORS
+
+# Includes 1 MiB for multipart headers/boundaries; document bytes have a separate limit.
+MAX_REQUEST_BYTES = 101 * 1024 * 1024
+router = APIRouter(tags=["CV intake"])
+
+
+@router.post("/cv-uploads/{job_reference}/{batch_id}/candidate-profiles", response_model=CandidateProfilesResponse,
+    responses={400: {"description": "Unsafe batch layout."}, 404: {"description": "Batch not found."},
+        503: {"description": "Candidate parser not configured."}, 500: {"description": "Candidate parsing unavailable."}})
+async def candidate_profiles(request: Request, job_reference: JobReference, batch_id: UUID) -> CandidateProfilesResponse | JSONResponse:
+    try:
+        # This contract accepts path identity only, never browser-provided source/config.
+        if request.query_params:
+            return JSONResponse(status_code=400, content={"code": "invalid_candidate_request", "message": "Supply stored batch identity only."})
+        async for chunk in request.stream():
+            if chunk:
+                return JSONResponse(status_code=400, content={"code": "invalid_candidate_request", "message": "Supply stored batch identity only."})
+        candidates = await CandidateProfileService(settings).parse_batch(job_reference, batch_id)
+        return CandidateProfilesResponse(job_reference=job_reference, batch_id=batch_id,
+            processed_count=len(candidates), candidates=candidates)
+    except CandidateParserNotConfigured:
+        return JSONResponse(status_code=503, content={"code": "candidate_parser_not_configured",
+            "message": "Candidate profile extraction is not configured."})
+    except CvExtractionError as error:
+        return JSONResponse(status_code=error.status, content={"code": error.code, "message": EXTRACTION_ERRORS[error.code]})
+    except Exception:
+        return JSONResponse(status_code=500, content={"code": "candidate_parsing_unavailable",
+            "message": "Candidate profile extraction could not be completed."})
+
+
+@router.post("/cv-uploads/{job_reference}/{batch_id}/ocr", response_model=CvOcrResponse,
+    responses={400: {"description": "Unsafe batch layout."}, 404: {"description": "Batch not found."},
+        503: {"description": "OCR is not configured."}, 500: {"description": "OCR unavailable."}})
+async def ocr_cvs(job_reference: JobReference, batch_id: UUID) -> CvOcrResponse | JSONResponse:
+    try:
+        service = CvOcrService(settings.cv_upload_root, settings.ocr_tessdata_path)
+        documents = await run_in_threadpool(service.process_batch, job_reference, batch_id)
+        return CvOcrResponse(job_reference=job_reference, batch_id=batch_id,
+            attempted_count=len(documents), files=tuple(document.public_metadata() for document in documents))
+    except OcrNotConfigured:
+        return JSONResponse(status_code=503,
+            content={"code": "ocr_not_configured", "message": "OCR processing is not configured."})
+    except CvExtractionError as error:
+        return JSONResponse(status_code=error.status,
+            content={"code": error.code, "message": EXTRACTION_ERRORS[error.code]})
+    except Exception:
+        return JSONResponse(status_code=500,
+            content={"code": "ocr_unavailable", "message": "OCR processing could not be completed."})
+
+
+@router.post("/cv-uploads/{job_reference}/{batch_id}/extract", response_model=CvExtractionResponse,
+    responses={400: {"description": "Unsafe batch layout."},
+        404: {"description": "Batch not found."}, 500: {"description": "Extraction unavailable."}})
+async def extract_cvs(job_reference: JobReference, batch_id: UUID) -> CvExtractionResponse | JSONResponse:
+    try:
+        service = CvExtractionService(settings.cv_upload_root)
+        documents = await run_in_threadpool(service.extract_batch, job_reference, batch_id)
+        return CvExtractionResponse(job_reference=job_reference, batch_id=batch_id,
+            processed_count=len(documents), files=tuple(document.public_metadata() for document in documents))
+    except CvExtractionError as error:
+        return JSONResponse(status_code=error.status,
+            content={"code": error.code, "message": EXTRACTION_ERRORS[error.code]})
+    except Exception:
+        return JSONResponse(status_code=500, content={"code": "extraction_unavailable",
+            "message": EXTRACTION_ERRORS["extraction_unavailable"]})
+
+
+@router.post("/cv-uploads", response_model=CvUploadResponse, status_code=201,
+    responses={400: {"description": "Invalid multipart batch or document."},
+        413: {"description": "File, batch or request exceeds limits."},
+        415: {"description": "Unsupported request or document type."},
+        422: {"description": "Invalid demo Job Reference."},
+        500: {"description": "Storage failed; no upload confirmed."}},
+    openapi_extra={"requestBody": {"required": True, "content": {"multipart/form-data": {
+        "schema": {"type": "object", "additionalProperties": False,
+            "required": ["job_reference", "files"], "properties": {
+                "job_reference": {"type": "string", "pattern": "^TT-JOB-[A-F0-9]{16}$", "maxLength": 23},
+                "files": {"type": "array", "minItems": 1, "maxItems": 20,
+                    "items": {"type": "string", "format": "binary"}},
+            }}}}}})
+async def upload_cvs(request: Request) -> CvUploadResponse | JSONResponse:
+    received = 0
+    exceeded = False
+
+    async def bounded_receive():
+        nonlocal received, exceeded
+        message = await request.receive()
+        received += len(message.get("body", b""))
+        if received > MAX_REQUEST_BYTES:
+            exceeded = True
+            raise MultiPartException("Upload request exceeds size limit.")
+        return message
+
+    try:
+        if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "multipart/form-data":
+            raise CvUploadError("invalid_multipart", 415)
+        length = request.headers.get("content-length")
+        if length is not None:
+            if not length.isdecimal():
+                raise CvUploadError("invalid_multipart")
+            if int(length) > MAX_REQUEST_BYTES:
+                raise CvUploadError("batch_too_large", 413)
+        bounded = Request(request.scope, receive=bounded_receive)
+        async with bounded.form(max_files=20, max_fields=1, max_part_size=1024) as form:
+            references, files = form.getlist("job_reference"), form.getlist("files")
+            if set(form) - {"job_reference", "files"} or len(references) != 1 or not isinstance(references[0], str):
+                raise CvUploadError("invalid_multipart")
+            if any(not isinstance(file, UploadFile) for file in files):
+                raise CvUploadError("invalid_multipart")
+            service = CvUploadService(settings.cv_upload_root)
+            return await run_in_threadpool(service.store_batch, references[0], files)
+    except CvUploadError as error:
+        return JSONResponse(status_code=error.status,
+            content={"code": error.code, "message": PUBLIC_ERRORS[error.code]})
+    except HTTPException as error:
+        # Inspect only the parser's fixed count marker; never echo raw details.
+        too_many_files = isinstance(error.detail, str) and error.detail.startswith("Too many files.")
+        code = "batch_too_large" if exceeded else "invalid_batch" if too_many_files else "invalid_multipart"
+        return JSONResponse(status_code=413 if exceeded else 400,
+            content={"code": code, "message": PUBLIC_ERRORS[code]})
+    except Exception:
+        return JSONResponse(status_code=500,
+            content={"code": "storage_failed", "message": PUBLIC_ERRORS["storage_failed"]})
