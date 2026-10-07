@@ -156,6 +156,37 @@ checkpointed, and JD approval/revision is not implemented.
   as described above. JD approval enforcement and other destinations remain planned;
   the JD workflow remains unchanged. See [job-publishing MCP](../job-publishing-mcp/README.md).
 
+## Implemented - optional external application link and CV collection demo
+
+- Backend `APPLICATION_FORM_URL` is optional, validated HTTPS configuration kept
+  in environment/ignored root `.env` and protected as a secret setting. Only the
+  backend adds it to the MCP `JobCircular.application_url`; recruiter requests,
+  generated JD fields and LLM output cannot override it. No URL is returned in
+  the destination/status/external_id response or sent to the JD Agent.
+- Each demo publication gets a backend-derived `TT-JOB-<16 uppercase hash characters>`
+  reference from normalized publication content. The required MCP `job_reference`
+  is bounded to 40 safe uppercase/digit/hyphen characters. Discord displays
+  **Job Reference** immediately before **Apply for this role**; candidates copy it
+  into the external form. HTTP recruiter requests and LLM output cannot supply it.
+  This is a stable demo content fingerprint, not persisted job-profile identity or
+  publication deduplication. Native job-profile persistence and automatic form
+  prefilling remain planned.
+- The standalone MCP contract accepts the optional link, and the Discord adapter
+  includes **Apply for this role** while enforcing existing embed limits and
+  disabled mentions. Missing configuration preserves publication without a link.
+- **Implemented external CV collection demo path, once configured:** Discord ->
+  application link -> manually created Google Form -> form owner's Google Drive.
+  Link mapping/validation/presentation are mocked-tested. On 07 Oct 2026, the
+  project owner confirmed live Discord-to-Form-to-Sheets/Drive CV collection.
+  Google Form/Drive is an external privacy
+  dependency, not native TalentTrace storage. See [CV collection demo](cv_collection_demo.md)
+  for setup, Google sign-in requirements and a single synthetic manual demo.
+- **Planned:** native candidate portal, Drive API synchronization, automatic CV
+  import, candidate persistence, CV parsing/OCR, screening/scoring, candidate
+  authentication and retention/deletion automation. Production approval/audit
+  and additional publishing destinations remain planned. No CV data is sent
+  through the JD workflow or MCP publishing by this link feature.
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.

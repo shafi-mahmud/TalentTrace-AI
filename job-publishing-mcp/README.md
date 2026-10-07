@@ -14,6 +14,20 @@ It has no FastAPI or LangGraph dependency.
   required/preferred skills, qualifications, and optional location/employment/
   work arrangement. Unknown fields, HTML/angle-bracket markup, unsafe controls,
   blanks and invalid types are rejected. Whitespace is normalized.
+- Required `job_reference` is at most 40 uppercase/digit/hyphen characters.
+  Discord shows **Job Reference** immediately before the optional application
+  field so candidates can copy it into the external form. The backend derives a
+  stable `TT-JOB-<16 hex characters>` content fingerprint; it rejects recruiter/
+  LLM overrides. This is temporary demo identity, not job-profile persistence or
+  deduplication. Standalone clients must now supply a reference; the fixed manual
+  smoke client uses `TT-DEMO-SMOKE-001`. Automatic form prefilling remains planned.
+- Optional `application_url` is a bounded HTTPS string with no embedded credentials,
+  fragments or unsafe controls. The Discord embed shows **Apply for this role**
+  only when present, counting the URL toward field/total limits. Existing clients
+  can omit it. Trusted standalone clients may supply it; the TalentTrace backend
+  supplies it only from optional server-side `APPLICATION_FORM_URL`, never from
+  recruiter or LLM output. This does not implement CV ingestion. See
+  [external CV collection demo](../docs/cv_collection_demo.md).
 - Server-side configuration: environment overrides the ignored repository-root
   `.env`. Configuration is loaded when publishing, not on import. The webhook
   is a protected `SecretStr`; configuration errors never echo its value.

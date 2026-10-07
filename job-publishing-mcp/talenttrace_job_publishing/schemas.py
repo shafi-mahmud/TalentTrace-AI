@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 import unicodedata
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
+from .urls import validate_application_url
 
 
 def normalize_text(value: object) -> object:
@@ -43,9 +44,19 @@ Location = Annotated[
 ]
 
 
+JobReference = Annotated[
+    str, BeforeValidator(single_line),
+    StringConstraints(min_length=1, max_length=40, pattern=r"^[A-Z0-9]+(?:-[A-Z0-9]+)*$"),
+]
+
+
+ApplicationURL = Annotated[str, BeforeValidator(validate_application_url)]
+
+
 class JobCircular(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
+    job_reference: JobReference
     title: Title
     summary: Summary
     responsibilities: list[Item] = Field(min_length=1, max_length=15)
@@ -53,6 +64,7 @@ class JobCircular(BaseModel):
     preferred_skills: list[Skill] = Field(default_factory=list, max_length=20)
     qualifications: list[Item] = Field(min_length=1, max_length=15)
     location: Location | None = None
+    application_url: ApplicationURL | None = None
     employment_type: Literal[
         "full_time", "part_time", "contract", "internship", "temporary"
     ] | None = None

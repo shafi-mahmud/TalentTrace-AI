@@ -3,8 +3,9 @@ from typing import Annotated, Any
 from urllib.parse import unquote, urlsplit
 from uuid import UUID
 
-from pydantic import Field, SecretStr, StringConstraints
+from pydantic import Field, SecretStr, StringConstraints, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from app.core.urls import validate_application_url
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: SecretStr | None = None
+    application_form_url: SecretStr | None = None
     langgraph_checkpoint_database_url: SecretStr | None = None
     company_policy_document_id: UUID | None = None
     groq_api_key: SecretStr | None = None
@@ -42,6 +44,13 @@ class Settings(BaseSettings):
         extra="ignore",
         hide_input_in_errors=True,
     )
+
+    @field_validator("application_form_url")
+    @classmethod
+    def validate_form_url(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            validate_application_url(value.get_secret_value())
+        return value
 
     def model_post_init(self, __context: Any) -> None:
         if self.langgraph_checkpoint_database_url is not None:

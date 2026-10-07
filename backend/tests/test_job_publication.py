@@ -7,6 +7,7 @@ import httpx
 import pytest
 from app.api.routers import recruiter_chat as route
 from app.main import app
+from app.core.config import Settings
 from app.integrations.job_publishing import mcp_client
 from app.schemas.job_publication import PublicationResult, RecruiterPublishRequest
 
@@ -32,7 +33,7 @@ def test_endpoint_returns_only_safe_confirmed_metadata(monkeypatch):
     response = asyncio.run(send(job()))
     assert response.status_code == 200
     assert response.json() == {"destination": "discord", "status": "published", "external_id": "123456789012345678"}
-    assert calls == [{**job(), "work_arrangement": "onsite"}]
+    assert calls == [{**job(), "work_arrangement": "onsite", "job_reference": "TT-JOB-30BB2CDF9A5CCCA9"}]
 
 
 @pytest.mark.parametrize("changes", [
@@ -61,6 +62,11 @@ def test_failures_are_sanitized_and_not_retried(monkeypatch, error, status):
     assert response.status_code == status
     assert len(calls) == 1
     assert "PRIVATE" not in response.text
+
+
+@pytest.fixture(autouse=True)
+def isolate_application_configuration(monkeypatch):
+    monkeypatch.setattr(mcp_client, "settings", Settings(_env_file=None, application_form_url=None))
 
 
 def setup_client(monkeypatch, tmp_path, result=None, error=None):
@@ -96,7 +102,7 @@ def test_official_client_path_maps_job_and_invokes_tool_exactly_once(monkeypatch
     calls=setup_client(monkeypatch,tmp_path,result=result)
     response=asyncio.run(mcp_client.MCPJobPublisher().publish(RecruiterPublishRequest(**job())))
     assert response.external_id == "123456789012345678"
-    assert calls == [("publish_job", {"job": {**job(),"work_arrangement":"onsite"}})]
+    assert calls == [("publish_job", {"job": {**job(),"work_arrangement":"onsite","job_reference":"TT-JOB-30BB2CDF9A5CCCA9"}})]
 
 
 @pytest.mark.parametrize("result,error", [
@@ -147,4 +153,129 @@ def test_real_sdk_and_existing_server_tool_through_endpoint_without_discord(monk
     response=asyncio.run(send(job()))
     assert response.status_code==200
     assert response.json()=={"destination":"discord","status":"published","external_id":"123456789012345678"}
-    assert captured==[{**job(),"work_arrangement":"onsite"}]
+    assert captured==[{**job(),"work_arrangement":"onsite","job_reference":"TT-JOB-30BB2CDF9A5CCCA9","application_url":None}]
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_application_url_is_only_added_from_server_configuration(monkeypatch, tmp_path, configured):
+    result=SimpleNamespace(is_error=False, structured_content={"destination":"discord","status":"published","external_id":"123456789012345678"})
+    calls=setup_client(monkeypatch,tmp_path,result=result)
+    url="https://docs.google.com/forms/d/e/synthetic-test-form/viewform" if configured else None
+    configuration=Settings(_env_file=None, application_form_url=url)
+    returned=asyncio.run(mcp_client.MCPJobPublisher(configuration).publish(RecruiterPublishRequest(**job())))
+    sent=calls[0][1]["job"]
+    assert sent.get("application_url")==url
+    assert ("application_url" in sent)==configured
+    assert set(returned.model_dump())=={"destination","status","external_id"}
+    assert url is None or url not in returned.model_dump_json()
+
+
+@pytest.mark.parametrize("field", ["application_url","application_form_url","APPLICATION_FORM_URL"])
+def test_recruiter_or_generated_publication_payload_cannot_override_form(monkeypatch,field):
+    monkeypatch.setattr(route,"get_job_publisher",lambda: pytest.fail("Client URL override must never reach MCP."))
+    response=asyncio.run(send({**job(),field:"https://example.invalid/untrusted-form"}))
+    assert response.status_code==422
+    assert "untrusted-form" not in response.text
+
+
+def test_failure_never_exposes_configured_application_url(monkeypatch,tmp_path):
+    url="https://docs.google.com/forms/d/e/private-synthetic-test-form/viewform"
+    calls=setup_client(monkeypatch,tmp_path,error=RuntimeError(url))
+    configuration=Settings(_env_file=None,application_form_url=url)
+    with pytest.raises(mcp_client.PublicationFailed) as error:
+        asyncio.run(mcp_client.MCPJobPublisher(configuration).publish(RecruiterPublishRequest(**job())))
+    assert url not in str(error.value)
+    assert len(calls)==1
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_env_file_to_endpoint_mcp_and_discord_application_link(monkeypatch, tmp_path, configured):
+    """Exercise the complete local path; all external HTTP is replaced."""
+    monkeypatch.delenv("APPLICATION_FORM_URL", raising=False)
+    env_file = tmp_path / ".env"
+    url = "https://example.com/apply"
+    env_file.write_text(
+        "APPLICATION_FORM_URL=" + url + "\n" if configured else "# No application form configured\n",
+        encoding="utf-8",
+    )
+    configuration = Settings(_env_file=env_file)
+    monkeypatch.setattr(mcp_client, "settings", configuration)
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[2] / "job-publishing-mcp"))
+    from talenttrace_job_publishing import server
+    from talenttrace_job_publishing.config import Settings as PublishingSettings
+    from talenttrace_job_publishing.publishers.discord import DiscordPublisher
+
+    arguments_seen = []
+    payloads_seen = []
+    real_client = mcp_client.Client
+
+    class CapturingClient(real_client):
+        async def call_tool(self, name, arguments, **kwargs):
+            arguments_seen.append(arguments)
+            return await super().call_tool(name, arguments, **kwargs)
+
+    def mocked_discord(request):
+        import json
+        payloads_seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": "123456789012345678"})
+
+    async def forbidden_http(*args, **kwargs):
+        pytest.fail("Real Discord traffic must never occur.")
+
+    publishing_settings = PublishingSettings(
+        _env_file=None,
+        discord_webhook_url="https://discord.com/api/webhooks/123456789012345678/" + "synthetic_token_" * 4,
+    )
+    monkeypatch.setattr(server, "load_settings", lambda: publishing_settings)
+    monkeypatch.setattr(server, "DiscordPublisher", lambda settings: DiscordPublisher(
+        settings, transport=httpx.MockTransport(mocked_discord),
+    ))
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", forbidden_http)
+    monkeypatch.setattr(mcp_client, "Client", CapturingClient)
+    monkeypatch.setattr(mcp_client, "stdio_client", lambda params, errlog: server.mcp)
+
+    response = asyncio.run(send(job()))
+    assert response.status_code == 200
+    assert response.json() == {
+        "destination": "discord", "status": "published", "external_id": "123456789012345678",
+    }
+    assert len(arguments_seen) == len(payloads_seen) == 1
+    assert (configuration.application_form_url is not None) == configured
+    assert ("application_url" in arguments_seen[0]["job"]) == configured
+    fields = payloads_seen[0]["embeds"][0]["fields"]
+    apply_fields = [field for field in fields if field["name"] == "Apply for this role"]
+    reference = arguments_seen[0]["job"]["job_reference"]
+    reference_field = {"name": "Job Reference", "value": reference, "inline": False}
+    assert reference == "TT-JOB-30BB2CDF9A5CCCA9"
+    assert reference_field in fields
+    if configured:
+        assert fields.index(reference_field) + 1 == fields.index(apply_fields[0])
+    assert apply_fields == ([{"name": "Apply for this role", "value": url, "inline": False}] if configured else [])
+    assert payloads_seen[0]["allowed_mentions"]["parse"] == []
+    assert url not in response.text
+
+
+def test_demo_reference_is_stable_for_normalized_content_and_changes_with_draft():
+    original = RecruiterPublishRequest(**job()).mcp_job()["job_reference"]
+    normalized = RecruiterPublishRequest(**{**job(), "title": "  " + job()["title"] + "  "})
+    assert normalized.mcp_job()["job_reference"] == original
+    revised = RecruiterPublishRequest(**{**job(), "summary": "A revised synthetic summary."})
+    assert revised.mcp_job()["job_reference"] != original
+    assert original == "TT-JOB-30BB2CDF9A5CCCA9"
+
+
+def test_frontend_cannot_supply_job_reference(monkeypatch):
+    monkeypatch.setattr(route, "get_job_publisher", lambda: pytest.fail("Reference override must be rejected."))
+    response = asyncio.run(send({**job(), "job_reference": "ARBITRARY-REFERENCE"}))
+    assert response.status_code == 422
+    assert "ARBITRARY-REFERENCE" not in response.text
+
+
+def test_llm_cannot_supply_job_reference():
+    from pydantic import ValidationError
+    from app.schemas.recruiter_chat import RecruiterInterpretation
+    from test_recruiter_chat import extracted_data
+    data = extracted_data()
+    data["requirements"]["job_reference"] = "ARBITRARY-REFERENCE"
+    with pytest.raises(ValidationError):
+        RecruiterInterpretation.model_validate(data)

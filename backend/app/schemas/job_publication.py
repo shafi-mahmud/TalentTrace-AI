@@ -1,4 +1,6 @@
 """Bounded HTTP publication DTO mapped to the standalone MCP JobCircular."""
+import hashlib
+import json
 from typing import Annotated, Literal
 import unicodedata
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
@@ -41,6 +43,9 @@ class RecruiterPublishRequest(BaseModel):
         job = self.model_dump(mode="json")
         if job["work_arrangement"] == "on_site":
             job["work_arrangement"] = "onsite"
+        # Temporary demo identity: stable for normalized content, not a database ID.
+        canonical = json.dumps(job, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        job["job_reference"] = "TT-JOB-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16].upper()
         return job
 
 
