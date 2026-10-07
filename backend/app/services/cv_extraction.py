@@ -1,5 +1,6 @@
 """Read-only digital extraction. No OCR, persistence, candidate parsing or network."""
 from pathlib import Path
+from contextlib import contextmanager
 import re
 from threading import Lock
 import unicodedata
@@ -36,6 +37,22 @@ class CvExtractionError(Exception):
         super().__init__(PUBLIC_ERRORS[code])
 
 
+@contextmanager
+def pdf_access():
+    """Shared serialization/diagnostic suppression for digital extraction and OCR."""
+    with PDF_LOCK:
+        errors = pymupdf.TOOLS.mupdf_display_errors()
+        warnings = pymupdf.TOOLS.mupdf_display_warnings()
+        pymupdf.TOOLS.mupdf_display_errors(False)
+        pymupdf.TOOLS.mupdf_display_warnings(False)
+        try:
+            yield
+        finally:
+            pymupdf.TOOLS.mupdf_warnings(reset=True)
+            pymupdf.TOOLS.mupdf_display_errors(errors)
+            pymupdf.TOOLS.mupdf_display_warnings(warnings)
+
+
 def normalize_text(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     return "".join(c for c in text if c in "\n\t" or unicodedata.category(c) not in {"Cc", "Cf", "Cs"}).strip()
@@ -68,6 +85,14 @@ class CvExtractionService:
         self.root = CvUploadService(storage_root).root
 
     def extract_batch(self, job_reference: str, batch_id: UUID) -> tuple[ExtractedCvDocument, ...]:
+        return tuple(document for _, document in self.extract_batch_with_paths(job_reference, batch_id))
+
+    def extract_batch_with_paths(self, job_reference: str, batch_id: UUID):
+        """Internal read-only processing context; paths must never be serialized."""
+        files = self.batch_files(job_reference, batch_id)
+        return tuple((path, self._extract_file(path)) for path in files)
+
+    def batch_files(self, job_reference: str, batch_id: UUID) -> tuple[Path, ...]:
         try:
             reference = CvBatchInput(job_reference=job_reference).job_reference
             batch_id = UUID(str(batch_id))
@@ -95,7 +120,7 @@ class CvExtractionService:
             total += size
             if not 0 < size <= MAX_FILE_BYTES or total > MAX_BATCH_BYTES:
                 raise CvExtractionError("unsafe_batch")
-        return tuple(self._extract_file(path) for path in files)
+        return tuple(files)
 
     def _extract_file(self, path: Path) -> ExtractedCvDocument:
         upload_id, file_type = UUID(path.stem), path.suffix[1:]
@@ -126,24 +151,14 @@ class CvExtractionService:
 
     @staticmethod
     def _pdf_units(path: Path) -> list[PdfPageText]:
-        with PDF_LOCK:
-            errors = pymupdf.TOOLS.mupdf_display_errors()
-            warnings = pymupdf.TOOLS.mupdf_display_warnings()
-            pymupdf.TOOLS.mupdf_display_errors(False)
-            pymupdf.TOOLS.mupdf_display_warnings(False)
-            try:
-                with pymupdf.open(path) as document:
-                    if document.needs_pass or not 1 <= document.page_count <= MAX_PDF_PAGES:
-                        raise ValueError("Unsupported PDF")
-                    units, chars = [], 0
-                    for index, page in enumerate(document):
-                        text = normalize_text(page.get_text("text", sort=True))
-                        chars += len(text) + (2 if units else 0)
-                        if chars > MAX_TEXT_CHARS:
-                            raise ValueError("Extraction limit")
-                        units.append(PdfPageText(page_number=index + 1, text=text))
-                    return units
-            finally:
-                pymupdf.TOOLS.mupdf_display_errors(errors)
-                pymupdf.TOOLS.mupdf_display_warnings(warnings)
-                pymupdf.TOOLS.mupdf_warnings(reset=True)
+        with pdf_access(), pymupdf.open(path) as document:
+            if document.needs_pass or not 1 <= document.page_count <= MAX_PDF_PAGES:
+                raise ValueError("Unsupported PDF")
+            units, chars = [], 0
+            for index, page in enumerate(document):
+                text = normalize_text(page.get_text("text", sort=True))
+                chars += len(text) + (2 if units else 0)
+                if chars > MAX_TEXT_CHARS:
+                    raise ValueError("Extraction limit")
+                units.append(PdfPageText(page_number=index + 1, text=text))
+            return units

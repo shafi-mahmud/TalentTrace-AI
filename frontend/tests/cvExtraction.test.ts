@@ -28,13 +28,13 @@ test("uploaded batch offers Extract text action and disabled loading state", () 
   assert.match(loading, /disabled/);
 });
 
-test("mixed extraction status shows pages, blocks and explicit unimplemented OCR", () => {
+test("mixed extraction status shows pages, blocks and explicit OCR recommendation", () => {
   const html = renderToStaticMarkup(createElement(CvExtractionSummary, {result: result()}));
   assert.match(html, /3 CVs processed/);
   assert.match(html, /PDF · <\/strong>Text extracted · 2 pages/);
   assert.match(html, /DOCX · <\/strong>Text extracted · 18 blocks/);
   assert.match(html, /OCR required/);
-  assert.match(html, /Digital text was insufficient. OCR processing is not implemented yet./);
+  assert.match(html, /Digital text was insufficient. Run OCR to try reading this PDF./);
   assert.ok(!html.includes("text_char_count"));
 });
 

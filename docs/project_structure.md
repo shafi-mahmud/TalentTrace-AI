@@ -201,7 +201,7 @@ checkpointed, and JD approval/revision is not implemented.
   This is trusted local-demo intake, without authentication or production
   retention/deletion controls. Reference association is not database integrity.
 - The external Google Form/Drive demo remains separate and already verified.
-  Automatic Drive import, actual OCR, candidate parsing, screening/scoring,
+  Automatic Drive import, candidate parsing, screening/scoring,
   candidate persistence and Docker volume integration remain **Planned**.
   See [native CV ingestion](cv_ingestion.md) for limits, storage and security caveats.
 
@@ -216,8 +216,9 @@ checkpointed, and JD approval/revision is not implemented.
   metadata only, never extracted CV text or private paths.
 - PDFs need at least 80 alphanumeric characters overall and at least 50% of pages
   with 20 alphanumeric characters each to pass the explicit digital-text heuristic.
-  Otherwise **OCR required** is shown. OCR is **Planned**, not executed; insufficient
-  text is not evidence of missing qualifications. DOCX does not route to OCR.
+  Otherwise **OCR required** is shown; a separate fallback action is described
+  below. Insufficient text is not evidence of missing qualifications. DOCX does
+  not route to OCR.
 - Per-file parser failures are sanitized; other files remain independently
   processable. Storage validation and document/text limits are enforced. See
   [CV ingestion](cv_ingestion.md) for exact limits and heuristic limitations.
@@ -225,6 +226,31 @@ checkpointed, and JD approval/revision is not implemented.
   screening/scoring, background processing, automatic Drive import, authorization
   and production retention/deletion remain **Planned**. This is not a new agent or
   LangGraph workflow and does not send CVs to JD/RAG/MCP.
+
+## Implemented - CV OCR fallback (#647491)
+
+- **Run OCR** calls `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/ocr`.
+  It reuses safe private lookup and primary extraction. Only `ocr_required` PDFs
+  qualify; digital PDFs, failed PDFs and DOCX bypass OCR. No eligible PDFs is a
+  successful no-op without installation checks.
+- PyMuPDF integrated Tesseract performs English full-page OCR at 300 DPI on
+  low-text pages, preserving meaningful digital pages where possible. Immutable
+  internal evidence records page number and `digital`/`ocr` source. Output is
+  extraction evidence, not verified candidate truth.
+- Public API/UI show metadata only. No raw OCR text, file/tessdata paths, original
+  filenames, sidecars or candidate records are returned/persisted. Originals stay
+  unchanged. OCR failures are per-file; missing English data is sanitized 503
+  `ocr_not_configured`. A shared PDF lock serializes native work in the threadpool.
+- Limits: 25 pages/document, 100 eligible PDF pages/batch, 25 million rendered
+  pixels/page and 500,000 output characters/document. See [CV ingestion](cv_ingestion.md)
+  for exact routing, success checks, setup and limitations.
+- **System dependency:** Tesseract English language data; optional lazy
+  `OCR_TESSDATA_PATH`, otherwise local discovery. No new Python dependencies.
+  **Real local OCR verification is Blocked** on 07 Oct 2026 because Tesseract/
+  English data was not available; mocked tests prove behavior, not recognition accuracy.
+- Structured candidate parsing/persistence, screening/scoring, automatic Drive
+  import, background processing, authentication and production retention/deletion
+  remain **Planned**. No new workflow/agent was added.
 
 ## Planned — future functionality
 

@@ -11,12 +11,34 @@ from starlette.formparsers import MultiPartException
 from app.core.config import settings
 from app.schemas.cv_upload import CvUploadResponse, JobReference
 from app.schemas.cv_extraction import CvExtractionResponse
+from app.schemas.cv_ocr import CvOcrResponse
+from app.services.cv_ocr import CvOcrService, OcrNotConfigured
 from app.services.cv_extraction import CvExtractionError, CvExtractionService, PUBLIC_ERRORS as EXTRACTION_ERRORS
 from app.services.cv_upload import CvUploadError, CvUploadService, PUBLIC_ERRORS
 
 # Includes 1 MiB for multipart headers/boundaries; document bytes have a separate limit.
 MAX_REQUEST_BYTES = 101 * 1024 * 1024
 router = APIRouter(tags=["CV intake"])
+
+
+@router.post("/cv-uploads/{job_reference}/{batch_id}/ocr", response_model=CvOcrResponse,
+    responses={400: {"description": "Unsafe batch layout."}, 404: {"description": "Batch not found."},
+        503: {"description": "OCR is not configured."}, 500: {"description": "OCR unavailable."}})
+async def ocr_cvs(job_reference: JobReference, batch_id: UUID) -> CvOcrResponse | JSONResponse:
+    try:
+        service = CvOcrService(settings.cv_upload_root, settings.ocr_tessdata_path)
+        documents = await run_in_threadpool(service.process_batch, job_reference, batch_id)
+        return CvOcrResponse(job_reference=job_reference, batch_id=batch_id,
+            attempted_count=len(documents), files=tuple(document.public_metadata() for document in documents))
+    except OcrNotConfigured:
+        return JSONResponse(status_code=503,
+            content={"code": "ocr_not_configured", "message": "OCR processing is not configured."})
+    except CvExtractionError as error:
+        return JSONResponse(status_code=error.status,
+            content={"code": error.code, "message": EXTRACTION_ERRORS[error.code]})
+    except Exception:
+        return JSONResponse(status_code=500,
+            content={"code": "ocr_unavailable", "message": "OCR processing could not be completed."})
 
 
 @router.post("/cv-uploads/{job_reference}/{batch_id}/extract", response_model=CvExtractionResponse,

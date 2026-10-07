@@ -115,8 +115,8 @@ documents can still pass. Text ordering in complex columns depends on the parser
 
 `ocr_required` means digital extraction was insufficient; it is **not evidence
 that the candidate lacks information**. A future candidate parser must not run
-normal parsing on these PDFs until OCR is implemented. The UI says:
-“Digital text was insufficient. OCR processing is not implemented yet.”
+normal parsing on these PDFs without successful OCR evidence. The UI offers
+**Run OCR** after primary extraction.
 DOCX never routes to OCR; no alphanumeric text gives `extraction_failed`.
 Malformed, encrypted or resource-limited documents also report a safe per-file
 `extraction_failed`, without deleting the batch or affecting other files.
@@ -127,6 +127,76 @@ document, 10,000 nonempty DOCX blocks and nesting depth 16; existing upload/ZIP
 limits are rechecked. These are application limits, not a parser sandbox, malware
 scanner, hard timeout or protection against every hostile document. Storage must
 remain operator-controlled; concurrent filesystem replacement is not supported.
+
+## Implemented - OCR fallback (#647491)
+
+`POST /api/v1/cv-uploads/{job_reference}/{batch_id}/ocr` reuses the same validated
+stored-batch lookup and primary extraction. Only PDF `ocr_required` results are
+eligible. Digital `text_extracted`, malformed `extraction_failed` PDFs and all
+DOCX files bypass OCR. If none qualify, a successful no-op has
+`attempted_count=0` and `files=[]`, without checking OCR installation.
+
+For eligible PDFs, pages with at least 20 alphanumeric digital characters are
+preserved; other pages use PyMuPDF's integrated Tesseract
+`get_textpage_ocr(language="eng", dpi=300, full=True, tessdata=...)`.
+If every page passes the page threshold but the document fails the total threshold,
+all its pages are OCRed. Each selected page runs once per request, using full-page
+OCR and deterministic TextPage extraction. English only; no confidence scores.
+300 DPI favors readable recognition at greater CPU/memory cost than lower DPI.
+
+Internal frozen page evidence records `source_method=digital|ocr`, 1-based page
+numbers and normalized text in document order. It remains backend memory only.
+Original PDFs are never rewritten and no OCR layers or sidecars are saved.
+Public responses contain batch identity, `attempted_count` and eligible files'
+upload ID, `ocr_status`, character count, total page count and OCR page count.
+The count represents eligible files processed, including resource-limit failures;
+`ocr_page_count` counts page calls actually attempted, including failed calls.
+
+`ocr_extracted` requires the same document-level 80-character/50%-of-pages
+sufficiency checks plus at least one OCR page recovering 20 alphanumeric characters.
+Blank/negligible recognized text, parser failures or resource-limit violations
+return per-file `ocr_failed`; failure discards partial evidence. Other files and
+originals remain intact. OCR output is untrusted extraction evidence, not verified
+candidate truth. Failure is not evidence of missing qualifications.
+
+Limits: **25 total pages per eligible document**, **100 eligible PDF pages per
+batch**, **25 million rendered pixels per selected page** at 300 DPI, and the
+existing **500,000-character output limit**. The batch budget counts preserved
+pages too, conservatively. Later over-budget files report `ocr_failed` without OCR
+calls. Digital and OCR access share the same serialization lock; work runs in the
+API threadpool. Native OCR stderr is temporarily suppressed during engine calls
+to avoid logging paths or parser details, then restored. This also briefly
+suppresses unrelated stderr writes in the same process. There is no hard timeout,
+worker queue or parser sandbox; production isolation/concurrency design is planned.
+
+### System dependency and local setup
+
+PyMuPDF remains pinned at 1.26.7; no additional Python OCR library is required.
+Tesseract OCR with readable, nonempty English `eng.traineddata` is an external
+system/data dependency. PyMuPDF uses its integrated OCR engine and the installed
+language files; it does not invoke the Tesseract executable to OCR each page.
+Optional `OCR_TESSDATA_PATH` chooses the language-data directory; otherwise
+PyMuPDF attempts local discovery. Resolution is lazy, only when files need OCR.
+Missing configuration/data yields fixed **503 `ocr_not_configured`**:
+“OCR processing is not configured.” Corrupt nonempty language data can still fail
+at engine initialization and produce `ocr_failed`; existence is not proof of validity.
+Normal startup, JD/MCP, uploads and digital extraction do not require OCR setup.
+
+**Local verification on 07 Oct 2026:** Tesseract was unavailable on PATH and at
+the checked standard Windows install locations; PyMuPDF could not discover
+English data. Mocked deterministic tests validate fallback behavior, but real
+OCR verification is **Blocked**, not passed. No system software was installed.
+
+Recommended manual setup: install Tesseract with English data explicitly, verify
+`tesseract --version` and `tesseract --list-langs` includes `eng`, then either make
+discovery work or set `OCR_TESSDATA_PATH` in ignored local `.env` to its tessdata
+directory. Restart only the backend after changing configuration. Never place a
+machine-specific active path or candidate documents in Git.
+
+The CV Intake UI retains upload and digital-extraction status, offers **Run OCR**
+only when needed, disables duplicate attempts while running, and shows compact
+OCR extracted/failed page metadata. Missing setup shows “OCR is not configured
+on this server.” No recognized text or installation details enter browser state.
 
 ## Recommended synthetic verification
 
@@ -140,6 +210,8 @@ remain operator-controlled; concurrent filesystem replacement is not supported.
    check PDF pages/DOCX blocks. A synthetic blank PDF should show **OCR required**.
    Public responses must contain metadata only. Check only this batch's generated
    filenames locally; do not display or log candidate contents.
+   With OCR configured, use an image-only synthetic PDF, click **Run OCR**, check
+   **OCR extracted**, and confirm its original bytes are unchanged.
 5. Remove temporary synthetic input files and, when no longer needed, only the
    synthetic batch created by this test. Never delete unrelated upload data.
 
@@ -157,7 +229,7 @@ remains separate. This native file picker does not automatically import Google
 Form, Sheet or Drive data. CVs never enter Company Policy/Technical Knowledge
 RAG, the JD Agent, MCP publication or LangGraph thread IDs in this slice.
 
-**Planned - not implemented:** actual OCR (#647491), structured candidate
+**Planned - not implemented:** structured candidate
 parsing, candidate database records, background processing, screening LangGraph,
 scoring/ranking, automatic Drive import, authentication/authorization, malware
 scanning, production retention/deletion and Docker named-volume integration.

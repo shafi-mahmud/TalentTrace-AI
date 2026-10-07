@@ -4,7 +4,9 @@ import { uploadCvs, validateCvSelection } from "../api/cvUploads";
 import type { CvUploadResponse } from "../types/cvUpload";
 import type { CvExtractionResponse } from "../types/cvExtraction";
 import { extractCvs } from "../api/cvExtraction";
-import { CvExtractionSummary, CvUploadConfirmation, SelectedCvFiles } from "./cvIntakePresentation";
+import { runCvOcr } from "../api/cvOcr";
+import type { CvOcrResponse } from "../types/cvOcr";
+import { CvExtractionSummary, CvOcrSummary, CvUploadConfirmation, SelectedCvFiles } from "./cvIntakePresentation";
 
 export default function CvIntake() {
   const [reference, setReference] = useState("");
@@ -14,6 +16,8 @@ export default function CvIntake() {
   const [result, setResult] = useState<CvUploadResponse | null>(null);
   const [extraction, setExtraction] = useState<CvExtractionResponse | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [ocr, setOcr] = useState<CvOcrResponse | null>(null);
+  const [processingOcr, setProcessingOcr] = useState(false);
   const pending = useRef(false);
   const picker = useRef<HTMLInputElement>(null);
 
@@ -23,7 +27,7 @@ export default function CvIntake() {
     const invalid = validateCvSelection(reference, files);
     if (invalid) { setError(invalid); return; }
     pending.current = true;
-    setLoading(true); setError(""); setResult(null); setExtraction(null);
+    setLoading(true); setError(""); setResult(null); setExtraction(null); setOcr(null);
     try {
       setResult(await uploadCvs(reference, files));
       setFiles([]);
@@ -39,10 +43,19 @@ export default function CvIntake() {
   async function extract() {
     if (!result || pending.current) return;
     pending.current = true;
-    setExtracting(true); setError(""); setExtraction(null);
+    setExtracting(true); setError(""); setExtraction(null); setOcr(null);
     try { setExtraction(await extractCvs(result)); }
     catch (failure) { setError(failure instanceof Error ? failure.message : "Text extraction could not be completed."); }
     finally { pending.current = false; setExtracting(false); }
+  }
+
+  async function runOcr() {
+    if (!extraction || pending.current) return;
+    pending.current = true;
+    setProcessingOcr(true); setError(""); setOcr(null);
+    try { setOcr(await runCvOcr(extraction)); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "OCR could not be completed."); }
+    finally { pending.current = false; setProcessingOcr(false); }
   }
 
   return <div className="app-shell chat-page">
@@ -51,27 +64,28 @@ export default function CvIntake() {
       <div className="page-intro"><h1>CV intake</h1><p className="page-description">Upload sample PDF/DOCX files and check digital text extraction. No candidate parsing or screening yet.</p></div>
       <section className="card cv-intake-card" aria-label="Native CV upload">
         <form onSubmit={submit}>
-          <fieldset disabled={loading || extracting}>
+          <fieldset disabled={loading || extracting || processingOcr}>
             <legend className="sr-only">CV intake details</legend>
             <div className="field"><label htmlFor="cv-job-reference">Job Reference</label>
-              <input id="cv-job-reference" value={reference} maxLength={23} required placeholder="TT-JOB-XXXXXXXXXXXXXXXX" onChange={event => {setReference(event.target.value); setError(""); setResult(null); setExtraction(null);}} />
+              <input id="cv-job-reference" value={reference} maxLength={23} required placeholder="TT-JOB-XXXXXXXXXXXXXXXX" onChange={event => {setReference(event.target.value); setError(""); setResult(null); setExtraction(null); setOcr(null);}} />
               <p className="helper-text">Copy the reference from the published job. Demo association only; no persisted job profile.</p>
             </div>
             <div className="field"><label htmlFor="cv-files">Choose CV files</label>
               <input ref={picker} id="cv-files" type="file" accept=".pdf,.docx" multiple onChange={event => {
-                setFiles(Array.from(event.target.files ?? [])); setError(""); setResult(null); setExtraction(null);
+                setFiles(Array.from(event.target.files ?? [])); setError(""); setResult(null); setExtraction(null); setOcr(null);
               }} />
               <p className="helper-text">1–20 files. Up to 10 MiB each and 100 MiB per batch. Use synthetic/sample CVs only.</p>
             </div>
-            <SelectedCvFiles files={files} disabled={loading || extracting} onRemove={index => {setFiles(previous => previous.filter((_, i) => i !== index)); setError("");}} />
+            <SelectedCvFiles files={files} disabled={loading || extracting || processingOcr} onRemove={index => {setFiles(previous => previous.filter((_, i) => i !== index)); setError("");}} />
           </fieldset>
           {error && <div className="error-banner" role="alert">{error}</div>}
-          <button className="button button-primary" type="submit" disabled={loading || extracting}>{loading ? "Uploading CVs…" : "Upload CVs"}</button>
+          <button className="button button-primary" type="submit" disabled={loading || extracting || processingOcr}>{loading ? "Uploading CVs…" : "Upload CVs"}</button>
           {loading && <p role="status">Validating and storing your batch…</p>}
           <p className="form-note">Trusted local demo. No candidate data is sent to the JD Agent, MCP publishing or RAG.</p>
         </form>
-        {result && <CvUploadConfirmation result={result} onExtract={extract} extracting={extracting} />}
-        {extraction && <CvExtractionSummary result={extraction} />}
+        {result && <CvUploadConfirmation result={result} onExtract={processingOcr ? undefined : extract} extracting={extracting} />}
+        {extraction && <CvExtractionSummary result={extraction} onOcr={runOcr} processingOcr={processingOcr} disabled={loading || extracting} />}
+        {ocr && <CvOcrSummary result={ocr} />}
       </section>
     </main>
   </div>;
