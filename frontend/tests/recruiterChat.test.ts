@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { isValidRecruiterMessage, sendRecruiterMessage } from "../src/api/recruiterChat.ts";
+import { publishDraft } from "../src/api/jobPublishing.ts";
 import { ChatMessageView, RecruiterChatPage, replyToChatMessage } from "../src/components/chatPresentation.ts";
 
 function result() {
@@ -104,9 +105,75 @@ test("clarification maps directly into an assistant conversation message", () =>
 });
 
 test("posting is shown as unavailable without a draft or fake publishing UI", () => {
-  const text = "Job posting is not available in this chatbot yet. I can currently help create a job description draft only.";
+  const text = "Job posting by chat instruction is not available. Review a draft and use its Publish to Discord button.";
   const message = replyToChatMessage({status: "unsupported", intent: "unsupported", assistant_message: text});
   const html = renderToStaticMarkup(createElement(ChatMessageView, {message}));
   assert.ok(html.includes(text));
   assert.ok(!html.includes("chat-draft"));
+});
+
+
+test("draft action footer has publish and revise buttons", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => Response.json(result()));
+  const message=replyToChatMessage(await sendRecruiterMessage("Create a JD."));
+  const html=renderToStaticMarkup(createElement(ChatMessageView,{message,onPublish:()=>{},onRevise:()=>{}}));
+  assert.match(html,/Publish to Discord/);
+  assert.match(html,/Revise draft/);
+  assert.match(html,/Policy grounded/);
+  assert.match(html,/<details class="grounding-section"/);
+});
+
+test("publication request maps only circular fields and optional context to backend", async (t) => {
+  let calls=0;
+  const draft=result().job_description_result;
+  // Validate through the existing runtime contract before the publish action.
+  t.mock.method(globalThis,"fetch",async () => Response.json(result()));
+  const response=await sendRecruiterMessage("Create a JD.");
+  if(response.status!=="jd_generated") assert.fail("Expected draft");
+  t.mock.restoreAll();
+  t.mock.method(globalThis,"fetch",async (url,options) => {
+    calls++;
+    assert.equal(url,"/api/v1/recruiter-chat/publish");
+    const body=JSON.parse(String(options?.body));
+    assert.deepEqual(body,{title:draft.job_description.title,summary:draft.job_description.summary,responsibilities:draft.job_description.responsibilities,required_skills:draft.job_description.required_skills,preferred_skills:draft.job_description.preferred_skills,qualifications:draft.job_description.qualifications,location:"Dhaka",employment_type:"full_time",work_arrangement:"on_site"});
+    return Response.json({destination:"discord",status:"published",external_id:"123456789012345678"});
+  });
+  const metadata=await publishDraft(response.job_description_result,{location:"Dhaka",employment_type:"full_time",work_arrangement:"on_site"});
+  assert.equal(metadata.external_id,"123456789012345678");
+  assert.equal(calls,1);
+});
+
+test("publication failures are sanitized and never automatically retried", async (t) => {
+  t.mock.method(globalThis,"fetch",async () => Response.json(result()));
+  const response=await sendRecruiterMessage("Create a JD.");
+  if(response.status!=="jd_generated") assert.fail("Expected draft");
+  for (const status of [422,502,503,504]) {
+    let calls=0;
+    t.mock.method(globalThis,"fetch",async()=> { calls++; return Response.json({message:"PRIVATE_SECRET"},{status}); });
+    await assert.rejects(publishDraft(response.job_description_result),(error:Error)=>!error.message.includes("PRIVATE_SECRET"));
+    assert.equal(calls,1);
+  }
+});
+
+test("malformed confirmation is rejected rather than showing success", async (t) => {
+  t.mock.method(globalThis,"fetch",async () => Response.json(result()));
+  const response=await sendRecruiterMessage("Create a JD.");
+  if(response.status!=="jd_generated") assert.fail("Expected draft");
+  t.mock.method(globalThis,"fetch",async()=>Response.json({destination:"discord",status:"published",external_id:"bad"}));
+  await assert.rejects(publishDraft(response.job_description_result));
+});
+
+test("draft card renders loading, confirmed metadata and safe failure states", async (t) => {
+  t.mock.method(globalThis,"fetch",async () => Response.json(result()));
+  const message=replyToChatMessage(await sendRecruiterMessage("Create a JD."));
+  const loading=renderToStaticMarkup(createElement(ChatMessageView,{message:{...message,publication:{status:"loading"}},onPublish:()=>{},onRevise:()=>{}}));
+  assert.match(loading,/Publishing/);
+  assert.match(loading,/disabled/);
+  const success=renderToStaticMarkup(createElement(ChatMessageView,{message:{...message,publication:{status:"success",result:{destination:"discord",status:"published",external_id:"123456789012345678"}}},onPublish:()=>{},onRevise:()=>{}}));
+  for(const value of ["Publication confirmed","discord","published","123456789012345678"]) assert.ok(success.includes(value));
+  assert.ok(!success.includes("has not been approved, saved, or published"));
+  const failed=renderToStaticMarkup(createElement(ChatMessageView,{message:{...message,publication:{status:"failed",message:"Check Discord before another attempt."}},onPublish:()=>{},onRevise:()=>{}}));
+  assert.match(failed,/role="alert"/);
+  assert.match(failed,/Check Discord/);
+  assert.match(failed,/disabled/);
 });

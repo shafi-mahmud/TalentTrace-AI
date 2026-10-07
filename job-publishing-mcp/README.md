@@ -96,14 +96,16 @@ This increment supports ordinary text channels, not forum/media thread setup.
 
 ## Planned — not implemented
 
-- TalentTrace backend MCP client integration and recruiter chatbot.
+- Publication idempotency/deduplication and additional destinations.
 - JD approval enforcement, authorization and publication audit/persistence.
 - Blogger, Telegram and other destinations, including LinkedIn/X.
 
 An MCP server exposes protocol tools; it is not a LangGraph agent and does not
-generate or approve a JD. A future backend MCP client will map an approved JD
-into `JobCircular` and call this same tool. The fields are designed for that
-mapping; no backend contract or workflow is changed in this increment.
+generate or approve a JD. The trainer-demo backend client now maps the inline draft and supplied optional
+context into this same `JobCircular` tool through `/api/v1/recruiter-chat/publish`.
+The React action requires explicit review/confirmation; it does not implement
+persisted approval or authorization. The JD workflow is unchanged. See
+[project structure](../docs/project_structure.md) for the demo boundary.
 
 Until approval enforcement is added, use only synthetic demo circulars from
 trusted local clients. Automated tests mock Discord so repeatable tests cannot

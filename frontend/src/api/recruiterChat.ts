@@ -1,6 +1,6 @@
 import { isGenerationResponse } from "./jobDescriptions.ts";
 import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
-import type { RecruiterChatResponse } from "../types/recruiterChat";
+import type { RecruiterChatResponse, PublishingContext } from "../types/recruiterChat";
 
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 const FAILURE = "Recruiter chat could not be completed. Please try again.";
@@ -14,7 +14,8 @@ export function isRecruiterChatResponse(value: unknown): value is RecruiterChatR
       || !value.assistant_message.trim() || value.assistant_message.length > 600) return false;
   if (value.status === "unsupported") return value.intent === "unsupported";
   if (value.intent !== "create_job_description") return false;
-  if (value.status === "jd_generated") return isGenerationResponse(value.job_description_result);
+  if (value.status === "jd_generated") return isGenerationResponse(value.job_description_result)
+    && (value.publishing_context === undefined || isPublishingContext(value.publishing_context));
   return value.status === "clarification" && Array.isArray(value.missing_fields)
     && value.missing_fields.length > 0 && value.missing_fields.length <= Object.keys(MISSING_FIELD_LABELS).length
     && value.missing_fields.every((field) => typeof field === "string" && Object.hasOwn(MISSING_FIELD_LABELS, field));
@@ -47,4 +48,12 @@ export function isValidRecruiterMessage(message: string): boolean {
   const text = message.trim();
   return text.length > 0 && text.length <= 4000
     && !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(text.replace(/[\r\n\t]/g, ""));
+}
+
+
+function isPublishingContext(value: unknown): value is PublishingContext {
+  if (!isRecord(value) || Object.keys(value).some(key => !["location", "employment_type", "work_arrangement"].includes(key))) return false;
+  return (value.location == null || (typeof value.location === "string" && value.location.length <= 150))
+    && (value.employment_type == null || ["full_time", "part_time", "contract", "internship", "temporary"].includes(String(value.employment_type)))
+    && (value.work_arrangement == null || ["on_site", "remote", "hybrid"].includes(String(value.work_arrangement)));
 }

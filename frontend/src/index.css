@@ -218,5 +218,10 @@ fieldset:disabled { opacity: 0.65; }
 .grounded-badge { background: #e9f2eb; color: #365d44; }
 .grounding-section > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: #365d44; }
 .grounding-section[open] > summary { margin-bottom: 16px; }
-
+.draft-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #e4ece6; }
+.publication-note { font-size: 12px; color: #61766a; }
+.publication-success { margin-top: 16px; border: 1px solid #c4ddcb; background: #edf6ef; padding: 14px; border-radius: 8px; font-size: 12px; }
+.publication-success dl { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 10px 0 0; }
+.publication-success dt { color: #61766a; font-size: 11px; }
+.publication-success dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .chat-composer { position: sticky; bottom: 0; }

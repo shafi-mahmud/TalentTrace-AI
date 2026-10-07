@@ -105,7 +105,14 @@ class UnsupportedResponse(BaseModel):
 
     status: Literal["unsupported"] = "unsupported"
     intent: Literal["unsupported"] = "unsupported"
-    assistant_message: str = "I can help create a job description. Include the job title, role purpose, responsibilities and required skills. Publishing and candidate processing are unavailable."
+    assistant_message: str = "I can help create a job description. Include the job title, role purpose, responsibilities and required skills. Publishing uses the draft action after review; candidate processing is unavailable."
+
+
+class PublishingContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    location: Location | None = None
+    employment_type: EmploymentType | None = None
+    work_arrangement: WorkArrangement | None = None
 
 
 class JobDescriptionChatResponse(BaseModel):
@@ -113,8 +120,9 @@ class JobDescriptionChatResponse(BaseModel):
 
     status: Literal["jd_generated"] = "jd_generated"
     intent: Literal["create_job_description"] = "create_job_description"
-    assistant_message: str = "Your policy-grounded draft is ready. Human review is required before use."
+    assistant_message: str = "Your policy-grounded draft is ready. Please review it before publishing."
     job_description_result: JobDescriptionGenerationResponse
+    publishing_context: PublishingContext = Field(default_factory=PublishingContext)
 
 
 RecruiterChatResponse = Annotated[

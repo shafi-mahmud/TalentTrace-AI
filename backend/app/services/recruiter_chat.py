@@ -10,7 +10,7 @@ from app.integrations.llm.recruiter_chat import RecruiterInstructionInterpreter
 from app.schemas.job_description import JobDescriptionGenerationRequest
 from app.schemas.recruiter_chat import (
     ClarificationResponse, FIELD_LABELS, JobDescriptionChatResponse,
-    RecruiterChatRequest, RecruiterChatResponse, UnsupportedResponse,
+    RecruiterChatRequest, RecruiterChatResponse, UnsupportedResponse, PublishingContext,
 )
 
 ALIASES = {
@@ -95,7 +95,7 @@ class RecruiterChatService:
         # Recognize direct posting requests without any provider or publication call.
         posting = re.search(r"^(?:please\s+)?(?:(?:can|could|would) you\s+|(?:i want|i would like|i need) to\s+)?(?:publish|post|share)\b|\b(?:and|then)\s+(?:publish|post)\b", request.message, re.I)
         if posting and re.search(r"\b(?:jd|job|draft|description|discord|linkedin)\b", request.message, re.I):
-            return UnsupportedResponse(assistant_message="Job posting is not available in this chatbot yet. I can currently help create a job description draft only.")
+            return UnsupportedResponse(assistant_message="Job posting by chat instruction is not available. Review a draft and use its Publish to Discord button.")
         interpretation = await self._interpreter.interpret(request)
         if interpretation.intent == "unsupported":
             return UnsupportedResponse()
@@ -124,4 +124,5 @@ class RecruiterChatService:
                 assistant_message="Please clarify " + ", ".join(FIELD_LABELS[f] for f in uncertain)
                 + ". Edit and resend your complete instruction with positively stated requirements; each request is independent.")
         result = await self._workflow_factory().generate(jd_request)
-        return JobDescriptionChatResponse(job_description_result=result)
+        return JobDescriptionChatResponse(job_description_result=result, publishing_context=PublishingContext(
+            location=jd_request.location, employment_type=jd_request.employment_type, work_arrangement=jd_request.work_arrangement))

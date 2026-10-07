@@ -1,3 +1,6 @@
+from app.integrations.job_publishing.mcp_client import get_job_publisher, PublicationUnavailable
+from app.schemas.job_publication import PublicationResult, RecruiterPublishRequest
+
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
@@ -37,3 +40,18 @@ async def recruiter_chat(request: RecruiterChatRequest) -> RecruiterChatResponse
         return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content={
             "code": "recruiter_chat_failed", "message": "Recruiter chat could not be completed.",
         })
+
+
+
+
+@router.post("/publish", response_model=PublicationResult, responses={
+    502: {"description": "Publication unconfirmed; check delivery before another attempt."},
+    503: {"description": "Local MCP publishing server unavailable."},
+})
+async def publish_job(request: RecruiterPublishRequest) -> PublicationResult | JSONResponse:
+    try:
+        return await get_job_publisher().publish(request)
+    except PublicationUnavailable:
+        return JSONResponse(status_code=503, content={"code": "job_publication_unavailable", "message": "Job publishing is not configured."})
+    except Exception:
+        return JSONResponse(status_code=502, content={"code": "job_publication_unconfirmed", "message": "Publication was not confirmed. Check Discord before another attempt; delivery may have occurred."})

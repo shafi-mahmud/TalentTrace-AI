@@ -17,14 +17,25 @@ export const MISSING_FIELD_LABELS = {
 
 export type MissingField = keyof typeof MISSING_FIELD_LABELS;
 
+export interface PublishingContext {
+  location?: string | null;
+  employment_type?: "full_time" | "part_time" | "contract" | "internship" | "temporary" | null;
+  work_arrangement?: "on_site" | "remote" | "hybrid" | null;
+}
+export interface PublicationResult { destination: "discord"; status: "published"; external_id: string; }
+export type PublicationState = {status: "idle" | "loading"} | {status: "success"; result: PublicationResult} | {status: "failed"; message: string};
+
 export type RecruiterChatResponse =
   | { status: "clarification"; intent: "create_job_description"; assistant_message: string; missing_fields: MissingField[] }
   | { status: "unsupported"; intent: "unsupported"; assistant_message: string }
-  | { status: "jd_generated"; intent: "create_job_description"; assistant_message: string; job_description_result: JobDescriptionGenerationResponse };
+  | { status: "jd_generated"; intent: "create_job_description"; assistant_message: string; job_description_result: JobDescriptionGenerationResponse; publishing_context?: PublishingContext };
 
 export interface ChatMessage {
   role: "recruiter" | "assistant";
   text: string;
   missingFields?: MissingField[];
   jobDescriptionResult?: JobDescriptionGenerationResponse;
+  publishingContext?: PublishingContext;
+  publication?: PublicationState;
+  sourceInstruction?: string;
 }

@@ -467,7 +467,7 @@ def test_posting_requests_are_unavailable_without_external_calls(monkeypatch, me
     assert response.status_code == 200
     assert response.json() == {
         "status": "unsupported", "intent": "unsupported",
-        "assistant_message": "Job posting is not available in this chatbot yet. I can currently help create a job description draft only.",
+        "assistant_message": "Job posting by chat instruction is not available. Review a draft and use its Publish to Discord button.",
     }
 
 
@@ -476,3 +476,11 @@ def test_posting_word_in_job_responsibility_does_not_block_drafting():
     service = RecruiterChatService(FakeInterpreter(), workflow_factory=lambda: workflow)
     result = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE + " Responsibilities include posting job adverts.")))
     assert result.status == "jd_generated"
+
+
+def test_validated_optional_context_is_returned_for_publication_mapping():
+    data = realistic_extraction()
+    data["requirements"]["location"] = evidence("Dhaka")
+    workflow = RecordingWorkflow()
+    result = asyncio.run(RecruiterChatService(FakeInterpreter(data), workflow_factory=lambda: workflow).respond(RecruiterChatRequest(message=REALISTIC_MESSAGE + " Location: Dhaka.")))
+    assert result.publishing_context.model_dump() == {"location": "Dhaka", "employment_type": "full_time", "work_arrangement": "remote"}
