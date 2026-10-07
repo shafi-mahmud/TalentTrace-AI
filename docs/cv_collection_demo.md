@@ -8,8 +8,10 @@ Discord **Apply for this role** -> Google Form -> form owner's Google Drive.
 The TalentTrace-side link plumbing is implemented and tested with mocked
 Discord traffic. On 07 Oct 2026, the project owner confirmed manual verification
 of UI-to-MCP-to-Discord publication and Discord-to-Google-Form-to-Sheets/Drive
-CV collection. Form setup remains manual; no Google API synchronization or
-native TalentTrace CV ingestion is implemented.
+CV collection. Form setup remains manual; this external channel does not
+automatically ingest Drive uploads into TalentTrace. The separate
+[native CV intake foundation](cv_ingestion.md) now accepts manually selected
+sample files, without parsing or screening.
 Google Form/Drive is an external privacy dependency, not a TalentTrace database.
 
 `APPLICATION_FORM_URL` comes only from backend settings (environment or ignored
@@ -100,7 +102,7 @@ operator's responsibility; production retention/deletion automation is absent.
 
 **Planned - not implemented:** native candidate application portal, Google Drive
 API synchronization, automatic CV import, candidate database persistence,
-PDF/DOCX CV ingestion, OCR, structured parsing, screening LangGraph, scoring/
+PDF/DOCX text extraction/processing, OCR, structured parsing, screening LangGraph, scoring/
 ranking, candidate authentication, retention/deletion automation, production
 approval/audit, and additional publication destinations. No Google OAuth,
 Drive API or candidate-processing dependency was added.

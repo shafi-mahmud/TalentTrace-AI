@@ -187,6 +187,24 @@ checkpointed, and JD approval/revision is not implemented.
   and additional publishing destinations remain planned. No CV data is sent
   through the JD workflow or MCP publishing by this link feature.
 
+## Implemented - native batch CV intake foundation
+
+- **CV Intake** is a separate top-level frontend mode; JD Assistant remains the
+  default chat-first experience. Recruiters enter a demo Job Reference, select
+  1-20 PDF/DOCX files, remove selections and see controlled upload status.
+- `POST /api/v1/cv-uploads` accepts bounded multipart UploadFile parts, validates
+  reference syntax, extension/MIME, PDF signatures and DOCX ZIP structure, then
+  streams files to private ignored local storage. Responses contain UUID batch/
+  upload IDs and sizes only. A failed batch cleans up its own stored files.
+- `CV_UPLOAD_ROOT` defaults to ignored `data/cv_uploads/`; no files are web-served.
+  No candidate data is logged, sent to JD/RAG/MCP or stored in candidate tables.
+  This is trusted local-demo intake, without authentication or production
+  retention/deletion controls. Reference association is not database integrity.
+- The external Google Form/Drive demo remains separate and already verified.
+  Automatic Drive import, text extraction, OCR, parsing, screening/scoring,
+  candidate persistence and Docker volume integration remain **Planned**.
+  See [native CV ingestion](cv_ingestion.md) for limits, storage and security caveats.
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.
