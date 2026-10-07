@@ -51,10 +51,32 @@ migration, JD graph change or automatic policy selection. See
 safe commands, source/version/document UUID semantics and the documented
 decision to preserve BGE-small while deferring model benchmarks.
 
+## Implemented — PostgreSQL checkpoint foundation
+
+- `backend/app/db/checkpointer.py` provides the official LangGraph
+  `AsyncPostgresSaver` lifecycle with strict serialization. A separate checkpoint
+  database on the same PostgreSQL instance keeps LangGraph-owned tables apart
+  from application tables and Alembic. Setup is explicit through
+  `python -m app.db.setup_checkpointer`; import/startup remains lazy.
+- `backend/app/db/workflow_threads.py` validates opaque UUID-based identifiers
+  in the four workflow namespaces, without implementing those workflows.
+- See [checkpoint storage](checkpoint_storage.md) for configuration, setup,
+  ownership, Windows async compatibility and the two-process validation helper.
+  This establishes infrastructure only; it does not checkpoint the JD workflow.
+- **Implemented and verified — 07 Oct 2026:** live setup in a separate database
+  on the preserved PostgreSQL instance and a genuine two-process interrupt/resume
+  proof passed. Business/RAG tables and data fingerprints remained unchanged.
+  All 35 focused tests and 50 backend tests passed on the standalone
+  infrastructure branch before this integration.
+
+**Implemented and verified:** the checkpoint foundation. **Planned:** wiring
+the existing JD workflow into that foundation; the JD workflow is not yet
+checkpointed, and JD approval/revision is not implemented.
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.
-- Other ORM business models, a production Docker Compose PostgreSQL service, other repositories, and a LangGraph PostgreSQL checkpointer remain planned. The disposable database used for the successful live validation does not implement the production service.
+- Other ORM business models, a production Docker Compose PostgreSQL service, and other repositories remain planned. The disposable database used for the successful live validation does not implement the production service.
 - A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
 - Background processing and concrete external integration implementations remain planned; their current packages are architectural boundaries only.
 - `job-publishing-mcp/` marks the boundary for a future lightweight, TalentTrace-owned MCP server for approved job publishing. It is not implemented.
