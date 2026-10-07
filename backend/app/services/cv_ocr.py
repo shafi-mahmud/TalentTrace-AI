@@ -61,6 +61,10 @@ class CvOcrService:
 
     def process_batch(self, job_reference: str, batch_id: UUID) -> tuple[OcrCvDocument, ...]:
         extracted = self.extraction.extract_batch_with_paths(job_reference, batch_id)
+        return self.process_extracted(extracted)
+
+    def process_extracted(self, extracted: tuple[tuple[Path, ExtractedCvDocument], ...]) -> tuple[OcrCvDocument, ...]:
+        """Reuse freshly validated extraction within a request; no evidence persistence."""
         eligible = [(path, document) for path, document in extracted
             if document.file_type == "pdf" and document.extraction_status == "ocr_required"]
         if not eligible:

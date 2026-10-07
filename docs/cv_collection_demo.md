@@ -102,10 +102,11 @@ operator's responsibility; production retention/deletion automation is absent.
 
 **Planned - not implemented:** native candidate application portal, Google Drive
 API synchronization, automatic CV import, candidate database persistence,
-structured candidate parsing, screening LangGraph, scoring/
+screening LangGraph, scoring/
 ranking, candidate authentication, retention/deletion automation, production
 approval/audit, and additional publication destinations. No Google OAuth,
 Drive API or candidate-processing dependency was added.
 
-Native upload, primary digital extraction and the OCR fallback are implemented separately;
+Native upload, primary digital extraction, OCR fallback and grounded candidate profiles
+are implemented separately;
 see [native CV ingestion](cv_ingestion.md). This does not import Google Drive data.

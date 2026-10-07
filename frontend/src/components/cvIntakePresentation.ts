@@ -28,7 +28,7 @@ export function CvUploadConfirmation({result, onExtract, extracting = false}: {
   return h("section", {className: "cv-upload-success", role: "status"},
     h("h2", null, "Upload complete"), h("p", null, `${result.accepted_count} file${result.accepted_count === 1 ? "" : "s"} stored for ${result.job_reference}.`),
     h("p", null, "Batch reference"), h("code", null, result.batch_id),
-    h("p", {className: "helper-text"}, "Files stored privately. Candidate parsing and screening are not implemented yet."),
+    h("p", {className: "helper-text"}, "Files stored privately. Extract source-backed profiles after processing; no screening or scoring."),
     onExtract && h("button", {type: "button", className: "button button-primary", disabled: extracting, onClick: onExtract}, extracting ? "Extracting text…" : "Extract text"));
 }
 
@@ -57,5 +57,5 @@ export function CvOcrSummary({result}: {result: CvOcrResponse}) {
         h("strong", null, `OCR file ${index + 1} · PDF · `),
         file.ocr_status === "ocr_extracted" ? `OCR extracted · ${file.page_count} ${file.page_count === 1 ? "page" : "pages"}` : "OCR failed",
         file.ocr_status === "ocr_failed" && h("p", {className: "helper-text"}, "Usable text could not be recovered. This is not evidence of missing qualifications.")))),
-    h("p", {className: "helper-text"}, "Extraction evidence only. Candidate parsing and screening are not implemented yet."));
+    h("p", {className: "helper-text"}, "Extraction evidence only. Profile extraction is a separate action; no screening or scoring."));
 }

@@ -13,12 +13,39 @@ from app.schemas.cv_upload import CvUploadResponse, JobReference
 from app.schemas.cv_extraction import CvExtractionResponse
 from app.schemas.cv_ocr import CvOcrResponse
 from app.services.cv_ocr import CvOcrService, OcrNotConfigured
+from app.schemas.candidate_profile import CandidateProfilesResponse
+from app.services.candidate_profile import CandidateProfileService
+from app.integrations.llm.candidate_profile import CandidateParserNotConfigured
 from app.services.cv_extraction import CvExtractionError, CvExtractionService, PUBLIC_ERRORS as EXTRACTION_ERRORS
 from app.services.cv_upload import CvUploadError, CvUploadService, PUBLIC_ERRORS
 
 # Includes 1 MiB for multipart headers/boundaries; document bytes have a separate limit.
 MAX_REQUEST_BYTES = 101 * 1024 * 1024
 router = APIRouter(tags=["CV intake"])
+
+
+@router.post("/cv-uploads/{job_reference}/{batch_id}/candidate-profiles", response_model=CandidateProfilesResponse,
+    responses={400: {"description": "Unsafe batch layout."}, 404: {"description": "Batch not found."},
+        503: {"description": "Candidate parser not configured."}, 500: {"description": "Candidate parsing unavailable."}})
+async def candidate_profiles(request: Request, job_reference: JobReference, batch_id: UUID) -> CandidateProfilesResponse | JSONResponse:
+    try:
+        # This contract accepts path identity only, never browser-provided source/config.
+        if request.query_params:
+            return JSONResponse(status_code=400, content={"code": "invalid_candidate_request", "message": "Supply stored batch identity only."})
+        async for chunk in request.stream():
+            if chunk:
+                return JSONResponse(status_code=400, content={"code": "invalid_candidate_request", "message": "Supply stored batch identity only."})
+        candidates = await CandidateProfileService(settings).parse_batch(job_reference, batch_id)
+        return CandidateProfilesResponse(job_reference=job_reference, batch_id=batch_id,
+            processed_count=len(candidates), candidates=candidates)
+    except CandidateParserNotConfigured:
+        return JSONResponse(status_code=503, content={"code": "candidate_parser_not_configured",
+            "message": "Candidate profile extraction is not configured."})
+    except CvExtractionError as error:
+        return JSONResponse(status_code=error.status, content={"code": error.code, "message": EXTRACTION_ERRORS[error.code]})
+    except Exception:
+        return JSONResponse(status_code=500, content={"code": "candidate_parsing_unavailable",
+            "message": "Candidate profile extraction could not be completed."})
 
 
 @router.post("/cv-uploads/{job_reference}/{batch_id}/ocr", response_model=CvOcrResponse,

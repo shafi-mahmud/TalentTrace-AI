@@ -201,7 +201,7 @@ checkpointed, and JD approval/revision is not implemented.
   This is trusted local-demo intake, without authentication or production
   retention/deletion controls. Reference association is not database integrity.
 - The external Google Form/Drive demo remains separate and already verified.
-  Automatic Drive import, candidate parsing, screening/scoring,
+  Automatic Drive import, screening/scoring,
   candidate persistence and Docker volume integration remain **Planned**.
   See [native CV ingestion](cv_ingestion.md) for limits, storage and security caveats.
 
@@ -222,8 +222,7 @@ checkpointed, and JD approval/revision is not implemented.
 - Per-file parser failures are sanitized; other files remain independently
   processable. Storage validation and document/text limits are enforced. See
   [CV ingestion](cv_ingestion.md) for exact limits and heuristic limitations.
-- Candidate structured parsing, entity/skill extraction, candidate persistence,
-  screening/scoring, background processing, automatic Drive import, authorization
+- Candidate persistence, screening/scoring, background processing, automatic Drive import, authorization
   and production retention/deletion remain **Planned**. This is not a new agent or
   LangGraph workflow and does not send CVs to JD/RAG/MCP.
 
@@ -246,11 +245,42 @@ checkpointed, and JD approval/revision is not implemented.
   for exact routing, success checks, setup and limitations.
 - **System dependency:** Tesseract English language data; optional lazy
   `OCR_TESSDATA_PATH`, otherwise local discovery. No new Python dependencies.
-  **Real local OCR verification is Blocked** on 07 Oct 2026 because Tesseract/
-  English data was not available; mocked tests prove behavior, not recognition accuracy.
-- Structured candidate parsing/persistence, screening/scoring, automatic Drive
+  **Real local OCR was manually verified by the project owner on 07 Oct 2026**:
+  synthetic image-only PDF -> `ocr_required` -> Tesseract 5.4.0.20240606 ->
+  `ocr_extracted`; 31 focused OCR tests were reported passed. The earlier dependency
+  blocker was resolved; English data/version were detected in the profile increment.
+- Candidate persistence, screening/scoring, automatic Drive
   import, background processing, authentication and production retention/deletion
   remain **Planned**. No new workflow/agent was added.
+
+## Implemented - source-backed candidate profile extraction (#647493)
+
+- `schemas/candidate_profile.py` separates private source/evidence/provider contracts
+  from public profiles, and contact identity from qualifications. Every public fact
+  has a server-derived page/block and digital/OCR locator; full text/quotes stay private.
+- `services/candidate_profile.py` reuses stored-batch validation, primary extraction
+  and OCR fallback, then validates every returned fact. Unknown sources, absent
+  quotations and invented/inferred values fail the whole file. Skills are deduplicated
+  in source order. Failed source extraction is `source_unavailable`, not missing skills.
+- `integrations/llm/candidate_profile.py` provides the replaceable extractor interface
+  and Groq strict JSON implementation: existing key/model, 30-second timeout, zero
+  retries, temperature 0 and one sequential call per usable CV. Input limits are
+  40,000 characters and 400 units; no silent truncation. This is not a new workflow.
+- `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/candidate-profiles` accepts
+  stored identity only. Missing provider setup is sanitized 503; individual provider/
+  grounding failures are `parsing_failed`. Other files continue; originals stay unchanged.
+- CV Intake uses `api/candidateProfiles.ts`, `types/candidateProfile.ts` and
+  `components/candidateProfilesPresentation.ts` for an Extract candidate profiles
+  action and compact Contact/Education/Work history/Skills results. Focused backend
+  and lightweight frontend tests cover contracts, grounding, source routing and safe UI.
+- **Privacy:** this feature sends CV-derived text to external Groq. Synthetic/sample
+  data only; no authentication or production provider governance exists. Text/evidence
+  is not persisted; profiles stay in request/component memory. CVs do not enter JD,
+  RAG or MCP. Repeated processing may repeat extraction/OCR/provider calls.
+- Grounding confirms textual support, not verified candidate truth. Candidate
+  persistence, screening LangGraph, semantic job matching, hard exclusion, scoring/
+  ranking, background workers, authentication and production consent/retention remain
+  **Planned**. Future merit evaluation must exclude contact identity.
 
 ## Planned — future functionality
 

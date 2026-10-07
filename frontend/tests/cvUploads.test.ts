@@ -44,7 +44,7 @@ test("upload success shows accepted count and opaque batch reference only", () =
   const html = renderToStaticMarkup(createElement(CvUploadConfirmation, {result: result() as Parameters<typeof CvUploadConfirmation>[0]["result"]}));
   assert.match(html, /1 file stored/);
   assert.match(html, new RegExp(BATCH));
-  assert.match(html, /parsing and screening are not implemented/);
+  assert.match(html, /no screening or scoring/);
   assert.ok(!html.includes("synthetic.pdf"));
   assert.ok(!html.includes("iframe"));
 });

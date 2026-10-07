@@ -182,10 +182,12 @@ Missing configuration/data yields fixed **503 `ocr_not_configured`**:
 at engine initialization and produce `ocr_failed`; existence is not proof of validity.
 Normal startup, JD/MCP, uploads and digital extraction do not require OCR setup.
 
-**Local verification on 07 Oct 2026:** Tesseract was unavailable on PATH and at
-the checked standard Windows install locations; PyMuPDF could not discover
-English data. Mocked deterministic tests validate fallback behavior, but real
-OCR verification is **Blocked**, not passed. No system software was installed.
+**Verified on 07 Oct 2026:** the project owner manually confirmed a synthetic
+image-only PDF -> `ocr_required` -> real Tesseract **5.4.0.20240606** ->
+`ocr_extracted`, and reported **31 focused OCR tests passed**. The earlier missing
+system dependency was resolved. English data and that Tesseract version were also
+detected during the candidate-profile increment. No system software was installed
+by this increment.
 
 Recommended manual setup: install Tesseract with English data explicitly, verify
 `tesseract --version` and `tesseract --list-langs` includes `eng`, then either make
@@ -196,7 +198,90 @@ machine-specific active path or candidate documents in Git.
 The CV Intake UI retains upload and digital-extraction status, offers **Run OCR**
 only when needed, disables duplicate attempts while running, and shows compact
 OCR extracted/failed page metadata. Missing setup shows “OCR is not configured
-on this server.” No recognized text or installation details enter browser state.
+on this server.” No complete recognized text or installation details enter browser
+state. The separate profile action below returns only structured values/locators.
+
+## Implemented - grounded candidate profiles (#647493)
+
+**Extract candidate profiles** calls
+`POST /api/v1/cv-uploads/{job_reference}/{batch_id}/candidate-profiles`.
+Only stored batch identity is accepted; nonempty bodies and query parameters are
+rejected. Safe storage validation and primary extraction are reused. Successful
+PDF pages/DOCX blocks become private `page:N`/`block:N` source units. OCR-required
+PDFs use the existing OCR service, preserving `digital`/`ocr` page methods;
+unavailable or unsuccessful OCR/extraction yields `source_unavailable`, not an
+empty qualifications claim. The browser prefers profile extraction after digital
+processing and, if needed, an OCR attempt; the backend independently resolves sources.
+
+`CandidateProfileExtractor` is a replaceable async interface, implemented by
+`GroqCandidateProfileExtractor`. It uses existing server-controlled Groq key/model,
+strict JSON-schema output, temperature 0, 30-second timeout, no retries and at most
+6000 completion tokens. There is one sequential call per usable document. Sources
+are JSON-encoded untrusted data; the system instructions forbid following CV
+instructions, inferred facts, protected demographics, suitability and scoring.
+There is no new agent, graph, RAG collection or candidate persistence.
+
+Provider facts include a copied quotation and declared source ID. Server validation
+requires the ID to exist, the quotation to appear in that exact unit and the value
+to occur within it at word boundaries after NFC/case/whitespace normalization.
+Only harmless terminal punctuation may be stripped; there is no fuzzy matching or
+semantic inference (Django cannot establish Python). Name support excludes matches
+found only inside email/URL tokens. One unsupported value rejects the entire file's
+profile as `parsing_failed`; it is not silently dropped. Skills are validated before
+deduplication, case-insensitively deduplicated and ordered by first source/occurrence.
+
+Input is limited to **40,000 normalized characters**, including two-character unit
+separators, and **400 source units**. Larger inputs fail without a provider call or
+silent truncation. Values are bounded to 500 characters, evidence to 1000; narrower
+validated limits are name/location 200, email 254, phone 64 and skill 80. Lists cap
+emails/phones at 5, links at 10, education/work entries at 20, work activities at 20
+per entry and skills at 100. Missing facts remain null/empty; dates stay source text.
+
+Public `CandidateProfile` separates **CandidateContact** (name, email, phone, links,
+contact location) from **CandidateQualifications** (education, work history, skills).
+Each structured value has only a server-derived page/block locator and source method.
+The response contains batch identity, processed count and per-upload `parsed`,
+`source_unavailable` or `parsing_failed`, with null profile sections on failure.
+It never returns full CV/OCR text, evidence quotations, filenames, private paths or
+prompts. The UI shows Contact, Education, Work history and Skills, with Page/Block
+and OCR labels. Links are rendered as text, not executable HTML.
+
+Missing Groq configuration gives fixed 503 `candidate_parser_not_configured`.
+Provider timeout/failure, invalid JSON/shape, grounding failure or input-limit
+failure becomes per-file `parsing_failed`; other candidates continue. Extraction
+failure is not rejection or evidence of missing skills. Structured output proves
+shape; grounding proves textual support, **not real-world truth or correct semantic
+classification**. OCR errors and ambiguous documents can still affect results.
+
+### Third-party privacy and recomputation
+
+**Candidate CV-derived source text is sent to the configured external Groq provider
+for profile extraction.** This differs from local digital extraction/OCR. Use only
+synthetic/sample CVs in this unauthenticated localhost training demo. CVs still never
+enter JD generation, Company Policy/Technical Reference RAG or MCP publication.
+This is not production consent/provider/privacy governance.
+
+Raw text, evidence and profiles remain request-scoped; structured results are held
+only in component memory for presentation. No candidate values, prompts or raw
+provider errors are logged; no database/sidecar/profile files are written. Uploads
+remain byte-identical. Because evidence is not persisted, separate UI stages repeat
+digital/OCR work; the candidate service forwards primary evidence to OCR within its
+own request. Repeated parsing also repeats provider calls. Later governed persistence
+or a background workflow can pass evidence forward without this recomputation.
+
+Future screening must consume qualifications and explicit job requirements, not
+contact identity as a merit signal. No experience totals, screening, matching,
+exclusion, recommendation, score or ranking is calculated here. Sequential batch
+processing is a bounded demo, not a production-scale worker architecture.
+
+**Live synthetic API verification - 07 Oct 2026:** one generated sample DOCX was
+uploaded and processed through the actual FastAPI candidate endpoint and real Groq
+strict structured output. HTTP 200 returned `parsed`, one education entry, one
+work entry and three skills. All 16 returned attributes were checked against their
+referenced source blocks. Raw text/quotes/paths were absent and original bytes were
+unchanged. There was one provider call with no retry; only that synthetic batch and
+temporary input were removed. Frontend rendering is automated-tested; this check
+did not perform manual browser interaction.
 
 ## Recommended synthetic verification
 
@@ -219,8 +304,10 @@ Automated tests generate synthetic documents in memory and store only in pytest
 temporary directories. They cover mixed/20-file batches, limits, signatures,
 package safety, traversal, opaque responses and rollback. Extraction tests cover
 real synthetic parser output, page/block order, OCR thresholds, malformed files,
-metadata-only responses and byte-identical originals. No real CVs, provider
-calls, Google data or binary repository fixtures are used.
+metadata-only responses and byte-identical originals. Candidate tests mock Groq
+and cover strict shape, evidence grounding, source failures, privacy and per-file
+isolation. Ordinary tests use no real CVs, provider calls, Google data or binary
+repository fixtures. A separately authorized live check may use synthetic data only.
 
 ## Separate external channel and Planned work
 
@@ -229,8 +316,7 @@ remains separate. This native file picker does not automatically import Google
 Form, Sheet or Drive data. CVs never enter Company Policy/Technical Knowledge
 RAG, the JD Agent, MCP publication or LangGraph thread IDs in this slice.
 
-**Planned - not implemented:** structured candidate
-parsing, candidate database records, background processing, screening LangGraph,
+**Planned - not implemented:** candidate database records, background processing, screening LangGraph,
 scoring/ranking, automatic Drive import, authentication/authorization, malware
 scanning, production retention/deletion and Docker named-volume integration.
 Use only synthetic/sample CVs in the trusted localhost demo.
