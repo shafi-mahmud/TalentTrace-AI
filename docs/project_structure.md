@@ -201,9 +201,30 @@ checkpointed, and JD approval/revision is not implemented.
   This is trusted local-demo intake, without authentication or production
   retention/deletion controls. Reference association is not database integrity.
 - The external Google Form/Drive demo remains separate and already verified.
-  Automatic Drive import, text extraction, OCR, parsing, screening/scoring,
+  Automatic Drive import, actual OCR, candidate parsing, screening/scoring,
   candidate persistence and Docker volume integration remain **Planned**.
   See [native CV ingestion](cv_ingestion.md) for limits, storage and security caveats.
+
+## Implemented - primary CV digital-text extraction (#647488)
+
+- **Extract text** in CV Intake processes a stored batch through
+  `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/extract`. A synchronous
+  service runs in the threadpool and preserves all originals.
+- PyMuPDF extracts PDF text with 1-based page evidence. python-docx preserves
+  paragraph/table interleaving with ordered body-text blocks. Internal immutable
+  evidence is held only in memory; public responses and frontend state contain
+  metadata only, never extracted CV text or private paths.
+- PDFs need at least 80 alphanumeric characters overall and at least 50% of pages
+  with 20 alphanumeric characters each to pass the explicit digital-text heuristic.
+  Otherwise **OCR required** is shown. OCR is **Planned**, not executed; insufficient
+  text is not evidence of missing qualifications. DOCX does not route to OCR.
+- Per-file parser failures are sanitized; other files remain independently
+  processable. Storage validation and document/text limits are enforced. See
+  [CV ingestion](cv_ingestion.md) for exact limits and heuristic limitations.
+- Candidate structured parsing, entity/skill extraction, candidate persistence,
+  screening/scoring, background processing, automatic Drive import, authorization
+  and production retention/deletion remain **Planned**. This is not a new agent or
+  LangGraph workflow and does not send CVs to JD/RAG/MCP.
 
 ## Planned — future functionality
 

@@ -1,8 +1,8 @@
-# Native CV intake - first upload increment
+# Native CV intake and primary digital-text extraction
 
 ## Implemented
 
-WBS #647485 has a deterministic upload slice, not an agent or parsing pipeline:
+WBS #647485 has a deterministic upload slice, not an agent or candidate parser:
 **CV Intake UI -> multipart FastAPI endpoint -> file/package validation ->
 private local storage -> safe batch/upload identifiers.** The JD Assistant stays
 the default view. Switching modes preserves its in-page conversation.
@@ -67,6 +67,67 @@ operator cleanup. Storage errors are fixed public messages with no raw paths.
 Uploads are not idempotent. An interrupted response may leave a successful batch;
 check with the operator before retrying. Retention/deletion automation is planned.
 
+## Implemented - primary extraction (#647488)
+
+After upload, **Extract text** calls
+`POST /api/v1/cv-uploads/{job_reference}/{batch_id}/extract`.
+The synchronous service runs in the API threadpool, reads only that private batch
+and leaves every original unchanged. It rejects symlink/junction job directories,
+batch directories and files, unexpected filenames, nonregular files, empty batches
+and storage limits. Filenames must be canonical upload UUIDs with `.pdf`/`.docx`.
+Files are processed in filename order. Missing batches return a fixed 404;
+invalid identifiers, unsafe layouts and unexpected service failures have sanitized
+request-level errors. There is no client-supplied filesystem path.
+
+**PDF:** PyMuPDF 1.26.7, using `pymupdf`, extracts `get_text("text", sort=True)`
+page by page. Internal evidence retains actual 1-based page numbers, including
+empty pages. Line endings are normalized and unsafe control/format/surrogate
+characters removed, keeping tabs/newlines. No OCR, image rendering, semantic
+rewriting, embedded-content execution or external-link following occurs.
+PDF calls are serialized with a lock because concurrent MuPDF thread use is unsafe.
+Parser diagnostics are suppressed during these calls and raw exceptions are not
+returned or logged.
+
+**DOCX:** existing python-docx walks `iter_inner_content()` in paragraph/table
+order, then row/cell order. Nonempty paragraphs become ordered evidence blocks;
+paragraphs within cells are `table_cell` blocks. Merged cells are visited once and
+nested tables are traversed once. Block indexes start at 1. This does not interpret
+comments, tracked changes, images, macros or external hyperlinks. DOCX headers,
+footers and text boxes are not part of this body-text increment.
+
+Internal frozen `ExtractedCvDocument` results hold text, character count and
+`PdfPageText`/`DocxTextBlock` evidence only in memory. They are separate from the
+public response contract; text/evidence is omitted from object representations.
+No extracted text is written to sidecars, a database, logs, RAG or browser state.
+The API returns `status=processed`, Job Reference, batch ID, processed count and
+per-file upload ID, type, extraction status, character count, source-unit count
+and `ocr_recommended`. The UI displays pages/blocks and safe status only.
+
+### Digital-text sufficiency heuristic - not OCR
+
+A PDF is `text_extracted` only when it has **at least 80 alphanumeric characters
+in total** and **at least 50% of pages each contain at least 20 alphanumeric
+characters**. Otherwise it is `ocr_required` with `ocr_recommended=true`.
+Equality meets the threshold. Character counts in API metadata include whitespace;
+the heuristic counts letters/digits only. This is a routing heuristic, not reliable
+proof that a PDF is scanned: short digital CVs may trigger it, and mixed image/text
+documents can still pass. Text ordering in complex columns depends on the parser.
+
+`ocr_required` means digital extraction was insufficient; it is **not evidence
+that the candidate lacks information**. A future candidate parser must not run
+normal parsing on these PDFs until OCR is implemented. The UI says:
+“Digital text was insufficient. OCR processing is not implemented yet.”
+DOCX never routes to OCR; no alphanumeric text gives `extraction_failed`.
+Malformed, encrypted or resource-limited documents also report a safe per-file
+`extraction_failed`, without deleting the batch or affecting other files.
+Unlike upload rollback, extraction processes an already stored batch independently.
+
+Extraction limits are 200 PDF pages, 500,000 total normalized text characters per
+document, 10,000 nonempty DOCX blocks and nesting depth 16; existing upload/ZIP
+limits are rechecked. These are application limits, not a parser sandbox, malware
+scanner, hard timeout or protection against every hostile document. Storage must
+remain operator-controlled; concurrent filesystem replacement is not supported.
+
 ## Recommended synthetic verification
 
 1. Restart the local backend after adding this route/configuration. Keep the
@@ -75,14 +136,18 @@ check with the operator before retrying. Retention/deletion automation is planne
    Job Reference into its input.
 3. Select 1-20 synthetic PDF/DOCX files generated outside the repository. Remove
    unwanted selections, then upload once.
-4. Verify accepted count and opaque batch reference. Check only this batch's
-   generated filenames locally; do not display or log candidate contents.
+4. Verify accepted count and opaque batch reference. Click **Extract text** and
+   check PDF pages/DOCX blocks. A synthetic blank PDF should show **OCR required**.
+   Public responses must contain metadata only. Check only this batch's generated
+   filenames locally; do not display or log candidate contents.
 5. Remove temporary synthetic input files and, when no longer needed, only the
    synthetic batch created by this test. Never delete unrelated upload data.
 
 Automated tests generate synthetic documents in memory and store only in pytest
 temporary directories. They cover mixed/20-file batches, limits, signatures,
-package safety, traversal, opaque responses and rollback. No real CVs, provider
+package safety, traversal, opaque responses and rollback. Extraction tests cover
+real synthetic parser output, page/block order, OCR thresholds, malformed files,
+metadata-only responses and byte-identical originals. No real CVs, provider
 calls, Google data or binary repository fixtures are used.
 
 ## Separate external channel and Planned work
@@ -92,7 +157,7 @@ remains separate. This native file picker does not automatically import Google
 Form, Sheet or Drive data. CVs never enter Company Policy/Technical Knowledge
 RAG, the JD Agent, MCP publication or LangGraph thread IDs in this slice.
 
-**Planned - not implemented:** PDF/DOCX text extraction, OCR, structured candidate
+**Planned - not implemented:** actual OCR (#647491), structured candidate
 parsing, candidate database records, background processing, screening LangGraph,
 scoring/ranking, automatic Drive import, authentication/authorization, malware
 scanning, production retention/deletion and Docker named-volume integration.

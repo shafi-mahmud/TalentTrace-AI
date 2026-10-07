@@ -1,4 +1,6 @@
 """Trusted local-demo multipart intake, with bounded parser input and safe errors."""
+from uuid import UUID
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -7,12 +9,31 @@ from starlette.exceptions import HTTPException
 from starlette.formparsers import MultiPartException
 
 from app.core.config import settings
-from app.schemas.cv_upload import CvUploadResponse
+from app.schemas.cv_upload import CvUploadResponse, JobReference
+from app.schemas.cv_extraction import CvExtractionResponse
+from app.services.cv_extraction import CvExtractionError, CvExtractionService, PUBLIC_ERRORS as EXTRACTION_ERRORS
 from app.services.cv_upload import CvUploadError, CvUploadService, PUBLIC_ERRORS
 
 # Includes 1 MiB for multipart headers/boundaries; document bytes have a separate limit.
 MAX_REQUEST_BYTES = 101 * 1024 * 1024
 router = APIRouter(tags=["CV intake"])
+
+
+@router.post("/cv-uploads/{job_reference}/{batch_id}/extract", response_model=CvExtractionResponse,
+    responses={400: {"description": "Unsafe batch layout."},
+        404: {"description": "Batch not found."}, 500: {"description": "Extraction unavailable."}})
+async def extract_cvs(job_reference: JobReference, batch_id: UUID) -> CvExtractionResponse | JSONResponse:
+    try:
+        service = CvExtractionService(settings.cv_upload_root)
+        documents = await run_in_threadpool(service.extract_batch, job_reference, batch_id)
+        return CvExtractionResponse(job_reference=job_reference, batch_id=batch_id,
+            processed_count=len(documents), files=tuple(document.public_metadata() for document in documents))
+    except CvExtractionError as error:
+        return JSONResponse(status_code=error.status,
+            content={"code": error.code, "message": EXTRACTION_ERRORS[error.code]})
+    except Exception:
+        return JSONResponse(status_code=500, content={"code": "extraction_unavailable",
+            "message": EXTRACTION_ERRORS["extraction_unavailable"]})
 
 
 @router.post("/cv-uploads", response_model=CvUploadResponse, status_code=201,
