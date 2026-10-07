@@ -30,8 +30,10 @@
   stdio server with one `publish_job` tool, a strict `JobCircular` contract and
   an async Discord webhook adapter. Credentials stay server-side; mentions are
   disabled, oversized payloads are rejected and provider failures are sanitized.
-- Mocked tests verify the adapter and MCP protocol. Real Discord smoke
-  verification is pending. Backend MCP client/chatbot integration, JD approval
+- Mocked tests verify the adapter and MCP protocol. **Implemented and live
+  verified — 07 Oct 2026:** MCP-to-Discord publication used synthetic job data,
+  returned confirmed external publication metadata and visibly appeared in the
+  `#job-openings` demo channel. Backend MCP client/chatbot integration, JD approval
   enforcement and other destinations remain planned. No JD workflow or frontend
   integration is included. See [job-publishing MCP](../job-publishing-mcp/README.md).
 

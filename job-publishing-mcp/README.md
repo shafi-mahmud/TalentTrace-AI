@@ -1,6 +1,6 @@
 # TalentTrace Job Publishing MCP
 
-**Status: Implemented — standalone foundation; real Discord smoke verification pending.**
+**Status: Implemented and live verified — standalone MCP-to-Discord foundation, 07 Oct 2026.**
 
 TalentTrace owns this small MCP server. Its one business tool, `publish_job`,
 accepts a validated `JobCircular`, delegates to `DiscordPublisher`, and returns
@@ -66,9 +66,14 @@ Run the server from this directory:
 It waits for an MCP client on stdin/stdout; it does not open an HTTP port or
 publish on startup. Stdout is reserved for the protocol.
 
-## Manual synthetic smoke publication — not yet verified
+## Manual synthetic smoke publication — verified on 07 Oct 2026
 
-After reviewing this increment, run **once** from `job-publishing-mcp/`:
+Manual verification confirmed that the MCP stdio client invoked `publish_job`,
+Discord accepted the publication and returned a confirmed external message
+identifier, and the synthetic job visibly appeared in the `#job-openings` demo
+channel. No real candidate or job data was used.
+
+For a future manual demo, run **once** from `job-publishing-mcp/`:
 
 ```powershell
 .\.venv\Scripts\python.exe -m talenttrace_job_publishing.smoke_client --publish-synthetic
@@ -81,13 +86,16 @@ reads its configured webhook; the client prints only validated result metadata
 or a generic failure. Subprocess diagnostics are not forwarded. Without
 `--publish-synthetic`, nothing is sent.
 
+**Real external side effect:** this command publishes a Discord message. Do not
+invoke it repeatedly: publication is non-idempotent and deduplication is not
+yet implemented.
+
 Timeouts or lost responses can occur after Discord accepted a message. Check
 the channel before retrying; there is no deduplication or automatic retry.
 This increment supports ordinary text channels, not forum/media thread setup.
 
 ## Planned — not implemented
 
-- Real MCP-to-Discord smoke verification, until manually performed.
 - TalentTrace backend MCP client integration and recruiter chatbot.
 - JD approval enforcement, authorization and publication audit/persistence.
 - Blogger, Telegram and other destinations, including LinkedIn/X.
