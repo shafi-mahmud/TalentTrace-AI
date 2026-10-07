@@ -14,6 +14,20 @@ It has no FastAPI or LangGraph dependency.
   required/preferred skills, qualifications, and optional location/employment/
   work arrangement. Unknown fields, HTML/angle-bracket markup, unsafe controls,
   blanks and invalid types are rejected. Whitespace is normalized.
+- Required `job_reference` is at most 40 uppercase/digit/hyphen characters.
+  Discord shows **Job Reference** immediately before the optional application
+  field so candidates can copy it into the external form. The backend derives a
+  stable `TT-JOB-<16 hex characters>` content fingerprint; it rejects recruiter/
+  LLM overrides. This is temporary demo identity, not job-profile persistence or
+  deduplication. Standalone clients must now supply a reference; the fixed manual
+  smoke client uses `TT-DEMO-SMOKE-001`. Automatic form prefilling remains planned.
+- Optional `application_url` is a bounded HTTPS string with no embedded credentials,
+  fragments or unsafe controls. The Discord embed shows **Apply for this role**
+  only when present, counting the URL toward field/total limits. Existing clients
+  can omit it. Trusted standalone clients may supply it; the TalentTrace backend
+  supplies it only from optional server-side `APPLICATION_FORM_URL`, never from
+  recruiter or LLM output. This does not implement CV ingestion. See
+  [external CV collection demo](../docs/cv_collection_demo.md).
 - Server-side configuration: environment overrides the ignored repository-root
   `.env`. Configuration is loaded when publishing, not on import. The webhook
   is a protected `SecretStr`; configuration errors never echo its value.
@@ -96,14 +110,16 @@ This increment supports ordinary text channels, not forum/media thread setup.
 
 ## Planned — not implemented
 
-- TalentTrace backend MCP client integration and recruiter chatbot.
+- Publication idempotency/deduplication and additional destinations.
 - JD approval enforcement, authorization and publication audit/persistence.
 - Blogger, Telegram and other destinations, including LinkedIn/X.
 
 An MCP server exposes protocol tools; it is not a LangGraph agent and does not
-generate or approve a JD. A future backend MCP client will map an approved JD
-into `JobCircular` and call this same tool. The fields are designed for that
-mapping; no backend contract or workflow is changed in this increment.
+generate or approve a JD. The trainer-demo backend client now maps the inline draft and supplied optional
+context into this same `JobCircular` tool through `/api/v1/recruiter-chat/publish`.
+The React action requires explicit review/confirmation; it does not implement
+persisted approval or authorization. The JD workflow is unchanged. See
+[project structure](../docs/project_structure.md) for the demo boundary.
 
 Until approval enforcement is added, use only synthetic demo circulars from
 trusted local clients. Automated tests mock Discord so repeatable tests cannot

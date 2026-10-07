@@ -40,8 +40,31 @@ def test_invalid_circular(job_data, field, value):
         JobCircular(**job_data)
 
 
-@pytest.mark.parametrize("field", ["title", "summary", "responsibilities", "required_skills", "qualifications"])
+@pytest.mark.parametrize("field", ["job_reference", "title", "summary", "responsibilities", "required_skills", "qualifications"])
 def test_missing_required_field(job_data, field):
     del job_data[field]
     with pytest.raises(ValidationError):
         JobCircular(**job_data)
+
+
+def test_optional_application_url_accepts_https_and_preserves_old_clients(job_data):
+    assert JobCircular(**job_data).application_url is None
+    url="https://docs.google.com/forms/d/e/synthetic-test-form/viewform"
+    assert JobCircular(**job_data,application_url=url).application_url==url
+
+
+@pytest.mark.parametrize("url", ["not-a-url","http://example.invalid/form","https://user:password@example.invalid/form","https://user@example.invalid/form","https://localhost/form","https://10.0.0.1/form","javascript:alert(1)","https://example.invalid/%0a","https://example.invalid/form\x00","https://example.invalid/"+"x"*2049,123])
+def test_invalid_application_url_is_rejected(job_data,url):
+    with pytest.raises(ValidationError):
+        JobCircular(**job_data,application_url=url)
+
+
+@pytest.mark.parametrize("value", ["TT-JOB-0001", "BACKEND-AI-001", "TT-JOB-30BB2CDF9A5CCCA9"])
+def test_valid_job_reference(job_data, value):
+    assert JobCircular(**{**job_data, "job_reference": value}).job_reference == value
+
+
+@pytest.mark.parametrize("value", ["", "x" * 41, "A" * 41, "lower-case", "A B", "A/B", "A\nB", "A\x00B", "A--B", 123, None])
+def test_invalid_job_reference(job_data, value):
+    with pytest.raises(ValidationError):
+        JobCircular(**{**job_data, "job_reference": value})

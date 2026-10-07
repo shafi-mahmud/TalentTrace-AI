@@ -2,7 +2,7 @@
 
 ## Implemented — current foundation
 
-- `frontend/` is a React, Vite, and TypeScript application with a recruiter-facing Job Description form, a synthetic company-policy knowledge-source panel, and a generated draft view with policy citations and a human-review notice.
+- `frontend/` is a React, Vite, and TypeScript application with a chat-first recruiter Job Description screen, inline generated drafts, policy citations, human-review notices and an explicit Discord publication action.
 - `backend/` is a modular FastAPI application. It currently provides centralized settings, CORS configuration, automatic OpenAPI documentation, and `GET /api/v1/health`.
 - `backend/app/db/` provides one shared SQLAlchemy `DeclarativeBase` and lazy factories for an async PostgreSQL engine and sessions. `DATABASE_URL` is optional during application import, is stored as a secret value when configured, and must use the `postgresql+asyncpg` scheme. SQL parameter values are hidden in engine diagnostics; importing the models or application does not connect to PostgreSQL.
 - `backend/app/db/models/knowledge.py` implements the Database Design v1.3 `KnowledgeDocument` and `KnowledgeChunk` relationship as `knowledge_documents` and `knowledge_chunks`. Each document records one source version, collection (`knowledge_type`), title, and content hash; `source` is an opaque UUID, not a path. Each chunk retains its citation, index, hash, text, token count, heading paths, BGE model identity, and `Vector(384)` embedding. JSONB holds only heading-path metadata. A composite foreign key requires each chunk and its parent document to have the same collection. Unique constraints protect source versions, citations, and document/chunk indexes.
@@ -11,7 +11,7 @@
 - **Implemented and verified — 06 Oct 2026:** exact cosine retrieval passed a live smoke test on disposable, localhost-only PostgreSQL 17.11 with pgvector 0.8.6. Three synthetic chunks with distinguishable vectors verified nearest-first ordering, bounded `top_k`, repeated tie ordering, source/citation metadata and embedding-free results. Another version of the same source remained isolated, and a Technical Reference document was rejected by the Company Policy query. The temporary container was removed afterward. The trainer-facing JD path now uses the semantic adapter described below.
 - `backend/alembic/` contains a PostgreSQL-only migration environment and the first knowledge-table revision. It enables the `vector` extension before creating the tables, with no approximate vector indexes. Migration code, offline SQL, and live migration application are tested. From `backend/`, `python -m alembic upgrade head --sql` previews SQL without a database or credentials. Applying `python -m alembic upgrade head` to another environment requires a configured PostgreSQL service with pgvector installed and migration privileges. Application credentials should have narrower permissions than migration credentials. Downgrade drops the knowledge tables but retains the shared extension.
 - **Implemented and verified — 06 Oct 2026:** the pgvector persistence foundation passed live validation using a disposable, localhost-only PostgreSQL 17.11 instance with pgvector 0.8.6. Validation confirmed actual `alembic upgrade head`, the enabled `vector` extension, `knowledge_documents` and `knowledge_chunks`, `Vector(384)`, a real synthetic repository write/read through a fresh session, duplicate rollback behavior, collection foreign-key enforcement, and downgrade/re-upgrade. The temporary test container was removed afterward. This verifies persistence, not a complete semantic RAG workflow or a production database deployment.
-- `backend/app/services/` and the integration packages other than `integrations/llm/` remain boundaries for future code; repositories other than the company-policy writer remain planned.
+- `backend/app/services/recruiter_chat.py` orchestrates JD creation; `integrations/llm/` and `integrations/job_publishing/` contain the implemented provider and MCP client boundaries. Other service/integration packages and business repositories remain planned.
 - `backend/app/rag/` contains validated internal company-policy source and chunk contracts, deterministic heading-aware text chunking, and a deterministic lexical adapter retained only for reference and focused tests. The actual JD endpoint uses semantic BGE + pgvector retrieval, without lexical fallback.
 - `load_demo_company_policy_source()` in `backend/app/rag/retrieval.py` loads the fixed synthetic demo file and validates its normalized contents. The lexical retriever and semantic demo seed share its existing source UUID, `synthetic-demo-v1` version and title; source/citation identity has not been renamed.
 - `backend/app/rag/ingestion.py` implements reusable plain-text source orchestration: semantic BGE-tokenizer chunks -> ordered document embeddings -> one vector per chunk -> atomic `CompanyPolicyRepository.save_source_version()` -> stored document UUID. Chunking/tokenization and document encoding run through `asyncio.to_thread` with the same embedding service. Existing layers retain validation ownership. Failures identify the stage without exposing policy text, vectors, paths or database details. Duplicate source/chunk conflicts are rejected without replacing existing data.
@@ -73,6 +73,76 @@ decision to preserve BGE-small while deferring model benchmarks.
 the existing JD workflow into that foundation; the JD workflow is not yet
 checkpointed, and JD approval/revision is not implemented.
 
+## Implemented — recruiter chatbot JD creation slice
+
+- `POST /api/v1/recruiter-chat` accepts a bounded, plain-text recruiter message
+  through `schemas/recruiter_chat.py`. The replaceable interpreter in
+  `integrations/llm/recruiter_chat.py` uses the existing Groq configuration and
+  official async client with strict structured output to extract requirements;
+  it never generates the final JD or receives company policy or server secrets
+  in its prompt. Provider calls use an explicit timeout and no automatic retries.
+- `services/recruiter_chat.py` validates copied source evidence for each extracted
+  value after Unicode/whitespace normalization. It allows narrow enum mappings
+  and terminal punctuation/finite leading-verb normalization, while preserving source-backed role
+  purpose rather than inventing polished prose. Negated/ambiguous clauses,
+  unsupported list items and years without explicit experience context trigger
+  clarification before generation; invalid items are never silently filtered.
+  It applies the existing `JobDescriptionGenerationRequest` validation. Only a
+  complete valid request invokes the existing `get_job_description_workflow()`.
+  Its semantic Company Policy retrieval, generation and citation validation are
+  reused unchanged. The chatbot is an interface/orchestrator, not a fifth graph.
+- The React recruiter screen is chat-first: distinct messages appear in a scrollable
+  conversation with the composer anchored below it and a demo-load button.
+  Generated JD sections, draft/human-review notices and grouped policy grounding
+  appear inline in the assistant message; technical citation IDs remain collapsible.
+  Clarification stays in the conversation. The manual structured form and separate
+  result panel are not part of this screen; the structured JD API remains unchanged.
+  Generation remains an unapproved draft; errors use fixed public messages.
+- **Implemented — demo publication:** `POST /api/v1/recruiter-chat/publish` accepts
+  a strict, bounded publication DTO matching the standalone `JobCircular` limits.
+  `integrations/job_publishing/mcp_client.py` uses official MCP SDK v2.3.0 and stdio
+  to launch the existing server with its separate virtual environment. It calls
+  `publish_job` once; only that server contacts Discord. It returns validated
+  destination/status/external-ID metadata and hides raw tool/subprocess errors.
+  The server reads ignored local configuration; webhook credentials never reach
+  the browser. Optional source-validated location/employment/work arrangement
+  are returned as `publishing_context`, with `on_site` mapped to MCP `onsite`.
+  Oversized content is rejected, never truncated. Applying a timeout can leave
+  delivery unconfirmed; there is no automatic retry.
+- Each inline draft has Publish to Discord and Revise draft actions. Publication
+  requires an explicit review/demo confirmation, shows loading/success/failure,
+  and locks that card after one attempt. Revision loads the original complete
+  instruction into the composer for editing and fresh generation; it is not
+  persisted approval/revision or multi-turn conversation state. Citations remain
+  accessible in a compact collapsible section. Text posting instructions direct
+  recruiters to the reviewed draft action instead of automatically publishing.
+- **Limitations:** this is a trusted local synthetic demo endpoint, without
+  authentication, authorization, persisted approval, publication audit or server
+  deduplication. Client-submitted fields are validated but their provenance is
+  not authenticated. Page reload/new requests can publish again. Check Discord
+  before another attempt after an unconfirmed result. Automated SDK/server
+  protocol tests replace Discord. On 07 Oct 2026, the project owner confirmed
+  live UI-to-FastAPI-to-MCP-to-Discord publication.
+- This first slice is single-turn: each submitted instruction is independent.
+  After clarification, edit and resend the complete instruction. Conversation
+  display exists only in page memory. Bounded input accepts multiline text, tabs,
+  comparisons and job descriptions involving resume/transcript processing.
+  React renders messages as escaped text. Input rejects unsafe control characters,
+  unknown request fields and obvious emails, phone-like contacts, named candidate/
+  applicant patterns and CV/resume submission/possessive patterns. These heuristics
+  are not comprehensive personal-data detection; enter only job requirements.
+  Evidence checks are not full semantic verification. Conservative clause negation
+  may ask for clarification on legitimate mixed-polarity wording; copied phrases
+  cannot prove every requirement is correctly classified or fully extracted.
+  Human review remains required.
+- Automated tests mock Groq and retrieval/generation boundaries; an API test runs
+  the existing JD graph with those boundaries replaced. The chat interpreter/provider
+  schema and full grounded JD API path passed live verification on 07 Oct 2026. The project owner confirmed manual chat-first UI verification. Existing
+  BGE query-length limits still apply to extracted requirements.
+- **Planned:** persisted JD approval/revision, publication authorization/audit,
+  server deduplication, multi-turn state, persistent conversation history and
+  authentication/authorization. The JD LangGraph remains unchanged.
+
 ## Implemented — standalone MCP job-publishing foundation
 
 - `job-publishing-mcp/` contains a TalentTrace-owned official Python MCP SDK v2
@@ -82,15 +152,46 @@ checkpointed, and JD approval/revision is not implemented.
 - Mocked tests verify the adapter and MCP protocol. **Implemented and live
   verified — 07 Oct 2026:** MCP-to-Discord publication used synthetic job data,
   returned confirmed external publication metadata and visibly appeared in the
-  `#job-openings` demo channel. Backend MCP client/chatbot integration, JD approval
-  enforcement and other destinations remain planned. No JD workflow or frontend
-  integration is included. See [job-publishing MCP](../job-publishing-mcp/README.md).
+  `#job-openings` demo channel. The bounded backend MCP client and inline Discord action are now implemented
+  as described above. JD approval enforcement and other destinations remain planned;
+  the JD workflow remains unchanged. See [job-publishing MCP](../job-publishing-mcp/README.md).
+
+## Implemented - optional external application link and CV collection demo
+
+- Backend `APPLICATION_FORM_URL` is optional, validated HTTPS configuration kept
+  in environment/ignored root `.env` and protected as a secret setting. Only the
+  backend adds it to the MCP `JobCircular.application_url`; recruiter requests,
+  generated JD fields and LLM output cannot override it. No URL is returned in
+  the destination/status/external_id response or sent to the JD Agent.
+- Each demo publication gets a backend-derived `TT-JOB-<16 uppercase hash characters>`
+  reference from normalized publication content. The required MCP `job_reference`
+  is bounded to 40 safe uppercase/digit/hyphen characters. Discord displays
+  **Job Reference** immediately before **Apply for this role**; candidates copy it
+  into the external form. HTTP recruiter requests and LLM output cannot supply it.
+  This is a stable demo content fingerprint, not persisted job-profile identity or
+  publication deduplication. Native job-profile persistence and automatic form
+  prefilling remain planned.
+- The standalone MCP contract accepts the optional link, and the Discord adapter
+  includes **Apply for this role** while enforcing existing embed limits and
+  disabled mentions. Missing configuration preserves publication without a link.
+- **Implemented external CV collection demo path, once configured:** Discord ->
+  application link -> manually created Google Form -> form owner's Google Drive.
+  Link mapping/validation/presentation are mocked-tested. On 07 Oct 2026, the
+  project owner confirmed live Discord-to-Form-to-Sheets/Drive CV collection.
+  Google Form/Drive is an external privacy
+  dependency, not native TalentTrace storage. See [CV collection demo](cv_collection_demo.md)
+  for setup, Google sign-in requirements and a single synthetic manual demo.
+- **Planned:** native candidate portal, Drive API synchronization, automatic CV
+  import, candidate persistence, CV parsing/OCR, screening/scoring, candidate
+  authentication and retention/deletion automation. Production approval/audit
+  and additional publishing destinations remain planned. No CV data is sent
+  through the JD workflow or MCP publishing by this link feature.
 
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.
 - Other ORM business models, a production Docker Compose PostgreSQL service, and other repositories remain planned. The disposable database used for the successful live validation does not implement the production service.
 - A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
-- Background processing and concrete external integration implementations remain planned; their current packages are architectural boundaries only.
+- Background processing and integrations other than the implemented LLM and MCP job-publishing paths remain planned; their packages are architectural boundaries only.
 
-Authentication, business-data persistence, human approval/revision, the remaining hiring workflows, backend MCP client/chatbot integration, and additional external publishing destinations remain planned work.
+Authentication/authorization, business-data persistence, human approval/revision, the remaining hiring workflows, publication audit/deduplication, persistent conversation history, and additional external publishing destinations remain planned work.

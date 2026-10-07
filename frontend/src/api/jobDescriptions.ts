@@ -27,7 +27,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isGenerationResponse(
+export function isGenerationResponse(
   value: unknown,
 ): value is JobDescriptionGenerationResponse {
   if (!isRecord(value) || !isRecord(value.job_description)) return false;

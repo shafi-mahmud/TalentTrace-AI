@@ -14,6 +14,7 @@ from .schemas import JobCircular, PublishJobResult
 
 def synthetic_job() -> JobCircular:
     return JobCircular(
+        job_reference="TT-DEMO-SMOKE-001",
         title="TalentTrace Demo — Backend AI Engineer (Synthetic)",
         summary="Synthetic evaluation circular: build secure AI-enabled backend services. This is not a real vacancy.",
         responsibilities=["Develop FastAPI services", "Write automated tests", "Follow secure engineering practices"],

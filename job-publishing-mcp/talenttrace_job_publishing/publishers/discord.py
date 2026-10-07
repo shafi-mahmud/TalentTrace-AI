@@ -41,6 +41,10 @@ def format_payload(job: JobCircular) -> dict[str, Any]:
         if value:
             fields.append({"name": name, "value": value.replace("_", " "), "inline": True})
 
+    fields.append({"name": "Job Reference", "value": job.job_reference, "inline": False})
+    if job.application_url is not None:
+        fields.append({"name": "Apply for this role", "value": job.application_url, "inline": False})
+
     footer = "TalentTrace AI • Job circular"
     total = discord_length(job.title) + discord_length(job.summary) + discord_length(footer)
     total += sum(

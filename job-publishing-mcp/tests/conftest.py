@@ -45,6 +45,7 @@ def settings():
 @pytest.fixture
 def job_data():
     return {
+        "job_reference": "TT-JOB-0001",
         "title": " Backend AI Engineer ",
         "summary": "Build secure backend services.",
         "responsibilities": ["Develop APIs", "Write tests"],
