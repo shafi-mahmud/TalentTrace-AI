@@ -11,7 +11,7 @@
 - **Implemented and verified — 06 Oct 2026:** exact cosine retrieval passed a live smoke test on disposable, localhost-only PostgreSQL 17.11 with pgvector 0.8.6. Three synthetic chunks with distinguishable vectors verified nearest-first ordering, bounded `top_k`, repeated tie ordering, source/citation metadata and embedding-free results. Another version of the same source remained isolated, and a Technical Reference document was rejected by the Company Policy query. The temporary container was removed afterward. The trainer-facing JD path now uses the semantic adapter described below.
 - `backend/alembic/` contains a PostgreSQL-only migration environment and the first knowledge-table revision. It enables the `vector` extension before creating the tables, with no approximate vector indexes. Migration code, offline SQL, and live migration application are tested. From `backend/`, `python -m alembic upgrade head --sql` previews SQL without a database or credentials. Applying `python -m alembic upgrade head` to another environment requires a configured PostgreSQL service with pgvector installed and migration privileges. Application credentials should have narrower permissions than migration credentials. Downgrade drops the knowledge tables but retains the shared extension.
 - **Implemented and verified — 06 Oct 2026:** the pgvector persistence foundation passed live validation using a disposable, localhost-only PostgreSQL 17.11 instance with pgvector 0.8.6. Validation confirmed actual `alembic upgrade head`, the enabled `vector` extension, `knowledge_documents` and `knowledge_chunks`, `Vector(384)`, a real synthetic repository write/read through a fresh session, duplicate rollback behavior, collection foreign-key enforcement, and downgrade/re-upgrade. The temporary test container was removed afterward. This verifies persistence, not a complete semantic RAG workflow or a production database deployment.
-- `backend/app/services/recruiter_chat.py` orchestrates JD creation; `integrations/llm/` and `integrations/job_publishing/` contain the implemented provider and MCP client boundaries. Other service/integration packages and business repositories remain planned.
+- `backend/app/services/recruiter_chat.py` maintains a bounded, short-lived multi-turn conversation and orchestrates JD creation; `integrations/llm/` and `integrations/job_publishing/` contain the implemented provider and MCP client boundaries. Other service/integration packages and business repositories remain planned.
 - `backend/app/rag/` contains validated internal company-policy source and chunk contracts, deterministic heading-aware text chunking, and a deterministic lexical adapter retained only for reference and focused tests. The actual JD endpoint uses semantic BGE + pgvector retrieval, without lexical fallback.
 - `load_demo_company_policy_source()` in `backend/app/rag/retrieval.py` loads the fixed synthetic demo file and validates its normalized contents. The lexical retriever and semantic demo seed share its existing source UUID, `synthetic-demo-v1` version and title; source/citation identity has not been renamed.
 - `backend/app/rag/ingestion.py` implements reusable plain-text source orchestration: semantic BGE-tokenizer chunks -> ordered document embeddings -> one vector per chunk -> atomic `CompanyPolicyRepository.save_source_version()` -> stored document UUID. Chunking/tokenization and document encoding run through `asyncio.to_thread` with the same embedding service. Existing layers retain validation ownership. Failures identify the stage without exposing policy text, vectors, paths or database details. Duplicate source/chunk conflicts are rejected without replacing existing data.
@@ -111,10 +111,8 @@ checkpointed, and JD approval/revision is not implemented.
   delivery unconfirmed; there is no automatic retry.
 - Each inline draft has Publish to Discord and Revise draft actions. Publication
   requires an explicit review/demo confirmation, shows loading/success/failure,
-  and locks that card after one attempt. Revision loads the original complete
-  instruction into the composer for editing and fresh generation; it is not
-  persisted approval/revision or multi-turn conversation state. Citations remain
-  accessible in a compact collapsible section. Text posting instructions direct
+  and locks that card after one attempt. Revision loads the last recruiter message
+  into the composer. Citations remain accessible in a compact collapsible section. Text posting instructions direct
   recruiters to the reviewed draft action instead of automatically publishing.
 - **Limitations:** this is a trusted local synthetic demo endpoint, without
   authentication, authorization, persisted approval, publication audit or server
@@ -123,9 +121,16 @@ checkpointed, and JD approval/revision is not implemented.
   before another attempt after an unconfirmed result. Automated SDK/server
   protocol tests replace Discord. On 07 Oct 2026, the project owner confirmed
   live UI-to-FastAPI-to-MCP-to-Discord publication.
-- This first slice is single-turn: each submitted instruction is independent.
-  After clarification, edit and resend the complete instruction. Conversation
-  display exists only in page memory. Bounded input accepts multiline text, tabs,
+- Recruiter conversations now use a server-managed in-memory session with a
+  30-minute idle lifetime, 20-turn and 12,000-character limits, and a 100-session
+  process limit. The browser sends only a conversation UUID; requirements and
+  their evidence are revalidated server-side on each turn. A server restart,
+  multiple workers or another backend process does not share this state. It is
+  not saved to PostgreSQL. After the required title, purpose, responsibilities,
+  skills and minimum experience (including explicit no-minimum) are validated,
+  the existing JD workflow runs. A corrected requirement can create a new draft;
+  an unchanged complete request does not create a duplicate draft.
+  Bounded input accepts multiline text, tabs,
   comparisons and job descriptions involving resume/transcript processing.
   React renders messages as escaped text. Input rejects unsafe control characters,
   unknown request fields and obvious emails, phone-like contacts, named candidate/
@@ -140,8 +145,26 @@ checkpointed, and JD approval/revision is not implemented.
   schema and full grounded JD API path passed live verification on 07 Oct 2026. The project owner confirmed manual chat-first UI verification. Existing
   BGE query-length limits still apply to extracted requirements.
 - **Planned:** persisted JD approval/revision, publication authorization/audit,
-  server deduplication, multi-turn state, persistent conversation history and
+  server deduplication, persistent conversation history and
   authentication/authorization. The JD LangGraph remains unchanged.
+
+### Implemented — recruiter-grounded criteria review and shared workspace state
+
+- Each generated JD response includes deterministic screening suggestions built
+  from the validated recruiter requirements. Suggestions start as preferred and
+  carry a recruiter-input evidence excerpt where one is available. Recruiters can
+  edit, add or remove criteria and choose mandatory/preferred inside the JD card.
+- The same in-memory criteria draft is shown in the CV workspace for each JD
+  draft. Any edit clears the shared review flag and invalidates the confirmed
+  screening snapshot and results. The recruiter explicitly reviews the criteria
+  in the chat and confirms them against the manually entered Job Reference in
+  Candidate Screening before screening. Different JD draft IDs keep their criteria separate.
+- **Limitation:** the current RAG result supplies reference text and citations,
+  but not validated hiring-criterion assertions. Therefore this increment does
+  not derive policy-backed screening criteria or label recruiter suggestions as
+  policy-grounded. Suggestions are recruiter-grounded only. No default-mandatory
+  policy is inferred, no criteria are silently approved, and the session-only
+  state is not a persisted job profile.
 
 ## Implemented — standalone MCP job-publishing foundation
 
@@ -187,11 +210,20 @@ checkpointed, and JD approval/revision is not implemented.
   and additional publishing destinations remain planned. No CV data is sent
   through the JD workflow or MCP publishing by this link feature.
 
-## Implemented - native batch CV intake foundation
+## Implemented - native batch CV intake and Candidate Screening foundation
 
-- **CV Intake** is a separate top-level frontend mode; JD Assistant remains the
-  default chat-first experience. Recruiters enter a demo Job Reference, select
-  1-20 PDF/DOCX files, remove selections and see controlled upload status.
+- **Candidate Screening** is a separate top-level frontend mode; JD Assistant
+  remains the default chat-first experience. Screening works without generating
+  a JD: recruiters can enter a job title, demo Job Reference and requirements
+  directly, then explicitly review and confirm mandatory/preferred flags using
+  the same `ReviewedJobSnapshot` contract. Manually entered criteria are not
+  presented as policy-backed. JD-generated criteria remain isolated by draft ID.
+- Criteria setup and CV batch upload can happen in either order. Changing the
+  Job Reference invalidates criteria confirmation and screening results while
+  preserving the already uploaded batch, so recruiters can finish setup without
+  re-uploading it. Confirmed criteria remain session-only, not a saved job profile.
+- Recruiters select 1-20 PDF/DOCX files, remove selections and see controlled
+  upload status.
 - `POST /api/v1/cv-uploads` accepts bounded multipart UploadFile parts, validates
   reference syntax, extension/MIME, PDF signatures and DOCX ZIP structure, then
   streams files to private ignored local storage. Responses contain UUID batch/
@@ -207,7 +239,7 @@ checkpointed, and JD approval/revision is not implemented.
 
 ## Implemented - primary CV digital-text extraction (#647488)
 
-- **Extract text** in CV Intake processes a stored batch through
+- **Extract text** in Candidate Screening processes a stored batch through
   `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/extract`. A synchronous
   service runs in the threadpool and preserves all originals.
 - PyMuPDF extracts PDF text with 1-based page evidence. python-docx preserves
@@ -269,7 +301,7 @@ checkpointed, and JD approval/revision is not implemented.
 - `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/candidate-profiles` accepts
   stored identity only. Missing provider setup is sanitized 503; individual provider/
   grounding failures are `parsing_failed`. Other files continue; originals stay unchanged.
-- CV Intake uses `api/candidateProfiles.ts`, `types/candidateProfile.ts` and
+- Candidate Screening uses `api/candidateProfiles.ts`, `types/candidateProfile.ts` and
   `components/candidateProfilesPresentation.ts` for an Extract candidate profiles
   action and compact Contact/Education/Work history/Skills results. Focused backend
   and lightweight frontend tests cover contracts, grounding, source routing and safe UI.
@@ -327,9 +359,10 @@ checkpointed, and JD approval/revision is not implemented.
 
 - Successful recruiter-chat JD responses now include `screening_suggestions`
   built from source-backed recruiter requirements, not additional generated JD
-  qualifications. All suggestions start as preferred; the reviewer edits their
-  descriptions, categories and mandatory/preferred flags and explicitly confirms
-  them in the CV workspace. This confirms screening criteria, not formal JD approval.
+  qualifications. All suggestions start as preferred; the recruiter edits their
+  descriptions, categories and mandatory/preferred flags inline in the JD chat and
+  can continue editing in Candidate Screening. Explicit review in chat and confirmation
+  in Candidate Screening are screening-criteria approval, not formal JD approval.
 - The confirmed snapshot is bound to the manually entered demo Job Reference and
   stays in React session memory. Editing criteria/reference or selecting another
   JD invalidates confirmation/results. Nothing claims saved PostgreSQL job profiles;

@@ -2,6 +2,19 @@ import { createElement as h } from "react";
 import type { CvUploadResponse } from "../types/cvUpload";
 import type { CvExtractionResponse } from "../types/cvExtraction";
 import type { CvOcrResponse } from "../types/cvOcr";
+import type { WorkingCriteriaDraft } from "../types/recruiterChat";
+import { isValidJobReference } from "../api/cvUploads.ts";
+import type { ScreeningCriterion } from "../types/screening";
+import type { BatchScreeningResponse, ReviewedJobSnapshot } from "../types/screening";
+
+type ResettableCriteriaContext = {
+  reference: string; manualDraft: WorkingCriteriaDraft | null; manualJobTitle: string; setupError: string;
+  snapshot: ReviewedJobSnapshot | null; screening: BatchScreeningResponse | null;
+};
+
+export function resetCriteriaContextForNewChat<T extends ResettableCriteriaContext>(state: T): T {
+  return {...state, reference: "", manualDraft: null, manualJobTitle: "", setupError: "", snapshot: null, screening: null};
+}
 
 export type WorkspaceMode = "jd" | "cv";
 
@@ -9,9 +22,9 @@ export function screeningPrerequisiteMessage({busy, hasSuggestions, hasBatch, ha
   busy: boolean; hasSuggestions: boolean; hasBatch: boolean; hasSnapshot: boolean; referenceMatches: boolean;
 }): string | null {
   if (busy) return "Wait for the current operation to finish.";
-  if (!hasSuggestions) return "Generate a JD and choose Review screening criteria first.";
-  if (!hasBatch) return "Upload a CV batch for this Job Reference first.";
+  if (!hasSuggestions) return "Set up a job title and screening criteria first. A JD is optional.";
   if (!hasSnapshot) return "Review and explicitly confirm screening criteria for this job.";
+  if (!hasBatch) return "Upload a CV batch for this Job Reference first.";
   if (!referenceMatches) return "The confirmed Job Reference must match the uploaded batch.";
   return null;
 }
@@ -24,15 +37,15 @@ export function WorkspaceNavigation({mode, onChange}: {mode: WorkspaceMode; onCh
         h("span", null, "TalentTrace", h("span", {className: "brand-ai"}, " AI"))),
       h("nav", {className: "workspace-modes", "aria-label": "Recruiter workspace views"},
         h("button", {type: "button", "aria-pressed": mode === "jd", onClick: () => onChange("jd")}, "JD Assistant"),
-        h("button", {type: "button", "aria-pressed": mode === "cv", onClick: () => onChange("cv")}, "CV Intake"))));
+        h("button", {type: "button", "aria-pressed": mode === "cv", onClick: () => onChange("cv")}, "Candidate Screening"))));
 }
 
 export function ScreeningWorkflowSteps({hasSuggestions, hasSnapshot, hasBatch, isScreened}: {
   hasSuggestions: boolean; hasSnapshot: boolean; hasBatch: boolean; isScreened: boolean;
 }) {
   const steps = [
-    {label: "Review job criteria", complete: hasSnapshot, available: hasSuggestions},
-    {label: "Upload CV batch", complete: hasBatch, available: hasSnapshot},
+    {label: hasSuggestions ? "Review job criteria" : "Set up job criteria", complete: hasSnapshot, available: true},
+    {label: "Upload candidate CVs", complete: hasBatch, available: true},
     {label: "Screen candidates", complete: isScreened, available: hasBatch && hasSnapshot},
     {label: "Review results", complete: isScreened, available: isScreened},
   ];
@@ -41,6 +54,14 @@ export function ScreeningWorkflowSteps({hasSuggestions, hasSnapshot, hasBatch, i
       h("span", {className: "workflow-step-number", "aria-hidden": true}, step.complete ? "✓" : String(index + 1)),
       h("span", null, step.label),
       h("span", {className: "sr-only"}, step.complete ? " complete" : step.available ? " available" : " not yet available"))));
+}
+
+export function createManualCriteriaDraft(jobTitle: string, jobReference: string): WorkingCriteriaDraft | null {
+  const title = jobTitle.trim();
+  if (!title || title.length > 120 || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(title) || !isValidJobReference(jobReference)) return null;
+  const criteria: ScreeningCriterion[] = [];
+  return {draftId: `manual-${crypto.randomUUID()}`, origin: "manual", suggestions: {job_title: title, criteria},
+    sources: [], criteria, reviewed: false};
 }
 
 export function SelectedCvFiles({files, onRemove, disabled}: {

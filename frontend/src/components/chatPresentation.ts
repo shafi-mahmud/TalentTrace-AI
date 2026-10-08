@@ -3,12 +3,15 @@ import type { ReactNode } from "react";
 import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
 import type { ChatMessage, RecruiterChatResponse, PublicationState } from "../types/recruiterChat";
 import type { JobDescriptionGenerationResponse } from "../types/jobDescription";
+import { CriteriaEditor } from "./ScreeningCriteriaReview.ts";
+import type { WorkingCriteriaDraft } from "../types/recruiterChat";
 
 export function replyToChatMessage(reply: RecruiterChatResponse): ChatMessage {
-  return { role: "assistant", text: reply.assistant_message,
+  return { role: "assistant", text: reply.assistant_message, conversationId: reply.conversation_id,
     ...(reply.status === "clarification" ? { missingFields: reply.missing_fields } : {}),
     ...(reply.status === "jd_generated" ? { jobDescriptionResult: reply.job_description_result, publishingContext: reply.publishing_context,
-      screeningSuggestions: reply.screening_suggestions ?? undefined } : {}),
+      screeningSuggestions: reply.screening_suggestions, draftId: reply.draft_id,
+      screeningSuggestionSources: reply.screening_suggestion_sources } : {}),
   };
 }
 
@@ -31,8 +34,10 @@ function resultList(title: string, items: string[], skills = false) {
       ...items.map((item, index) => h("li", { key: index }, item))));
 }
 
-function DraftMessage({ result, publication = {status: "idle"}, onPublish, onRevise, actionsDisabled }: {
+function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, actionsDisabled }: {
   result: JobDescriptionGenerationResponse; publication?: PublicationState;
+  criteriaDraft?: WorkingCriteriaDraft; onCriteriaChange?: (criteria: WorkingCriteriaDraft["criteria"]) => void;
+  onCriteriaReviewed?: (reviewed: boolean) => void; onContinue?: () => void;
   onPublish?: () => void; onRevise?: () => void; actionsDisabled?: boolean;
 }) {
   const draft = result.job_description;
@@ -55,6 +60,11 @@ function DraftMessage({ result, publication = {status: "idle"}, onPublish, onRev
       resultList("Responsibilities", draft.responsibilities), resultList("Required Skills", draft.required_skills, true),
       draft.preferred_skills.length ? resultList("Preferred Skills", draft.preferred_skills) : null,
       resultList("Qualifications", draft.qualifications)),
+    criteriaDraft ? h("div", {className: "jd-criteria-inline"},
+      h(CriteriaEditor, {criteria: criteriaDraft.criteria, sources: criteriaDraft.sources, reviewed: criteriaDraft.reviewed,
+        disabled: Boolean(actionsDisabled), onChange: onCriteriaChange ?? (() => {}), onReviewedChange: onCriteriaReviewed ?? (() => {})}),
+      h("button", {type: "button", className: "button button-primary", disabled: !criteriaDraft.reviewed || actionsDisabled,
+        onClick: onContinue}, "Continue to CV screening")) : null,
     h("details", { className: "grounding-section", "aria-label": "Policy Grounding" }, h("summary", null, "Policy Grounding · Sources and citations"),
       h("div", { className: "grounding-header" }, h("h3", null, "Policy Grounding"), h("span", { className: "demo-badge" }, "Demo policy source")),
       h("p", { className: "grounding-description" }, "Grounded in synthetic company policy for this demo."),
@@ -82,16 +92,25 @@ function DraftMessage({ result, publication = {status: "idle"}, onPublish, onRev
 }
 
 // All recruiter/provider content renders as escaped React text, never raw HTML.
-export function ChatMessageView({ message, onPublish, onRevise, onReviewCriteria, actionsDisabled }: {
-  message: ChatMessage; onPublish?: () => void; onRevise?: () => void; onReviewCriteria?: () => void; actionsDisabled?: boolean;
+export function ChatMessageView({ message, criteriaDraft, onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, onRetry, actionsDisabled }: {
+  message: ChatMessage; criteriaDraft?: WorkingCriteriaDraft;
+  onCriteriaChange?: (criteria: WorkingCriteriaDraft["criteria"]) => void; onCriteriaReviewed?: (reviewed: boolean) => void;
+  onContinue?: () => void; onPublish?: () => void; onRevise?: () => void; onRetry?: () => void; actionsDisabled?: boolean;
 }) {
   return h("div", { className: `chat-message chat-${message.role}` },
     h("strong", null, message.role === "recruiter" ? "You" : "TalentTrace AI"),
     h("p", null, message.text),
+    message.sendState === "sending" ? h("p", {role: "status"}, "Sending…") : null,
+    message.sendState === "failed" ? h("div", {role: "alert", className: "error-banner chat-send-error"},
+      h("p", null, "Message was not confirmed as sent. Your text remains in the composer.", message.sendError ? ` ${message.sendError}` : ""),
+      message.retryAvailable && onRetry ? h("button", {type: "button", className: "button button-secondary", disabled: actionsDisabled, onClick: onRetry}, "Retry message") : null) : null,
+    message.sendState === "uncertain" ? h("div", {role: "alert", className: "error-banner chat-send-error"},
+      h("p", null, "Delivery was not confirmed. The server may have accepted this request; it was not retried automatically.",
+        message.sendError ? ` ${message.sendError}` : ""),
+      message.retryAvailable && onRetry ? h("button", {type: "button", className: "button button-secondary", disabled: actionsDisabled, onClick: onRetry}, "Retry in this conversation") : null) : null,
     message.missingFields?.length ? h("ul", { "aria-label": "Information needed" },
       ...message.missingFields.map(field => h("li", { key: field }, MISSING_FIELD_LABELS[field]))) : null,
-    message.role === "assistant" && message.screeningSuggestions && onReviewCriteria
-      ? h("button", {type: "button", className: "button button-secondary", onClick: onReviewCriteria, disabled: actionsDisabled}, "Review screening criteria") : null,
     message.role === "assistant" && message.jobDescriptionResult
-      ? h(DraftMessage, { result: message.jobDescriptionResult, publication: message.publication, onPublish, onRevise, actionsDisabled }) : null);
+      ? h(DraftMessage, { result: message.jobDescriptionResult, publication: message.publication, criteriaDraft,
+        onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, actionsDisabled }) : null);
 }

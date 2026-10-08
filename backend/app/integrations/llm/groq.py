@@ -144,6 +144,9 @@ def _generation_messages(
                 "only citation IDs supplied with the policy blocks. Preserve the "
                 "recruiter's facts, do not invent salary, benefits, approval, or "
                 "publication status, and return only the required JSON schema."
+                " A validated minimum_experience_years value of 0 means the recruiter "
+                "explicitly requires no minimum experience; preserve that meaning and do "
+                "not invent a years threshold."
             ),
         },
         {

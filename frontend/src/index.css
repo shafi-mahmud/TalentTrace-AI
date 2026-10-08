@@ -288,6 +288,7 @@ body { background: var(--page); color: var(--ink); }
 .button-secondary:hover:enabled { background: #edf5f1; border-color: #c5ddd2; }
 .chat-card { height: min(76dvh, 920px); min-height: 640px; }
 .chat-card .card-header { padding: 20px 26px; }
+.chat-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .chat-history { background: linear-gradient(180deg, #f8fbf9 0%, #f5f8f6 100%); }
 .chat-message { box-shadow: 0 2px 9px rgb(25 58 48 / 4%); }
 .chat-recruiter { background: #e9f4ef; border-color: #d7e9df; }
@@ -296,6 +297,11 @@ body { background: var(--page); color: var(--ink); }
 .chat-composer textarea { min-height: 88px; border-radius: 10px; }
 .chat-draft { padding: 18px; border: 1px solid #e1eae5; border-radius: 12px; background: #fff; }
 .chat-draft .generated-title { margin-top: 18px; }
+.jd-criteria-inline { margin-top: 20px; }
+.jd-criteria-inline .criteria-review { margin: 0; }
+.criteria-review h3 { margin: 0 0 8px; color: #25483e; font-size: 17px; }
+.criterion-provenance { grid-column: 1 / -1; margin: 0; color: #5f716a; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.criterion-row .button { justify-self: start; }
 .draft-actions { align-items: center; }
 .cv-intake-card { padding: 28px; }
 .cv-intake-card > form { padding: 0; }

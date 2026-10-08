@@ -17,7 +17,7 @@ def screening_suggestions(request: JobDescriptionGenerationRequest) -> Screening
     """Source-backed recruiter requirements only; no generated JD additions."""
     values = [("skill", text) for text in request.required_skills + request.preferred_skills]
     values += [("education", text) for text in request.education_requirements]
-    if request.minimum_experience_years is not None:
+    if request.minimum_experience_years is not None and request.minimum_experience_years > 0:
         values.append(("experience", f"Minimum {request.minimum_experience_years} years of relevant experience"))
     return ScreeningSuggestions(job_title=request.job_title, criteria=[
         ScreeningCriterion(criterion_id=f"criterion-{index:02d}", category=category,

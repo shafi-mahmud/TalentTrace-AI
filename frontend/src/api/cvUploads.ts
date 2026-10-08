@@ -6,12 +6,16 @@ const REFERENCE = /^TT-JOB-[A-F0-9]{16}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export function validateCvSelection(jobReference: string, files: readonly Pick<File, "name" | "size">[]): string | null {
-  if (!REFERENCE.test(jobReference.trim())) return "Enter the TT-JOB reference shown in the published job.";
+  if (!isValidJobReference(jobReference)) return "Enter the TT-JOB reference shown in the published job.";
   if (files.length < 1 || files.length > 20) return "Select between 1 and 20 PDF/DOCX files.";
   if (files.some(file => !/\.(pdf|docx)$/i.test(file.name))) return "Only PDF and DOCX files are supported.";
   if (files.some(file => file.size <= 0 || file.size > 10 * MIB)) return "Each file must be nonempty and no larger than 10 MiB.";
   if (files.reduce((sum, file) => sum + file.size, 0) > 100 * MIB) return "The batch must be no larger than 100 MiB.";
   return null;
+}
+
+export function isValidJobReference(value: string): boolean {
+  return REFERENCE.test(value.trim());
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -56,7 +60,7 @@ export async function uploadCvs(jobReference: string, files: readonly File[]): P
   }
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) throw new Error(record(body) && typeof body.code === "string" && Object.hasOwn(PUBLIC_ERRORS, body.code)
-    ? PUBLIC_ERRORS[body.code] : "CV intake could not store the batch. No upload was confirmed.");
+    ? PUBLIC_ERRORS[body.code] : "Candidate CV upload could not store the batch. No upload was confirmed.");
   if (!isCvUploadResponse(body) || body.job_reference !== jobReference.trim() || body.accepted_count !== files.length) {
     throw new Error("Upload confirmation was invalid. Check with the local demo operator before uploading again.");
   }

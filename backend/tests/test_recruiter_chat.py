@@ -10,16 +10,17 @@ from app.agents.jd.errors import GenerationProviderError, GenerationTimeoutError
 from app.agents.jd.workflow import JobDescriptionWorkflow
 from app.api.routers import recruiter_chat as route
 from app.integrations.llm.recruiter_chat import GroqRecruiterInstructionInterpreter
+from app.integrations.llm.recruiter_chat import RecruiterConversationContext
 from app.main import app
 from app.rag.retrieval import PolicyRetrievalError
 from app.schemas.recruiter_chat import RecruiterChatRequest, RecruiterInterpretation
-from app.services.recruiter_chat import RecruiterChatService
+from app.services.recruiter_chat import ConversationStore, ConversationUnavailableError, RecruiterChatService
 from test_groq_job_description import FakeCompletions, FakeGroqClient, configured_settings, policy_context
 from test_job_descriptions_endpoint import successful_response
 from app.integrations.llm.groq import JobDescriptionGenerationResult
 
 
-MESSAGE = "Create a Backend Engineer JD. Build and maintain secure backend services. Responsibilities: Develop APIs; Write tests. Required skills: Python and FastAPI."
+MESSAGE = "Create a Backend Engineer JD. Build and maintain secure backend services. Responsibilities: Develop APIs; Write tests. Required skills: Python and FastAPI. No minimum experience required."
 
 
 def evidence(value, source=None):
@@ -36,7 +37,7 @@ def extracted_data():
             "required_skills": [evidence("Python"), evidence("FastAPI")],
             "department": None, "employment_type": None, "work_arrangement": None,
             "location": None, "seniority_level": None, "preferred_skills": [],
-            "minimum_experience_years": None, "education_requirements": [],
+            "minimum_experience_years": evidence(0, "No minimum experience required."), "education_requirements": [],
         },
     }
 
@@ -46,7 +47,8 @@ class FakeInterpreter:
         self.data = data or extracted_data()
         self.error = error
 
-    async def interpret(self, request):
+    async def interpret(self, request, context=None):
+        self.last_context = context
         if self.error:
             raise self.error
         return RecruiterInterpretation.model_validate(self.data)
@@ -64,6 +66,25 @@ class RecordingWorkflow:
         return successful_response()
 
 
+class SequenceInterpreter:
+    def __init__(self, outputs):
+        self.outputs = list(outputs)
+        self.contexts = []
+
+    async def interpret(self, request, context=None):
+        self.contexts.append((request.message, context))
+        return RecruiterInterpretation.model_validate(self.outputs.pop(0))
+
+
+def empty_extraction(**values):
+    data = extracted_data()
+    requirements = data["requirements"]
+    for name, value in requirements.items():
+        requirements[name] = [] if isinstance(value, list) else None
+    requirements.update(values)
+    return data
+
+
 def test_valid_message_calls_existing_jd_contract():
     workflow = RecordingWorkflow()
     service = RecruiterChatService(FakeInterpreter(), workflow_factory=lambda: workflow)
@@ -74,12 +95,148 @@ def test_valid_message_calls_existing_jd_contract():
     assert result.job_description_result == successful_response()
     assert result.job_description_result.status == "draft"
     assert result.job_description_result.human_review_required is True
+    assert len(result.screening_suggestions.criteria) == 2
+    assert {item.source for item in result.screening_suggestion_sources} == {"recruiter_input"}
+
+
+def test_progressive_conversation_collects_requirements_and_generates_once():
+    turns = [
+        ("I need a JD for an AI/ML Engineer.", {"job_title": evidence("AI/ML Engineer", "AI/ML Engineer")}),
+        ("Develop ML models and build prediction APIs.", {"role_summary": evidence("Develop ML models and build prediction APIs.")}),
+        ("Responsibilities are to develop ML models and build prediction APIs.", {"responsibilities": [evidence("Develop ML models"), evidence("Build prediction APIs")]}),
+        ("Python, PyTorch and FastAPI are required.", {"required_skills": [evidence("Python"), evidence("PyTorch"), evidence("FastAPI")]}),
+        ("Two years.", {"minimum_experience_years": evidence(2, "Two years.")}),
+    ]
+    interpreter = SequenceInterpreter([empty_extraction(**values) for _, values in turns])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    conversation_id = None
+    replies = []
+    for message, _ in turns:
+        reply = asyncio.run(service.respond(RecruiterChatRequest(message=message, conversation_id=conversation_id)))
+        conversation_id = reply.conversation_id
+        replies.append(reply)
+    assert [reply.status for reply in replies] == ["clarification"] * 4 + ["jd_generated"]
+    assert replies[0].assistant_message.startswith("Got it — AI/ML Engineer.")
+    assert len(workflow.requests) == 1
+    assert workflow.requests[0].job_title == "AI/ML Engineer"
+    assert workflow.requests[0].required_skills == ["Python", "PyTorch", "FastAPI"]
+    assert workflow.requests[0].minimum_experience_years == 2
+    assert interpreter.contexts[-1][1].prior_user_messages == tuple(message for message, _ in turns[:-1])
+    assert interpreter.contexts[-1][1].validated_requirements["job_title"][0]["value"] == "AI/ML Engineer"
+
+
+def test_explicit_no_minimum_experience_is_a_valid_requirement():
+    data = extracted_data()
+    workflow = RecordingWorkflow()
+    result = asyncio.run(RecruiterChatService(FakeInterpreter(data), workflow_factory=lambda: workflow,
+        conversation_store=ConversationStore()).respond(RecruiterChatRequest(message=MESSAGE)))
+    assert result.status == "jd_generated"
+    assert workflow.requests[0].minimum_experience_years == 0
+    assert not any(item.category == "experience" for item in result.screening_suggestions.criteria)
+
+
+def test_no_minimum_conflicts_with_another_explicit_required_duration():
+    service = RecruiterChatService(FakeInterpreter(), workflow_factory=lambda: pytest.fail("Conflicting minimums must clarify."),
+        conversation_store=ConversationStore())
+    result = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE + " Actually, require 3 years of backend experience.")))
+    assert result.status == "clarification"
+    assert result.missing_fields == ["minimum_experience_years"]
+
+
+def test_explicit_no_minimum_corrects_a_previously_stated_years_threshold():
+    interpreter = SequenceInterpreter([realistic_extraction(),
+        empty_extraction(minimum_experience_years=evidence(0, "No minimum experience required."))])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    first = asyncio.run(service.respond(RecruiterChatRequest(message=REALISTIC_MESSAGE)))
+    second = asyncio.run(service.respond(RecruiterChatRequest(message="Actually, no minimum experience required.",
+        conversation_id=first.conversation_id)))
+    assert first.status == second.status == "jd_generated"
+    assert workflow.requests[0].minimum_experience_years == 3
+    assert workflow.requests[1].minimum_experience_years == 0
+
+
+def test_assistant_or_prior_context_cannot_supply_a_new_requirement():
+    first = empty_extraction(job_title=evidence("Backend Engineer"))
+    second = empty_extraction(minimum_experience_years=evidence(2, "Two years"),
+        required_skills=[evidence("Python")])
+    interpreter = SequenceInterpreter([first, second])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    start = asyncio.run(service.respond(RecruiterChatRequest(message="I need a Backend Engineer.")))
+    follow_up = asyncio.run(service.respond(RecruiterChatRequest(message="Two years", conversation_id=start.conversation_id)))
+    assert follow_up.status == "clarification"
+    assert follow_up.missing_fields == ["role_summary"]
+    assert not workflow.requests
+    assert "required_skills" not in service._conversations._sessions[start.conversation_id].requirements
+
+
+def test_scalar_conflict_requires_explicit_correction_and_correction_regenerates():
+    interpreter = SequenceInterpreter([extracted_data(), empty_extraction(job_title=evidence("Platform Engineer")),
+        empty_extraction(job_title=evidence("Platform Engineer"))])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    first = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE)))
+    conflict = asyncio.run(service.respond(RecruiterChatRequest(message="Platform Engineer", conversation_id=first.conversation_id)))
+    assert conflict.status == "clarification"
+    assert conflict.missing_fields == ["job_title"]
+    assert len(workflow.requests) == 1
+    updated = asyncio.run(service.respond(RecruiterChatRequest(message="Change the title to Platform Engineer instead.", conversation_id=first.conversation_id)))
+    assert updated.status == "jd_generated"
+    assert len(workflow.requests) == 2
+    assert workflow.requests[-1].job_title == "Platform Engineer"
+
+
+def test_additive_list_correction_preserves_previously_grounded_skills():
+    interpreter = SequenceInterpreter([extracted_data(), empty_extraction(required_skills=[evidence("Docker")])])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    first = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE)))
+    second = asyncio.run(service.respond(RecruiterChatRequest(
+        message="Actually, Docker is also required.", conversation_id=first.conversation_id)))
+    assert first.status == second.status == "jd_generated"
+    assert workflow.requests[0].required_skills == ["Python", "FastAPI"]
+    assert workflow.requests[1].required_skills == ["Python", "FastAPI", "Docker"]
+
+
+def test_new_sessions_are_isolated_and_server_context_is_bounded():
+    interpreter = SequenceInterpreter([extracted_data(), extracted_data()])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    first = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE)))
+    second = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE)))
+    assert first.conversation_id != second.conversation_id
+    assert interpreter.contexts[1][1].prior_user_messages == ()
+    assert interpreter.contexts[1][1].validated_requirements == {}
+
+    store = ConversationStore()
+    store.MAX_TURNS = 1
+    limited = RecruiterChatService(SequenceInterpreter([empty_extraction(job_title=evidence("Engineer"))]),
+        workflow_factory=lambda: workflow, conversation_store=store)
+    clarification = asyncio.run(limited.respond(RecruiterChatRequest(message="Engineer")))
+    with pytest.raises(ConversationUnavailableError):
+        asyncio.run(limited.respond(RecruiterChatRequest(message="Follow up", conversation_id=clarification.conversation_id)))
+    assert clarification.conversation_id not in store._sessions
+
+
+def test_unchanged_complete_conversation_does_not_create_duplicate_draft():
+    interpreter = SequenceInterpreter([extracted_data(), extracted_data()])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    first = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE)))
+    second = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE, conversation_id=first.conversation_id)))
+    assert first.status == "jd_generated"
+    assert second.status == "draft_unchanged"
+    assert len(workflow.requests) == 1
 
 
 @pytest.mark.parametrize("field", ["responsibilities", "required_skills", "job_title", "role_summary"])
 def test_missing_information_never_constructs_workflow(field):
     data = extracted_data()
     data["requirements"][field] = [] if field in {"responsibilities", "required_skills"} else None
+    if field == "minimum_experience_years":
+        data["requirements"][field] = None
 
     def forbidden_workflow():
         pytest.fail("Clarification must not construct the JD workflow.")
@@ -112,7 +269,7 @@ def test_optional_invented_values_require_clarification():
     service = RecruiterChatService(FakeInterpreter(data), workflow_factory=lambda: pytest.fail("Unsupported optional facts must clarify."))
     result = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE)))
     assert result.status == "clarification"
-    assert set(result.missing_fields) == {"location", "preferred_skills", "minimum_experience_years"}
+    assert result.missing_fields == ["minimum_experience_years"]
 
 
 def test_explicit_optional_enums_are_preserved():
@@ -161,6 +318,22 @@ def test_interpreter_strict_schema_and_safe_prompt():
     assert "UNTRUSTED DATA" in captured["messages"][0]["content"]
     assert MESSAGE not in captured["messages"][0]["content"]
     assert "private-test-groq-key" not in json.dumps(captured)
+
+
+def test_interpreter_receives_server_context_as_prior_turns():
+    captured = {}
+    context = RecruiterConversationContext(
+        prior_user_messages=("I need a Backend Engineer JD.",),
+        validated_requirements={"job_title": [{"value": "Backend Engineer", "evidence": "Backend Engineer"}]},
+        last_asked_field="role_summary",
+    )
+    asyncio.run(adapter(json.dumps(extracted_data()), captured=captured).interpret(
+        RecruiterChatRequest(message="Build secure backend services."), context))
+    payload = json.loads(captured["messages"][1]["content"].split("\n", 1)[1].rsplit("\nEND_", 1)[0])
+    assert payload["current_recruiter_message"] == "Build secure backend services."
+    assert payload["prior_recruiter_messages"] == ["I need a Backend Engineer JD."]
+    assert payload["validated_server_requirements"]["job_title"][0]["value"] == "Backend Engineer"
+    assert payload["last_asked_field"] == "role_summary"
 
 
 @pytest.mark.parametrize("content", ["not-json", "{}", json.dumps({"intent": "publish_job", "requirements": None})])
@@ -262,7 +435,7 @@ def test_one_unsupported_list_item_never_silently_disappears(field, value):
 
 
 def test_punctuation_and_role_purpose_source_clause():
-    message = "Create a Backend Engineer JD for a team building FastAPI services. Responsibilities: Develop APIs; Write tests. Required skills: Python and FastAPI."
+    message = "Create a Backend Engineer JD for a team building FastAPI services. Responsibilities: Develop APIs; Write tests. Required skills: Python and FastAPI. No minimum experience required."
     data = extracted_data()
     data["requirements"]["role_summary"] = evidence("for a team building FastAPI services")
     data["requirements"]["responsibilities"][0] = evidence("Develop APIs.", "Develop APIs")
@@ -362,6 +535,26 @@ def test_generation_and_clarification_have_no_publication_side_effects(monkeypat
     data["requirements"]["required_skills"].append(evidence("Rust"))
     service = RecruiterChatService(FakeInterpreter(data), workflow_factory=lambda: pytest.fail("Clarification must stop."))
     assert asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE))).status == "clarification"
+
+
+def test_http_endpoint_preserves_conversation_id_across_clarification_turns(monkeypatch):
+    outputs = [empty_extraction(job_title=evidence("AI/ML Engineer")),
+        empty_extraction(role_summary=evidence("Build prediction APIs."))]
+    interpreter = SequenceInterpreter(outputs)
+    monkeypatch.setattr(route, "get_recruiter_interpreter", lambda: interpreter)
+    async def execute():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            first = await client.post("/api/v1/recruiter-chat", json={"message": "I need a JD for AI/ML Engineer."})
+            first_data = first.json()
+            second = await client.post("/api/v1/recruiter-chat", json={"message": "Build prediction APIs.",
+                "conversation_id": first_data["conversation_id"]})
+            return first, first_data, second
+    first, first_data, second = asyncio.run(execute())
+    assert first.status_code == 200
+    assert second.status_code == 200, second.text
+    assert first_data["missing_fields"] == ["role_summary"]
+    assert second.json()["conversation_id"] == first_data["conversation_id"]
+    assert second.json()["missing_fields"] == ["responsibilities"]
 
 
 @pytest.mark.parametrize("field", ["job_title", "role_summary"])
@@ -467,7 +660,8 @@ def test_posting_requests_are_unavailable_without_external_calls(monkeypatch, me
     assert response.status_code == 200
     assert response.json() == {
         "status": "unsupported", "intent": "unsupported",
-        "assistant_message": "Job posting by chat instruction is not available. Review a draft and use its Publish to Discord button.",
+        "conversation_id": response.json()["conversation_id"],
+        "assistant_message": "Job posting by chat instruction is not available. Review the draft and use its explicit Publish to Discord action.",
     }
 
 
