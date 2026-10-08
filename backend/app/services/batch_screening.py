@@ -2,7 +2,7 @@
 from uuid import UUID
 
 from app.agents.screening.workflow import CandidateScreeningWorkflow
-from app.schemas.batch_screening import BatchScreeningItem, BatchScreeningResponse, ReviewedJobSnapshot, ScreeningSuggestions
+from app.schemas.batch_screening import BatchScreeningItem, BatchScreeningResponse, ReviewedJobSnapshot, ScreeningSuggestions, overall_requirement_coverage
 from app.schemas.job_description import JobDescriptionGenerationRequest
 from app.schemas.screening import ScreeningCriterion, ScreeningInput
 from app.services.candidate_profile import CandidateProfileService
@@ -45,11 +45,12 @@ class BatchScreeningService:
                     parsing_status=profile.parsing_status, qualifications=profile.qualifications,
                     criteria=tuple(snapshot.criteria))
                 result = await self.workflow.screen(supplied)
-                candidates.append(BatchScreeningItem(upload_id=profile.upload_id, result=result, error_code=None))
+                candidates.append(BatchScreeningItem(upload_id=profile.upload_id, result=result, error_code=None,
+                    overall_coverage=overall_requirement_coverage(result)))
             except Exception:
                 # Unexpected candidate-level failures are operational, never exclusions.
                 candidates.append(BatchScreeningItem(upload_id=profile.upload_id,
-                    result=None, error_code="screening_processing_failed"))
+                    result=None, error_code="screening_processing_failed", overall_coverage="not_evaluated"))
         return BatchScreeningResponse(job_reference=job_reference, batch_id=batch_id,
             snapshot=snapshot, processed_count=len(candidates), candidates=candidates,
             ranking=rank_eligible_candidates([c.result for c in candidates if c.result is not None],

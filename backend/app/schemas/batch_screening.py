@@ -46,11 +46,32 @@ class ReviewedJobSnapshot(BaseModel):
         return self
 
 
+OverallCoverage = Literal["met", "partially_met", "unmet", "uncertain", "not_evaluated"]
+
+
+def overall_requirement_coverage(result: ScreeningDecisionResult | None) -> OverallCoverage:
+    """Overall coverage of confirmed atoms, independent of the eligibility gate."""
+    if result is None:
+        return "not_evaluated"
+    result = ScreeningDecisionResult.model_validate(result.model_dump(warnings=False))
+    if result.status != "decision_complete":
+        return "not_evaluated"
+    statuses = {match.match_status for match in result.matching_result.matches}
+    if "ambiguous" in statuses:
+        return "uncertain"
+    if statuses == {"supported"}:
+        return "met"
+    if statuses == {"not_found"}:
+        return "unmet"
+    return "partially_met"
+
+
 class BatchScreeningItem(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     upload_id: UUID
     result: ScreeningDecisionResult | None
     error_code: Literal["screening_processing_failed"] | None
+    overall_coverage: OverallCoverage
 
     @model_validator(mode="after")
     def consistent_item(self):
@@ -58,6 +79,8 @@ class BatchScreeningItem(BaseModel):
             raise ValueError("A screening item must have either a result or a processing error.")
         if self.result is not None and self.result.upload_id != self.upload_id:
             raise ValueError("Screening identity must match the upload.")
+        if self.overall_coverage != overall_requirement_coverage(self.result):
+            raise ValueError("Overall coverage must match the validated requirement evidence.")
         return self
 
 

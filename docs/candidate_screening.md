@@ -360,6 +360,24 @@ increment preserves the existing evidence statuses instead of guessing.
 Synthetic tests cover rank/count validation, ties, failure isolation, evidence and
 contact independence; no live provider or manual browser ranking test is claimed.
 
+## Implemented — overall requirement coverage
+
+Each batch candidate has a validated `overall_coverage` independent of eligibility:
+all confirmed atomic criteria supported -> `met`; a mix of supported/not-found
+with no ambiguity -> `partially_met`; all not-found -> `unmet`; any ambiguity ->
+`uncertain`; source, parsing, matching or processing failure -> `not_evaluated`.
+The UI shows supported coverage and "Unmet — not demonstrated in the CV", never
+asserting that a person lacks a qualification. Original evidence remains accessible.
+
+This summarizes coverage across the entire confirmed snapshot. It does not label
+an individual atomic or composite requirement partially met. A partially covered
+candidate can still be excluded for an unmet mandatory criterion; an eligible
+candidate with only preferred unmet criteria can have overall `unmet` coverage.
+Existing hard decisions, ranking/ties, graph topology and checkpoint schemas remain
+unchanged. The added field belongs to the batch response, outside checkpoint state.
+Per-composite partial fulfillment and any changed mandatory-partial policy still
+need trainer clarification. This is not weighted suitability scoring.
+
 ## Planned — production integration and future work
 
 Authentication, approved-job persistence, production API/UI ownership controls and

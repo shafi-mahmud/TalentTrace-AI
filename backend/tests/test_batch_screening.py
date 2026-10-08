@@ -73,6 +73,8 @@ def test_real_screening_graph_semantic_outcomes_and_ocr_evidence(monkeypatch, st
     assert response.status_code == 200
     result = response.json()["candidates"][0]["result"]
     assert result["screening_decision"] == outcome
+    assert response.json()["candidates"][0]["overall_coverage"] == {
+        "supported": "met", "not_found": "unmet", "ambiguous": "uncertain"}[status]
     assert result["matching_result"]["matches"][0]["match_method"] == "semantic"
     if evidence:
         assert result["matching_result"]["matches"][0]["evidence"][0]["source"]["method"] == "ocr"
@@ -103,6 +105,7 @@ def test_batch_isolates_source_provider_and_unexpected_candidate_failures(monkey
     assert rows[0]["result"]["screening_decision"] == rows[-1]["result"]["screening_decision"] == "eligible"
     assert rows[1]["result"]["screening_decision"] is None and rows[2]["result"]["screening_decision"] is None
     assert "PRIVATE" not in response.text
+    assert [row["overall_coverage"] for row in rows] == ["met", "not_evaluated", "not_evaluated", "not_evaluated", "met"]
     ranking = response.json()["ranking"]
     assert {r["upload_id"] for r in ranking} == {str(values[0].upload_id), str(values[-1].upload_id)}
     assert all(r["rank"] == 1 and r["tied"] for r in ranking)

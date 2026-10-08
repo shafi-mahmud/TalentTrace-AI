@@ -86,10 +86,18 @@ export function isBatchScreeningResponse(v: unknown): v is BatchScreeningRespons
     || !Array.isArray(v.candidates) || v.candidates.length < 1 || v.candidates.length > 20 || v.processed_count !== v.candidates.length) return false;
   const snapshot = v.snapshot;
   if (!(new Set(v.candidates.map(c => record(c) ? c.upload_id : null)).size === v.candidates.length
-    && v.candidates.every(c => keys(c, ["upload_id", "result", "error_code"]) && typeof c.upload_id === "string" && UUID.test(c.upload_id)
+    && v.candidates.every(c => keys(c, ["upload_id", "result", "error_code", "overall_coverage"]) && typeof c.upload_id === "string" && UUID.test(c.upload_id)
       && (c.result === null ? c.error_code === "screening_processing_failed" : c.error_code === null && decision(c.result, snapshot, c.upload_id))))) return false;
   // Verify server ranks against validated evidence; never trust a client/provider score.
   const candidates = v.candidates as BatchScreeningResponse["candidates"];
+  if (!candidates.every(c => {
+    const statuses = c.result?.matching_result.matches.map(m => m.match_status) ?? [];
+    const coverage = !c.result || c.result.status !== "decision_complete" ? "not_evaluated"
+      : statuses.includes("ambiguous") ? "uncertain"
+      : statuses.every(s => s === "supported") ? "met"
+      : statuses.every(s => s === "not_found") ? "unmet" : "partially_met";
+    return c.overall_coverage === coverage;
+  })) return false;
   const expected = candidates.filter(c => c.result?.status === "decision_complete" && c.result.screening_decision === "eligible").map(c => {
     const matches = c.result!.matching_result.matches;
     return {upload_id: c.upload_id, supported_count: matches.filter(m => m.match_status === "supported").length,

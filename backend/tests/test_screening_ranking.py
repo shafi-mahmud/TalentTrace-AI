@@ -124,7 +124,7 @@ def test_response_rejects_invented_or_incomplete_ranking(change):
     result, criteria = decision(["supported"], 1)
     reviewed = ReviewedJobSnapshot(job_reference=REFERENCE, job_title="Synthetic role", criteria_confirmed=True, criteria=list(criteria))
     payload = dict(job_reference=REFERENCE, batch_id=uuid4(), snapshot=reviewed, processed_count=1,
-                   candidates=[dict(upload_id=result.upload_id, result=result, error_code=None)], ranking=rank([result], criteria))
+                   candidates=[dict(upload_id=result.upload_id, result=result, error_code=None, overall_coverage="met")], ranking=rank([result], criteria))
     row = payload["ranking"][0]
     if change == "count": row.update(supported_count=0, not_found_count=1)
     if change == "rank": row["rank"] = 2
