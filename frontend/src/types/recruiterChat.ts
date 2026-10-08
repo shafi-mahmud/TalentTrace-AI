@@ -44,6 +44,10 @@ export type RecruiterChatResponse =
 export interface ChatMessage {
   role: "recruiter" | "assistant";
   text: string;
+  localMessageId?: string;
+  sendState?: "sending" | "failed" | "uncertain" | "sent";
+  sendError?: string;
+  retryAvailable?: boolean;
   missingFields?: MissingField[];
   jobDescriptionResult?: JobDescriptionGenerationResponse;
   publishingContext?: PublishingContext;

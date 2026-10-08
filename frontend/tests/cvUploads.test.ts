@@ -3,8 +3,9 @@ import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { isCvUploadResponse, isValidJobReference, uploadCvs, validateCvSelection } from "../src/api/cvUploads.ts";
-import { createManualCriteriaDraft, CvUploadConfirmation, SelectedCvFiles, WorkspaceNavigation, ScreeningWorkflowSteps, screeningPrerequisiteMessage } from "../src/components/cvIntakePresentation.ts";
+import { createManualCriteriaDraft, CvUploadConfirmation, SelectedCvFiles, WorkspaceNavigation, ScreeningWorkflowSteps, screeningPrerequisiteMessage, resetCriteriaContextForNewChat } from "../src/components/cvIntakePresentation.ts";
 import { confirmReviewedCriteria } from "../src/components/ScreeningCriteriaReview.ts";
+import type { ReviewedJobSnapshot, BatchScreeningResponse } from "../src/types/screening.ts";
 
 const REFERENCE = "TT-JOB-30BB2CDF9A5CCCA9";
 const BATCH = "9014cc92-9256-48e2-a5f7-52981251cc44";
@@ -93,6 +94,26 @@ test("manual screening setup needs a valid title and job reference, then uses th
   const snapshot = confirmReviewedCriteria(draft.suggestions, REFERENCE, criteria, true);
   assert.equal(snapshot?.job_title, "Backend Engineer");
   assert.equal(snapshot?.criteria[0].is_hard, true);
+});
+
+test("new chat clears old criteria confirmation and results while preserving the uploaded batch", () => {
+  const uploadedBatch = result();
+  const selectedFiles = [{name: "synthetic.pdf", size: 1234}];
+  const oldManualDraft = createManualCriteriaDraft("Old role", REFERENCE)!;
+  const oldSnapshot = {job_title: "Old role", job_reference: REFERENCE, criteria_confirmed: true, criteria: []} as ReviewedJobSnapshot;
+  const oldScreening = {job_reference: REFERENCE, batch_id: BATCH} as BatchScreeningResponse;
+  const reset = resetCriteriaContextForNewChat({reference: REFERENCE, manualDraft: oldManualDraft, manualJobTitle: "Old role",
+    setupError: "old error", snapshot: oldSnapshot, screening: oldScreening, uploadedBatch, selectedFiles});
+  assert.equal(reset.reference, "");
+  assert.equal(reset.manualDraft, null);
+  assert.equal(reset.manualJobTitle, "");
+  assert.equal(reset.snapshot, null);
+  assert.equal(reset.screening, null);
+  assert.equal(reset.uploadedBatch, uploadedBatch);
+  assert.equal(reset.selectedFiles, selectedFiles);
+  assert.match(screeningPrerequisiteMessage({busy: false, hasSuggestions: Boolean(reset.manualDraft), hasBatch: true,
+    hasSnapshot: false, referenceMatches: false})!, /A JD is optional/);
+  assert.ok(createManualCriteriaDraft("New role", REFERENCE));
 });
 
 

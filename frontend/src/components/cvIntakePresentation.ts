@@ -5,6 +5,16 @@ import type { CvOcrResponse } from "../types/cvOcr";
 import type { WorkingCriteriaDraft } from "../types/recruiterChat";
 import { isValidJobReference } from "../api/cvUploads.ts";
 import type { ScreeningCriterion } from "../types/screening";
+import type { BatchScreeningResponse, ReviewedJobSnapshot } from "../types/screening";
+
+type ResettableCriteriaContext = {
+  reference: string; manualDraft: WorkingCriteriaDraft | null; manualJobTitle: string; setupError: string;
+  snapshot: ReviewedJobSnapshot | null; screening: BatchScreeningResponse | null;
+};
+
+export function resetCriteriaContextForNewChat<T extends ResettableCriteriaContext>(state: T): T {
+  return {...state, reference: "", manualDraft: null, manualJobTitle: "", setupError: "", snapshot: null, screening: null};
+}
 
 export type WorkspaceMode = "jd" | "cv";
 

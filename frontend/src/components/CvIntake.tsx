@@ -6,7 +6,7 @@ import type { CvExtractionResponse } from "../types/cvExtraction";
 import { extractCvs } from "../api/cvExtraction";
 import { runCvOcr } from "../api/cvOcr";
 import type { CvOcrResponse } from "../types/cvOcr";
-import { createManualCriteriaDraft, CvExtractionSummary, CvOcrSummary, CvUploadConfirmation, SelectedCvFiles, ScreeningWorkflowSteps, screeningPrerequisiteMessage } from "./cvIntakePresentation";
+import { createManualCriteriaDraft, CvExtractionSummary, CvOcrSummary, CvUploadConfirmation, SelectedCvFiles, ScreeningWorkflowSteps, screeningPrerequisiteMessage, resetCriteriaContextForNewChat } from "./cvIntakePresentation";
 import { extractCandidateProfiles } from "../api/candidateProfiles";
 import type { CandidateProfilesResponse } from "../types/candidateProfile";
 import { CandidateProfileAction, CandidateProfilesSummary } from "./candidateProfilesPresentation";
@@ -16,7 +16,8 @@ import { screenCvBatch } from "../api/screening";
 import type { BatchScreeningResponse, ReviewedJobSnapshot } from "../types/screening";
 import type { WorkingCriteriaDraft } from "../types/recruiterChat";
 
-export default function CvIntake({draft, onCriteriaChange, onCriteriaReviewed}: {
+export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed}: {
+  contextResetKey: number;
   draft: WorkingCriteriaDraft | null; onCriteriaChange: (criteria: WorkingCriteriaDraft["criteria"]) => void;
   onCriteriaReviewed: (reviewed: boolean) => void;
 }) {
@@ -39,12 +40,21 @@ export default function CvIntake({draft, onCriteriaChange, onCriteriaReviewed}: 
   const [manualJobTitle, setManualJobTitle] = useState("");
   const [setupError, setSetupError] = useState("");
   const screeningRevision = useRef(0);
+  const previousContextResetKey = useRef(contextResetKey);
   const criteriaDraft = draft ?? manualDraft;
   const busy = loading || extracting || processingOcr || parsing || screeningBusy;
   const screeningPrerequisite = screeningPrerequisiteMessage({busy, hasSuggestions: Boolean(criteriaDraft), hasBatch: Boolean(result),
     hasSnapshot: Boolean(snapshot), referenceMatches: Boolean(result && snapshot && snapshot.job_reference === result.job_reference)});
   function invalidateCriteria() { screeningRevision.current++; setSnapshot(null); setScreening(null); }
   useLayoutEffect(() => { invalidateCriteria(); }, [criteriaDraft?.draftId, criteriaDraft?.criteria, criteriaDraft?.reviewed]);
+  useLayoutEffect(() => {
+    if (previousContextResetKey.current === contextResetKey) return;
+    previousContextResetKey.current = contextResetKey;
+    const next = resetCriteriaContextForNewChat({reference, manualDraft, manualJobTitle, setupError, snapshot, screening});
+    setReference(next.reference); setManualDraft(next.manualDraft); setManualJobTitle(next.manualJobTitle);
+    setSetupError(next.setupError); setSnapshot(next.snapshot); setScreening(next.screening); setError("");
+    screeningRevision.current++;
+  }, [contextResetKey]);
   function changeCriteria(criteria: WorkingCriteriaDraft["criteria"]) {
     if (draft) onCriteriaChange(criteria);
     else setManualDraft(current => current ? {...current, criteria, reviewed: false} : current);

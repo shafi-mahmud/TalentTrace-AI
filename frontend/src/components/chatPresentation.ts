@@ -92,14 +92,22 @@ function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, o
 }
 
 // All recruiter/provider content renders as escaped React text, never raw HTML.
-export function ChatMessageView({ message, criteriaDraft, onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, actionsDisabled }: {
+export function ChatMessageView({ message, criteriaDraft, onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, onRetry, actionsDisabled }: {
   message: ChatMessage; criteriaDraft?: WorkingCriteriaDraft;
   onCriteriaChange?: (criteria: WorkingCriteriaDraft["criteria"]) => void; onCriteriaReviewed?: (reviewed: boolean) => void;
-  onContinue?: () => void; onPublish?: () => void; onRevise?: () => void; actionsDisabled?: boolean;
+  onContinue?: () => void; onPublish?: () => void; onRevise?: () => void; onRetry?: () => void; actionsDisabled?: boolean;
 }) {
   return h("div", { className: `chat-message chat-${message.role}` },
     h("strong", null, message.role === "recruiter" ? "You" : "TalentTrace AI"),
     h("p", null, message.text),
+    message.sendState === "sending" ? h("p", {role: "status"}, "Sending…") : null,
+    message.sendState === "failed" ? h("div", {role: "alert", className: "error-banner chat-send-error"},
+      h("p", null, "Message was not confirmed as sent. Your text remains in the composer.", message.sendError ? ` ${message.sendError}` : ""),
+      message.retryAvailable && onRetry ? h("button", {type: "button", className: "button button-secondary", disabled: actionsDisabled, onClick: onRetry}, "Retry message") : null) : null,
+    message.sendState === "uncertain" ? h("div", {role: "alert", className: "error-banner chat-send-error"},
+      h("p", null, "Delivery was not confirmed. The server may have accepted this request; it was not retried automatically.",
+        message.sendError ? ` ${message.sendError}` : ""),
+      message.retryAvailable && onRetry ? h("button", {type: "button", className: "button button-secondary", disabled: actionsDisabled, onClick: onRetry}, "Retry in this conversation") : null) : null,
     message.missingFields?.length ? h("ul", { "aria-label": "Information needed" },
       ...message.missingFields.map(field => h("li", { key: field }, MISSING_FIELD_LABELS[field]))) : null,
     message.role === "assistant" && message.jobDescriptionResult

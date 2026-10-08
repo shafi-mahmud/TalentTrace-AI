@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { isValidRecruiterMessage, sendRecruiterMessage } from "../src/api/recruiterChat.ts";
+import { isValidRecruiterMessage, RecruiterChatRequestError, sendRecruiterMessage } from "../src/api/recruiterChat.ts";
 import { publishDraft } from "../src/api/jobPublishing.ts";
 import { ChatMessageView, RecruiterChatPage, replyToChatMessage } from "../src/components/chatPresentation.ts";
 
@@ -60,6 +60,17 @@ test("unsupported intent is displayed without claiming publication", async (t) =
 test("unsafe server error text is never shown", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ message: "PRIVATE_SECRET" }, { status: 502 }));
   await assert.rejects(sendRecruiterMessage("Create a JD."), (error: Error) => !error.message.includes("PRIVATE_SECRET"));
+});
+
+test("network failure is reported as uncertain and is never automatically retried", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => { calls++; throw new TypeError("network failure"); });
+  await assert.rejects(sendRecruiterMessage("Create a JD."), (error: Error) => {
+    assert.ok(error instanceof RecruiterChatRequestError);
+    assert.equal((error as RecruiterChatRequestError).uncertain, true);
+    return error.message.includes("may have been received");
+  });
+  assert.equal(calls, 1);
 });
 
 
@@ -121,6 +132,17 @@ test("clarification maps directly into an assistant conversation message", () =>
   assert.match(html, /chat-assistant/);
   assert.match(html, /Required skills/);
   assert.ok(!html.includes("chat-draft"));
+});
+
+test("failed chat attempt is visibly uncertain and only offers same-session retry when safe", () => {
+  const unsafeToRetry = renderToStaticMarkup(createElement(ChatMessageView, {message: {role: "recruiter", text: "Create a JD.",
+    localMessageId: "turn-1", sendState: "uncertain", sendError: "Connection lost.", retryAvailable: false}}));
+  assert.match(unsafeToRetry, /Delivery was not confirmed/);
+  assert.match(unsafeToRetry, /may have accepted/);
+  assert.ok(!unsafeToRetry.includes("Retry in this conversation"));
+  const retryable = renderToStaticMarkup(createElement(ChatMessageView, {message: {role: "recruiter", text: "Follow-up",
+    localMessageId: "turn-2", sendState: "uncertain", retryAvailable: true}, onRetry: () => {}}));
+  assert.match(retryable, /Retry in this conversation/);
 });
 
 test("conversation id is sent back on follow-up and draft-unchanged is a normal chat reply", async (t) => {

@@ -4,8 +4,19 @@ import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
 import type { RecruiterChatResponse, PublishingContext } from "../types/recruiterChat";
 
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
-const FAILURE = "Recruiter chat could not be completed. Please try again.";
+const FAILURE = "Recruiter chat could not be completed.";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export class RecruiterChatRequestError extends Error {
+  readonly uncertain: boolean;
+  readonly retryable: boolean;
+
+  constructor(message: string, uncertain: boolean, retryable: boolean) {
+    super(message);
+    this.uncertain = uncertain;
+    this.retryable = retryable;
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -46,18 +57,19 @@ export async function sendRecruiterMessage(message: string, conversationId?: str
       body: JSON.stringify({ message, ...(conversationId ? {conversation_id: conversationId} : {}) }),
     });
   } catch {
-    throw new Error("Cannot reach the TalentTrace AI backend.");
+    throw new RecruiterChatRequestError("Cannot reach the TalentTrace AI backend. The request may have been received.", true, true);
   }
   if (!response.ok) {
     // Never display arbitrary provider/server errors or returned request text.
-    throw new Error(response.status === 422
+    const message = response.status === 422
       ? "Use a plain-text job instruction of up to 4000 characters, without candidate information or unsafe control characters."
       : response.status === 503 ? "Recruiter chat is not configured."
-      : response.status === 504 ? "Recruiter chat timed out. Please try again."
-      : response.status === 409 ? "This conversation expired or reached its limit. Start a new chat." : FAILURE);
+      : response.status === 504 ? "Recruiter chat timed out."
+      : response.status === 409 ? "This conversation expired or reached its limit. Start a new chat." : FAILURE;
+    throw new RecruiterChatRequestError(message, response.status >= 500, response.status !== 409 && response.status !== 422);
   }
   const body: unknown = await response.json().catch(() => null);
-  if (!isRecruiterChatResponse(body)) throw new Error(FAILURE);
+  if (!isRecruiterChatResponse(body)) throw new RecruiterChatRequestError(FAILURE, true, true);
   return body;
 }
 
