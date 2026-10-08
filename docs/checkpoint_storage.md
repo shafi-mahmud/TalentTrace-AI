@@ -125,9 +125,31 @@ graph are used. Output contains operational status and process ID only.
 
 ## Planned
 
-JD approval/revision checkpoint integration, screening, live co-pilot and
+JD approval/revision checkpoint integration, live co-pilot and
 post-interview evaluation persistence integration remain separate feature tasks.
 Docker Compose provisioning, production access/retention policies and application
 lifecycle/pooling integration remain planned. A persisted interrupt does not
 provide exactly-once external side effects; resumed nodes can restart, so future
 business integrations must handle replay/idempotency explicitly.
+
+## Implemented — Candidate Screening integration (#647498)
+
+The actual Screening graph now supports supplied-saver compilation and trusted
+internal PostgreSQL start/resume functions. It reuses this lifecycle, thread
+validation and strict serializer; no new checkpoint tables, migrations or setup
+behavior are introduced. Registered state is converted to JSON primitives and
+reconstructed as strict domain models at graph boundaries. Default non-persistent
+`prepare()`, `match()` and `screen()` behavior is unchanged.
+
+Actual-graph unit tests verify pause after matching, saver-context closure and
+resume without repeating completed matching. **Live PostgreSQL cross-process
+Screening recovery is unverified on 08 Oct 2026:** local checkpoint configuration
+is missing and Docker is unavailable. The 07 Oct foundation proof above uses a
+different test graph and does not establish Screening recovery. An opt-in
+two-process Screening proof is provided with mocked semantic calls; see
+[Candidate Screening](candidate_screening.md) for the command and security limits.
+
+Checkpointed qualifications require privacy protection. Thread snapshot equality
+is an accidental-reuse guard, not ownership enforcement or concurrency locking;
+one trusted writer per thread is required. Authorization, retention/deletion and
+production application integration remain planned.
