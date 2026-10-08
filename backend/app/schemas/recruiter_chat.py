@@ -3,6 +3,7 @@
 import re
 import unicodedata
 from typing import Annotated, Literal
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
@@ -24,6 +25,7 @@ def safe_text(value: str) -> str:
 class RecruiterChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    conversation_id: UUID | None = None
 
     @field_validator("message", mode="before")
     @classmethod
@@ -42,6 +44,18 @@ class RecruiterChatRequest(BaseModel):
         names = r"\b(?i:candidate|applicant)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b|\b[A-Z][a-z]+\s+[A-Z][a-z]+['’]s\s+(?:CV|cv|resume)\b"
         if any(re.search(pattern, value, re.I) for pattern in patterns) or re.search(names, value):
             raise ValueError("Use job requirements only, without candidate information.")
+        return value
+
+    @field_validator("conversation_id", mode="before")
+    @classmethod
+    def parse_conversation_id(cls, value: object) -> object:
+        if value is None or isinstance(value, UUID):
+            return value
+        if isinstance(value, str):
+            try:
+                return UUID(value)
+            except ValueError:
+                return value
         return value
 
 
@@ -92,11 +106,24 @@ class RecruiterInterpretation(BaseModel):
     requirements: ExtractedJobRequirements | None
 
 
+class ScreeningSuggestionSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    criterion_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
+    source: Literal["recruiter_input"] = "recruiter_input"
+    evidence: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+    @field_validator("evidence")
+    @classmethod
+    def validate_source_evidence(cls, value: str) -> str:
+        return safe_text(value)
+
+
 class ClarificationResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     status: Literal["clarification"] = "clarification"
     intent: Literal["create_job_description"] = "create_job_description"
+    conversation_id: UUID
     assistant_message: str = Field(min_length=1, max_length=600)
     missing_fields: list[ClarificationField] = Field(min_length=1, max_length=12)
 
@@ -106,7 +133,16 @@ class UnsupportedResponse(BaseModel):
 
     status: Literal["unsupported"] = "unsupported"
     intent: Literal["unsupported"] = "unsupported"
-    assistant_message: str = "I can help create a job description. Include the job title, role purpose, responsibilities and required skills. Publishing uses the draft action after review; candidate processing is unavailable."
+    conversation_id: UUID
+    assistant_message: str = "I can help collect job requirements and create a job-description draft."
+
+
+class DraftUnchangedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    status: Literal["draft_unchanged"] = "draft_unchanged"
+    intent: Literal["create_job_description"] = "create_job_description"
+    conversation_id: UUID
+    assistant_message: str = "Your current draft is unchanged. Tell me which requirement you would like to update."
 
 
 class PublishingContext(BaseModel):
@@ -121,13 +157,16 @@ class JobDescriptionChatResponse(BaseModel):
 
     status: Literal["jd_generated"] = "jd_generated"
     intent: Literal["create_job_description"] = "create_job_description"
-    assistant_message: str = "Your policy-grounded draft is ready. Please review it before publishing."
+    conversation_id: UUID
+    draft_id: UUID = Field(default_factory=uuid4)
+    assistant_message: str = "Your policy-grounded draft is ready. Review its recruiter-grounded screening suggestions before screening."
     job_description_result: JobDescriptionGenerationResponse
     publishing_context: PublishingContext = Field(default_factory=PublishingContext)
-    screening_suggestions: ScreeningSuggestions | None = None
+    screening_suggestions: ScreeningSuggestions
+    screening_suggestion_sources: list[ScreeningSuggestionSource] = Field(max_length=71)
 
 
 RecruiterChatResponse = Annotated[
-    ClarificationResponse | UnsupportedResponse | JobDescriptionChatResponse,
+    ClarificationResponse | UnsupportedResponse | DraftUnchangedResponse | JobDescriptionChatResponse,
     Field(discriminator="status"),
 ]

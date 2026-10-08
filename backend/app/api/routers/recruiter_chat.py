@@ -10,7 +10,7 @@ from app.agents.jd.errors import (
 from app.integrations.llm.recruiter_chat import get_recruiter_interpreter
 from app.rag.retrieval import PolicyRetrievalError
 from app.schemas.recruiter_chat import RecruiterChatRequest, RecruiterChatResponse
-from app.services.recruiter_chat import RecruiterChatService
+from app.services.recruiter_chat import ConversationUnavailableError, RecruiterChatService
 
 
 router = APIRouter(prefix="/recruiter-chat", tags=["recruiter chat"])
@@ -20,10 +20,16 @@ router = APIRouter(prefix="/recruiter-chat", tags=["recruiter chat"])
     502: {"description": "Interpretation or JD generation failed."},
     503: {"description": "Recruiter chat or JD generation is not configured."},
     504: {"description": "Interpretation or JD generation timed out."},
+    409: {"description": "The bounded in-memory conversation expired or reached its limit."},
 })
 async def recruiter_chat(request: RecruiterChatRequest) -> RecruiterChatResponse | JSONResponse:
     try:
         return await RecruiterChatService(get_recruiter_interpreter()).respond(request)
+    except ConversationUnavailableError:
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={
+            "code": "recruiter_conversation_unavailable",
+            "message": "This conversation is no longer available. Start a new chat.",
+        })
     except MissingGenerationConfigurationError:
         return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={
             "code": "recruiter_chat_not_configured", "message": "Recruiter chat is not configured.",

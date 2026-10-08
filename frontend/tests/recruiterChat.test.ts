@@ -8,7 +8,11 @@ import { ChatMessageView, RecruiterChatPage, replyToChatMessage } from "../src/c
 
 function result() {
   return {
-    status: "jd_generated", intent: "create_job_description", assistant_message: "Your draft is ready. Human review required.",
+    status: "jd_generated", intent: "create_job_description", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910",
+    draft_id: "fe90b431-a0bf-44f5-908b-316001e1af15", assistant_message: "Your draft is ready. Human review required.",
+    screening_suggestions: {job_title: "Engineer", criteria: [{criterion_id: "skill-python", description: "Python", category: "skill", is_hard: false}]},
+    screening_suggestion_sources: [{criterion_id: "skill-python", source: "recruiter_input", evidence: "Required skills are Python."}],
+    publishing_context: {location: null, employment_type: null, work_arrangement: null},
     job_description_result: {
       status: "draft", human_review_required: true, provider: "groq", model: "openai/gpt-oss-120b", retrieval_mode: "semantic_bge_pgvector",
       job_description: { title: "Engineer", summary: "Build secure backend services.", responsibilities: ["Write tests"], required_skills: ["Python"], preferred_skills: [], qualifications: ["Backend skills"], policy_citation_ids: ["synthetic"] },
@@ -25,7 +29,7 @@ test("chatbot success preserves the validated semantic JD result", async (t) => 
 });
 
 test("clarification response renders the actual missing-field labels", async (t) => {
-  t.mock.method(globalThis, "fetch", async () => Response.json({ status: "clarification", intent: "create_job_description", assistant_message: "Please include responsibilities and skills.", missing_fields: ["responsibilities", "required_skills"] }));
+  t.mock.method(globalThis, "fetch", async () => Response.json({ status: "clarification", intent: "create_job_description", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910", assistant_message: "Please include responsibilities and skills.", missing_fields: ["responsibilities", "required_skills"] }));
   const reply = await sendRecruiterMessage("Create an engineer JD.");
   assert.equal(reply.status, "clarification");
   if (reply.status !== "clarification") assert.fail("Expected clarification");
@@ -49,7 +53,7 @@ test("chatbot does not bypass existing draft/review runtime validation", async (
 });
 
 test("unsupported intent is displayed without claiming publication", async (t) => {
-  t.mock.method(globalThis, "fetch", async () => Response.json({ status: "unsupported", intent: "unsupported", assistant_message: "Only JD creation is available." }));
+  t.mock.method(globalThis, "fetch", async () => Response.json({ status: "unsupported", intent: "unsupported", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910", assistant_message: "Only JD creation is available." }));
   assert.equal((await sendRecruiterMessage("Publish a job." )).status, "unsupported");
 });
 
@@ -68,7 +72,7 @@ test("multiline job instructions and comparisons pass the submission guard", () 
 });
 
 test("optional evidence clarification uses public field labels", async (t) => {
-  t.mock.method(globalThis, "fetch", async () => Response.json({status: "clarification", intent: "create_job_description", assistant_message: "Clarify work arrangement and experience; resend the complete instruction.", missing_fields: ["work_arrangement", "minimum_experience_years"]}));
+  t.mock.method(globalThis, "fetch", async () => Response.json({status: "clarification", intent: "create_job_description", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910", assistant_message: "Clarify work arrangement and experience.", missing_fields: ["work_arrangement", "minimum_experience_years"]}));
   const reply = await sendRecruiterMessage("Create a JD.");
   if (reply.status !== "clarification") assert.fail("Expected clarification");
   const html = renderToStaticMarkup(createElement(ChatMessageView, {message: {role: "assistant", text: reply.assistant_message, missingFields: reply.missing_fields}}));
@@ -96,17 +100,44 @@ test("generated draft is inside the rich assistant message with review and citat
   assert.match(html, /has not been approved, saved, or published/);
 });
 
+test("generated chat card includes editable recruiter-grounded criteria and review state", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => Response.json(result()));
+  const message = replyToChatMessage(await sendRecruiterMessage("Create a JD."));
+  if (!message.draftId || !message.screeningSuggestions || !message.screeningSuggestionSources) assert.fail("Expected criteria suggestions");
+  const html = renderToStaticMarkup(createElement(ChatMessageView, {message, criteriaDraft: {
+    draftId: message.draftId, suggestions: message.screeningSuggestions, sources: message.screeningSuggestionSources,
+    criteria: message.screeningSuggestions.criteria, reviewed: false,
+  }, onCriteriaChange: () => {}, onCriteriaReviewed: () => {}, onContinue: () => {}}));
+  assert.match(html, /Suggested screening criteria/);
+  assert.match(html, /Original recruiter excerpt/);
+  assert.match(html, /I reviewed the descriptions/);
+  assert.match(html, /Continue to CV screening/);
+  assert.match(html, /disabled=""/);
+});
+
 test("clarification maps directly into an assistant conversation message", () => {
-  const message = replyToChatMessage({status: "clarification", intent: "create_job_description", assistant_message: "Please include skills.", missing_fields: ["required_skills"]});
+  const message = replyToChatMessage({status: "clarification", intent: "create_job_description", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910", assistant_message: "Please include skills.", missing_fields: ["required_skills"]});
   const html = renderToStaticMarkup(createElement(ChatMessageView, {message}));
   assert.match(html, /chat-assistant/);
   assert.match(html, /Required skills/);
   assert.ok(!html.includes("chat-draft"));
 });
 
+test("conversation id is sent back on follow-up and draft-unchanged is a normal chat reply", async (t) => {
+  let requestBody: Record<string, unknown> = {};
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    requestBody = JSON.parse(String(options?.body));
+    return Response.json({status: "draft_unchanged", intent: "create_job_description", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910", assistant_message: "Your current draft is unchanged."});
+  });
+  const reply = await sendRecruiterMessage("Thanks", "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910");
+  assert.equal(requestBody.conversation_id, "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910");
+  assert.equal(reply.status, "draft_unchanged");
+  assert.equal(replyToChatMessage(reply).text, "Your current draft is unchanged.");
+});
+
 test("posting is shown as unavailable without a draft or fake publishing UI", () => {
   const text = "Job posting by chat instruction is not available. Review a draft and use its Publish to Discord button.";
-  const message = replyToChatMessage({status: "unsupported", intent: "unsupported", assistant_message: text});
+  const message = replyToChatMessage({status: "unsupported", intent: "unsupported", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910", assistant_message: text});
   const html = renderToStaticMarkup(createElement(ChatMessageView, {message}));
   assert.ok(html.includes(text));
   assert.ok(!html.includes("chat-draft"));

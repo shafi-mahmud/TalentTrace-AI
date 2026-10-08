@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { isCvUploadResponse, uploadCvs, validateCvSelection } from "../src/api/cvUploads.ts";
-import { CvUploadConfirmation, SelectedCvFiles, WorkspaceNavigation, ScreeningWorkflowSteps, screeningPrerequisiteMessage } from "../src/components/cvIntakePresentation.ts";
+import { isCvUploadResponse, isValidJobReference, uploadCvs, validateCvSelection } from "../src/api/cvUploads.ts";
+import { createManualCriteriaDraft, CvUploadConfirmation, SelectedCvFiles, WorkspaceNavigation, ScreeningWorkflowSteps, screeningPrerequisiteMessage } from "../src/components/cvIntakePresentation.ts";
+import { confirmReviewedCriteria } from "../src/components/ScreeningCriteriaReview.ts";
 
 const REFERENCE = "TT-JOB-30BB2CDF9A5CCCA9";
 const BATCH = "9014cc92-9256-48e2-a5f7-52981251cc44";
@@ -49,18 +50,20 @@ test("upload success shows accepted count and opaque batch reference only", () =
   assert.ok(!html.includes("iframe"));
 });
 
-test("workspace navigation keeps JD Assistant available alongside CV Intake", () => {
+test("workspace navigation names the standalone Candidate Screening experience", () => {
   const html = renderToStaticMarkup(createElement(WorkspaceNavigation, {mode: "jd", onChange: () => {}}));
   assert.match(html, /JD Assistant/);
-  assert.match(html, /CV Intake/);
+  assert.match(html, /Candidate Screening/);
   assert.match(html, /aria-pressed="true"/);
 });
 
 test("screening workflow progress reflects confirmed criteria, upload and results state", () => {
   const initial = renderToStaticMarkup(createElement(ScreeningWorkflowSteps, {hasSuggestions: false, hasSnapshot: false, hasBatch: false, isScreened: false}));
-  assert.match(initial, /Review job criteria/);
-  assert.match(initial, /not yet available/);
+  assert.match(initial, /Set up job criteria/);
+  assert.match(initial, /Upload candidate CVs/);
+  assert.match(initial, /available/);
   const ready = renderToStaticMarkup(createElement(ScreeningWorkflowSteps, {hasSuggestions: true, hasSnapshot: true, hasBatch: true, isScreened: false}));
+  assert.match(ready, /Review job criteria/);
   assert.match(ready, /Screen candidates/);
   assert.match(ready, /is-current/);
   const complete = renderToStaticMarkup(createElement(ScreeningWorkflowSteps, {hasSuggestions: true, hasSnapshot: true, hasBatch: true, isScreened: true}));
@@ -70,12 +73,28 @@ test("screening workflow progress reflects confirmed criteria, upload and result
 test("screening availability explains the actual missing prerequisite", () => {
   const defaults = {busy: false, hasSuggestions: true, hasBatch: true, hasSnapshot: true, referenceMatches: true};
   assert.equal(screeningPrerequisiteMessage({...defaults, busy: true}), "Wait for the current operation to finish.");
-  assert.match(screeningPrerequisiteMessage({...defaults, hasSuggestions: false})!, /Generate a JD/);
+  assert.match(screeningPrerequisiteMessage({...defaults, hasSuggestions: false})!, /A JD is optional/);
   assert.match(screeningPrerequisiteMessage({...defaults, hasBatch: false})!, /Upload a CV batch/);
   assert.match(screeningPrerequisiteMessage({...defaults, hasSnapshot: false})!, /explicitly confirm/);
   assert.match(screeningPrerequisiteMessage({...defaults, referenceMatches: false})!, /Job Reference must match/);
   assert.equal(screeningPrerequisiteMessage(defaults), null);
 });
+
+test("manual screening setup needs a valid title and job reference, then uses the reviewed snapshot contract", () => {
+  assert.equal(isValidJobReference(` ${REFERENCE} `), true);
+  assert.equal(createManualCriteriaDraft("  ", REFERENCE), null);
+  assert.equal(createManualCriteriaDraft("Backend\nEngineer", REFERENCE), null);
+  assert.equal(createManualCriteriaDraft("Backend Engineer", "TT-JOB-0001"), null);
+  const draft = createManualCriteriaDraft(" Backend Engineer ", REFERENCE)!;
+  assert.equal(draft.origin, "manual");
+  assert.equal(draft.suggestions.job_title, "Backend Engineer");
+  assert.deepEqual(draft.criteria, []);
+  const criteria = [{criterion_id: "manual-python", description: "Python API development", category: "skill" as const, is_hard: true}];
+  const snapshot = confirmReviewedCriteria(draft.suggestions, REFERENCE, criteria, true);
+  assert.equal(snapshot?.job_title, "Backend Engineer");
+  assert.equal(snapshot?.criteria[0].is_hard, true);
+});
+
 
 test("multipart request sends original File objects without reading or encoding their contents", async t => {
   const file = new File(["synthetic file contents"], "synthetic.pdf", {type: "application/pdf"});

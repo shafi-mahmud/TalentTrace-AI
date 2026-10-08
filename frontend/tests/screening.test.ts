@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { screenCvBatch, isBatchScreeningResponse, isReviewedSnapshot, isScreeningSuggestions } from "../src/api/screening.ts";
 import { ScreeningResults } from "../src/components/screeningPresentation.ts";
-import ScreeningCriteriaReview, { confirmReviewedCriteria } from "../src/components/ScreeningCriteriaReview.ts";
+import ScreeningCriteriaReview, { confirmReviewedCriteria, CriteriaEditor } from "../src/components/ScreeningCriteriaReview.ts";
 import { isRecruiterChatResponse } from "../src/api/recruiterChat.ts";
 import type { BatchScreeningResponse, ReviewedJobSnapshot } from "../src/types/screening.ts";
 import type { CvUploadResponse } from "../src/types/cvUpload.ts";
@@ -46,8 +46,9 @@ test("source-backed suggestions are not approved snapshots", () => {
 
 test("review panel exposes descriptions/categories/flags and starts unconfirmed", () => {
   const suggestions = {job_title: snapshot.job_title, criteria: snapshot.criteria.map(c => ({...c, is_hard: false}))};
-  const html = renderToStaticMarkup(createElement(ScreeningCriteriaReview, {suggestions, jobReference: reference,
-    disabled: false, onConfirm: () => assert.fail("Rendering must not approve"), onInvalidate: () => {}}));
+  const html = renderToStaticMarkup(createElement(ScreeningCriteriaReview, {suggestions, criteria: suggestions.criteria,
+    sources: [], reviewed: false, jobReference: reference, disabled: false,
+    onConfirm: () => assert.fail("Rendering must not approve"), onChange: () => {}, onReviewedChange: () => {}}));
   for (const label of ["Review screening criteria", "Session-only snapshot", "Category", "Requirement type", "Python", "explicitly confirm"]) assert.ok(html.includes(label));
   assert.match(html, /value="preferred" selected/);
   assert.match(html, /disabled="">Confirm criteria/);
@@ -59,6 +60,30 @@ test("review panel exposes descriptions/categories/flags and starts unconfirmed"
   suggestions.criteria[0].description = "Changed";
   assert.equal(confirmed.criteria[0].description, "Python");
   assert.equal(confirmReviewedCriteria(suggestions, "OTHER", suggestions.criteria, true), null);
+});
+
+test("manual criteria editor clearly labels recruiter-entered criteria as not policy-backed", () => {
+  const html = renderToStaticMarkup(createElement(ScreeningCriteriaReview, {suggestions: {job_title: "Backend Engineer", criteria: []},
+    criteria: [], sources: [], reviewed: false, origin: "manual", jobReference: reference, disabled: false,
+    onConfirm: () => {}, onChange: () => {}, onReviewedChange: () => {}}));
+  assert.match(html, /Recruiter-entered criteria/);
+  assert.match(html, /not policy-backed/);
+  assert.match(html, /Confirm criteria for this job/);
+});
+
+test("changing a manual requirement updates its flag and clears prior confirmation", () => {
+  const criterion = {criterion_id: "manual-python", description: "Python", category: "skill" as const, is_hard: false};
+  let updated = [criterion];
+  let reviewed = true;
+  const tree = CriteriaEditor({criteria: [criterion], sources: [], reviewed, disabled: false, origin: "manual",
+    onChange: value => {updated = value;}, onReviewedChange: value => {reviewed = value;}});
+  const sectionChildren = tree.props.children as React.ReactElement[];
+  const fieldset = sectionChildren[2];
+  const rowChildren = fieldset.props.children[1].props.children as React.ReactElement[];
+  const requirementTypeSelect = rowChildren[2].props.children[1];
+  requirementTypeSelect.props.onChange({target: {value: "mandatory"}});
+  assert.equal(updated[0].is_hard, true);
+  assert.equal(reviewed, false);
 });
 
 test("screening submits reviewed snapshot and stored identity only", async t => {
@@ -169,7 +194,7 @@ test("React escapes evidence and job text rather than interpreting markup", () =
 });
 
 test("unsupported chat behavior remains unchanged", () => {
-  assert.ok(isRecruiterChatResponse({status: "unsupported", intent: "unsupported", assistant_message: "Use the draft action."}));
+  assert.ok(isRecruiterChatResponse({status: "unsupported", intent: "unsupported", conversation_id: "6f6f6a5f-66a2-4e0e-8eb4-2f83d0d29910", assistant_message: "Use the draft action."}));
 });
 
 test("overall candidate coverage validates all evidence statuses and renders separately", () => {

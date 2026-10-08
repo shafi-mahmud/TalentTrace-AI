@@ -295,11 +295,21 @@ boundary recovery does not guarantee exactly-once external effects.
 
 ## Implemented — session-only reviewer batch integration
 
+Candidate Screening is a standalone workflow and does not require JD generation.
+Recruiters can provide a job title and Job Reference, enter criteria directly,
+edit descriptions/categories/mandatory-preferred flags, and explicitly confirm
+the same bounded `ReviewedJobSnapshot` contract used by JD-derived criteria.
+Manual criteria are recruiter-provided and are not represented as policy-backed.
+The recruiter may set up criteria or upload the CV batch first. A Job Reference
+change invalidates the review snapshot and screening results but keeps an existing
+uploaded batch available. All job/criteria state remains session-only; no durable
+job profile is created.
+
 The JD chat offers **Review screening criteria** from the recruiter requirements
 validated before generation. Suggested skills/education/experience are initially
 preferred; generated JD additions do not silently become mandatory. The reviewer
 can edit/remove/add criteria, choose category and mandatory/preferred flags, then
-explicitly confirm 1–50 criteria for the CV workspace's Job Reference. Changes
+explicitly confirm 1–50 criteria for the Candidate Screening workspace's Job Reference. Changes
 invalidate confirmation. One active snapshot is retained in browser memory across
 workspace navigation; reload clears it. This is not durable job-profile persistence
 or formal JD publication approval. Job Reference ownership remains unverified.
@@ -319,7 +329,7 @@ sequentially; source/provider failures retain existing no-decision semantics and
 unexpected candidate exceptions yield a separate fixed processing error. The
 endpoint returns contact-free results with the reviewed snapshot and batch IDs.
 
-The CV workspace displays outcomes and per-requirement exact/semantic evidence,
+The Candidate Screening workspace displays outcomes and per-requirement exact/semantic evidence,
 including digital/OCR page/block locators. It validates response identity, criterion
 coverage and hard-decision consistency before displaying results. A response from
 an older selected JD is discarded after its review context changes. The route now
@@ -345,7 +355,7 @@ controls display order only. Zero supported requirements can still be eligible
 when no mandatory requirement fails; the count remains visibly zero.
 
 The validated batch ranking contract preserves supported, ambiguous and not-found
-counts. The CV workspace places eligible candidates in ranking order, retaining
+counts. The Candidate Screening workspace places eligible candidates in ranking order, retaining
 expandable evidence/provenance. Excluded, insufficient-evidence, source-unavailable
 and processing-failed candidates remain visible outside the ranking. Operational
 failure never becomes exclusion. No contact data, new LLM ranking call, graph,
