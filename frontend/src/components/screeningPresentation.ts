@@ -4,6 +4,8 @@ import type { BatchScreeningResponse, CandidateRankingEntry } from "../types/scr
 export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
   const criteria = new Map(result.snapshot.criteria.map(c => [c.criterion_id, c]));
   const labels = {eligible: "Eligible", excluded: "Excluded", insufficient_evidence: "Needs review"};
+  const coverageLabels = {met: "Met", partially_met: "Partially met", unmet: "Unmet — not demonstrated in the CV",
+    uncertain: "Uncertain", not_evaluated: "Not evaluated"};
   return h("section", {className: "screening-results", "aria-label": "Candidate screening results"},
     h("h2", null, "Screening results"),
     h("p", null, `${result.snapshot.job_title} · ${result.job_reference}`),
@@ -16,6 +18,9 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
       const decision = candidate.result;
       return h("article", {key: candidate.upload_id, className: "cv-candidate-profile"},
         h("h3", null, `Upload ${index + 1}`),
+        h("p", null, `Overall requirement coverage: ${coverageLabels[candidate.overall_coverage]}`),
+        decision?.status === "decision_complete" ? h("p", {className: "helper-text"},
+          `${decision.matching_result.matches.filter(m => m.match_status === "supported").length} of ${result.snapshot.criteria.length} requirements supported. Overall coverage is separate from the screening decision.`) : null,
         ranking ? h("p", {className: "helper-text"}, `Rank ${ranking.rank}${ranking.tied ? " · Tied" : ""} · ${ranking.supported_count} of ${ranking.total_requirements} requirements supported · ${ranking.ambiguous_count} ambiguous · ${ranking.not_found_count} not found`) : null,
         h("p", {role: "status"}, !decision ? "Processing failed — no candidate decision."
           : decision.status === "source_unavailable" ? "Source unavailable — no candidate decision."

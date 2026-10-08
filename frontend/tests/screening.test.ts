@@ -19,7 +19,7 @@ const batch: CvUploadResponse = {status: "uploaded", job_reference: reference, b
 function result(): BatchScreeningResponse {
   return {status: "processed", job_reference: reference, batch_id: batchId, snapshot: structuredClone(snapshot), processed_count: 1,
     ranking: [{upload_id: id, rank: 1, tied: false, supported_count: 1, ambiguous_count: 0, not_found_count: 0, total_requirements: 1}],
-    candidates: [{upload_id: id, error_code: null, result: {job_reference: reference, upload_id: id, status: "decision_complete",
+    candidates: [{upload_id: id, error_code: null, overall_coverage: "met", result: {job_reference: reference, upload_id: id, status: "decision_complete",
       screening_decision: "eligible", unmet_hard_requirement_ids: [], ambiguous_hard_requirement_ids: [], exclusion_reasons: [],
       matching_result: {job_reference: reference, upload_id: id, parsing_status: "parsed", status: "matching_complete", error_code: null,
         screening_decision: null, requirement_context: {skill_ids: ["python"], experience_ids: [], education_ids: [], hard_requirement_ids: ["python"]},
@@ -123,6 +123,7 @@ test("exclusion and ambiguity retain evidence and never show as eligibility", ()
   for (const status of ["not_found", "ambiguous"] as const) {
     const value = result(), row = value.candidates[0].result!;
     value.ranking = [];
+    value.candidates[0].overall_coverage = status === "not_found" ? "unmet" : "uncertain";
     row.matching_result.matches[0].match_status = status;
     if (status === "not_found") {
       row.matching_result.matches[0].evidence = [];
@@ -137,7 +138,7 @@ test("exclusion and ambiguity retain evidence and never show as eligibility", ()
 });
 
 test("candidate processing failure is visible and has no exclusion verdict", () => {
-  const value = result(); value.ranking = []; value.candidates[0].result = null; value.candidates[0].error_code = "screening_processing_failed";
+  const value = result(); value.ranking = []; value.candidates[0].overall_coverage = "not_evaluated"; value.candidates[0].result = null; value.candidates[0].error_code = "screening_processing_failed";
   assert.ok(isBatchScreeningResponse(value));
   const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
   assert.ok(html.includes("Processing failed") && html.includes("no candidate decision"));
@@ -148,6 +149,7 @@ test("provider and source failure remain non-decisions", () => {
   for (const status of ["matching_failed", "source_unavailable"] as const) {
     const value = result(), row = value.candidates[0].result!;
     value.ranking = [];
+    value.candidates[0].overall_coverage = "not_evaluated";
     row.status = status; row.screening_decision = null;
     row.matching_result.status = status; row.matching_result.matches = [];
     row.matching_result.parsing_status = status === "source_unavailable" ? "parsing_failed" : "parsed";
@@ -168,6 +170,36 @@ test("React escapes evidence and job text rather than interpreting markup", () =
 
 test("unsupported chat behavior remains unchanged", () => {
   assert.ok(isRecruiterChatResponse({status: "unsupported", intent: "unsupported", assistant_message: "Use the draft action."}));
+});
+
+test("overall candidate coverage validates all evidence statuses and renders separately", () => {
+  for (const [statuses, coverage, label] of [
+    [["supported", "supported", "supported"], "met", "Met"],
+    [["supported", "not_found", "not_found"], "partially_met", "Partially met"],
+    [["not_found", "not_found", "not_found"], "unmet", "Unmet"],
+    [["supported", "ambiguous", "not_found"], "uncertain", "Uncertain"],
+  ] as const) {
+    const value = result(), row = value.candidates[0].result!;
+    value.snapshot.criteria = statuses.map((_, i) => ({criterion_id: `c${i}`, description: `Skill ${i}`, category: "skill", is_hard: false}));
+    row.matching_result.requirement_context.skill_ids = ["c0", "c1", "c2"];
+    row.matching_result.requirement_context.hard_requirement_ids = [];
+    const template = row.matching_result.matches[0];
+    row.matching_result.matches = statuses.map((status, i) => ({...structuredClone(template), criterion_id: `c${i}`,
+      match_status: status, evidence: status === "not_found" ? [] : structuredClone(template.evidence)}));
+    value.candidates[0].overall_coverage = coverage;
+    Object.assign(value.ranking[0], {supported_count: statuses.filter(s => s === "supported").length,
+      ambiguous_count: statuses.filter(s => s === "ambiguous").length, not_found_count: statuses.filter(s => s === "not_found").length, total_requirements: 3});
+    assert.ok(isBatchScreeningResponse(value));
+    const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
+    assert.ok(html.includes(`Overall requirement coverage: ${label}`) && html.includes("Eligible"));
+    if (coverage === "unmet") assert.ok(html.includes("not demonstrated in the CV"));
+    value.candidates[0].overall_coverage = "not_evaluated";
+    assert.ok(!isBatchScreeningResponse(value));
+  }
+  const failed = result(); failed.ranking = []; failed.candidates[0] = {upload_id: id, result: null,
+    error_code: "screening_processing_failed", overall_coverage: "not_evaluated"};
+  assert.ok(isBatchScreeningResponse(failed));
+  assert.ok(renderToStaticMarkup(createElement(ScreeningResults, {result: failed})).includes("Overall requirement coverage: Not evaluated"));
 });
 
 test("ranking displays explicit ties in server order with expandable provenance", () => {
@@ -194,11 +226,13 @@ test("zero-support eligible candidates retain separate ambiguous and not-found c
   value.snapshot.criteria[0].is_hard = false;
   row.matching_result.requirement_context.hard_requirement_ids = [];
   row.matching_result.matches[0].match_status = "ambiguous";
+  value.candidates[0].overall_coverage = "uncertain";
   value.ranking[0].supported_count = 0; value.ranking[0].ambiguous_count = 1;
   assert.ok(isBatchScreeningResponse(value));
   let html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
   assert.ok(html.includes("0 of 1 requirements supported") && html.includes("1 ambiguous"));
   row.matching_result.matches[0].match_status = "not_found";
+  value.candidates[0].overall_coverage = "unmet";
   row.matching_result.matches[0].evidence = [];
   value.ranking[0].ambiguous_count = 0; value.ranking[0].not_found_count = 1;
   assert.ok(isBatchScreeningResponse(value));
@@ -225,6 +259,7 @@ test("higher supported counts precede lower counts and do not count preferred am
   other.upload_id = batchId; other.result!.upload_id = batchId; other.result!.matching_result.upload_id = batchId;
   other.result!.matching_result.requirement_context.hard_requirement_ids = [];
   other.result!.matching_result.matches[0].match_status = "ambiguous";
+  other.overall_coverage = "uncertain";
   value.candidates.push(other); value.processed_count = 2;
   value.ranking.push({upload_id: batchId, rank: 2, tied: false, supported_count: 0, ambiguous_count: 1, not_found_count: 0, total_requirements: 1});
   assert.ok(isBatchScreeningResponse(value));

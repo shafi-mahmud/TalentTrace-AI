@@ -43,6 +43,7 @@ export interface CandidateRankingEntry {
 export interface BatchScreeningResponse {
   status: "processed"; job_reference: string; batch_id: string;
   snapshot: ReviewedJobSnapshot; processed_count: number;
-  candidates: {upload_id: string; result: ScreeningDecision | null; error_code: "screening_processing_failed" | null}[];
+  candidates: {upload_id: string; result: ScreeningDecision | null; error_code: "screening_processing_failed" | null;
+    overall_coverage: "met" | "partially_met" | "unmet" | "uncertain" | "not_evaluated"}[];
   ranking: CandidateRankingEntry[];
 }
