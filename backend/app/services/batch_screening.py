@@ -1,0 +1,53 @@
+"""One request-scoped parser/screening execution; no ranking or persistence."""
+from uuid import UUID
+
+from app.agents.screening.workflow import CandidateScreeningWorkflow
+from app.schemas.batch_screening import BatchScreeningItem, BatchScreeningResponse, ReviewedJobSnapshot, ScreeningSuggestions
+from app.schemas.job_description import JobDescriptionGenerationRequest
+from app.schemas.screening import ScreeningCriterion, ScreeningInput
+from app.services.candidate_profile import CandidateProfileService
+
+
+class JobSnapshotMismatch(ValueError):
+    pass
+
+
+def screening_suggestions(request: JobDescriptionGenerationRequest) -> ScreeningSuggestions:
+    """Source-backed recruiter requirements only; no generated JD additions."""
+    values = [("skill", text) for text in request.required_skills + request.preferred_skills]
+    values += [("education", text) for text in request.education_requirements]
+    if request.minimum_experience_years is not None:
+        values.append(("experience", f"Minimum {request.minimum_experience_years} years of relevant experience"))
+    return ScreeningSuggestions(job_title=request.job_title, criteria=[
+        ScreeningCriterion(criterion_id=f"criterion-{index:02d}", category=category,
+            description=text, is_hard=False)
+        for index, (category, text) in enumerate(values, start=1)])
+
+
+class BatchScreeningService:
+    def __init__(self, profiles: CandidateProfileService | None = None,
+                 workflow: CandidateScreeningWorkflow | None = None):
+        self.profiles = profiles if profiles is not None else CandidateProfileService()
+        self.workflow = workflow if workflow is not None else CandidateScreeningWorkflow()
+
+    async def screen_batch(self, job_reference: str, batch_id: UUID,
+                           snapshot: ReviewedJobSnapshot) -> BatchScreeningResponse:
+        snapshot = ReviewedJobSnapshot.model_validate(snapshot.model_dump(warnings=False))
+        if snapshot.job_reference != job_reference:
+            raise JobSnapshotMismatch("The reviewed snapshot must match the uploaded job reference.")
+        # Resolve the private stored batch once; browser-supplied qualifications are never accepted.
+        profiles = await self.profiles.parse_batch(job_reference, batch_id)
+        candidates = []
+        for profile in profiles:
+            try:
+                supplied = ScreeningInput(job_reference=job_reference, upload_id=profile.upload_id,
+                    parsing_status=profile.parsing_status, qualifications=profile.qualifications,
+                    criteria=tuple(snapshot.criteria))
+                result = await self.workflow.screen(supplied)
+                candidates.append(BatchScreeningItem(upload_id=profile.upload_id, result=result, error_code=None))
+            except Exception:
+                # Unexpected candidate-level failures are operational, never exclusions.
+                candidates.append(BatchScreeningItem(upload_id=profile.upload_id,
+                    result=None, error_code="screening_processing_failed"))
+        return BatchScreeningResponse(job_reference=job_reference, batch_id=batch_id,
+            snapshot=snapshot, processed_count=len(candidates), candidates=candidates)

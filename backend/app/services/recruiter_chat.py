@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.agents.jd.workflow import JobDescriptionWorkflow, get_job_description_workflow
 from app.integrations.llm.recruiter_chat import RecruiterInstructionInterpreter
 from app.schemas.job_description import JobDescriptionGenerationRequest
+from app.services.batch_screening import screening_suggestions
 from app.schemas.recruiter_chat import (
     ClarificationResponse, FIELD_LABELS, JobDescriptionChatResponse,
     RecruiterChatRequest, RecruiterChatResponse, UnsupportedResponse, PublishingContext,
@@ -124,5 +125,6 @@ class RecruiterChatService:
                 assistant_message="Please clarify " + ", ".join(FIELD_LABELS[f] for f in uncertain)
                 + ". Edit and resend your complete instruction with positively stated requirements; each request is independent.")
         result = await self._workflow_factory().generate(jd_request)
-        return JobDescriptionChatResponse(job_description_result=result, publishing_context=PublishingContext(
+        return JobDescriptionChatResponse(job_description_result=result,
+            screening_suggestions=screening_suggestions(jd_request), publishing_context=PublishingContext(
             location=jd_request.location, employment_type=jd_request.employment_type, work_arrangement=jd_request.work_arrangement))

@@ -324,6 +324,37 @@ checkpointed, and JD approval/revision is not implemented.
   See [Candidate Screening](candidate_screening.md) for graph flow, limits and
   failure behavior. This increment made no live Groq calls.
 
+## Implemented — reviewed criteria and native CV batch screening
+
+- Successful recruiter-chat JD responses now include `screening_suggestions`
+  built from source-backed recruiter requirements, not additional generated JD
+  qualifications. All suggestions start as preferred; the reviewer edits their
+  descriptions, categories and mandatory/preferred flags and explicitly confirms
+  them in the CV workspace. This confirms screening criteria, not formal JD approval.
+- The confirmed snapshot is bound to the manually entered demo Job Reference and
+  stays in React session memory. Editing criteria/reference or selecting another
+  JD invalidates confirmation/results. Nothing claims saved PostgreSQL job profiles;
+  the reference is syntactic demo association, not verified job ownership.
+- `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/screen` accepts the reviewed
+  snapshot only. It resolves the private batch through `CandidateProfileService`,
+  reuses digital extraction/OCR and profile grounding, and supplies qualifications
+  without contact fields to the existing `CandidateScreeningWorkflow.screen()`.
+  Candidate-level source/provider failures stay separate from eligibility decisions;
+  unexpected candidate failures do not abort later candidates or become exclusions.
+- Results show eligible/excluded/needs-review outcomes and expandable requirement
+  statuses, evidence and page/block/digital/OCR provenance. Contact information
+  remains in the separate existing profile view. There is no ranking or scoring.
+- No database/migration, graph, checkpoint wiring, upload replacement, MCP call or
+  background worker was added. Processing is sequential and request-scoped; each
+  screening attempt reparses stored originals and may repeat provider calls.
+  Criteria/results disappear on reload. Authentication, durable job/application
+  persistence, ranking/scoring and automatic Drive import remain **Planned**.
+- **Verified by automated tests:** actual FastAPI upload/stored PDF extraction,
+  grounded parsing and real Screening graph execution with mocked providers;
+  semantic outcomes/OCR provenance, batch isolation, confirmed reference binding,
+  malformed requests and frontend validation/rendering. This is not live Groq or
+  manual browser end-to-end verification. Synthetic local demonstrations only.
+
 ## Planned — future functionality
 
 - `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the trainer-demo workflow described above; `screening` has preparation, hybrid evidence matching and hard-requirement decisions. `copilot` and `evaluation` remain planned. These are Python modules inside the FastAPI modular monolith, not separate microservices.

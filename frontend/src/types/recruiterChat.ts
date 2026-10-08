@@ -1,4 +1,5 @@
 import type { JobDescriptionGenerationResponse } from "./jobDescription";
+import type { ScreeningSuggestions } from "./screening";
 
 export const MISSING_FIELD_LABELS = {
   job_title: "Job title",
@@ -28,7 +29,7 @@ export type PublicationState = {status: "idle" | "loading"} | {status: "success"
 export type RecruiterChatResponse =
   | { status: "clarification"; intent: "create_job_description"; assistant_message: string; missing_fields: MissingField[] }
   | { status: "unsupported"; intent: "unsupported"; assistant_message: string }
-  | { status: "jd_generated"; intent: "create_job_description"; assistant_message: string; job_description_result: JobDescriptionGenerationResponse; publishing_context?: PublishingContext };
+  | { status: "jd_generated"; intent: "create_job_description"; assistant_message: string; job_description_result: JobDescriptionGenerationResponse; publishing_context?: PublishingContext; screening_suggestions?: ScreeningSuggestions | null };
 
 export interface ChatMessage {
   role: "recruiter" | "assistant";
@@ -38,4 +39,5 @@ export interface ChatMessage {
   publishingContext?: PublishingContext;
   publication?: PublicationState;
   sourceInstruction?: string;
+  screeningSuggestions?: ScreeningSuggestions;
 }

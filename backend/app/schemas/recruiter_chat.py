@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.schemas.job_description import ExperienceYears, JobDescriptionGenerationResponse, Location, EmploymentType, WorkArrangement
+from app.schemas.batch_screening import ScreeningSuggestions
 
 
 ClarificationField = Literal["job_title", "role_summary", "responsibilities", "required_skills", "department", "employment_type", "work_arrangement", "location", "seniority_level", "preferred_skills", "minimum_experience_years", "education_requirements"]
@@ -123,6 +124,7 @@ class JobDescriptionChatResponse(BaseModel):
     assistant_message: str = "Your policy-grounded draft is ready. Please review it before publishing."
     job_description_result: JobDescriptionGenerationResponse
     publishing_context: PublishingContext = Field(default_factory=PublishingContext)
+    screening_suggestions: ScreeningSuggestions | None = None
 
 
 RecruiterChatResponse = Annotated[

@@ -293,9 +293,50 @@ production lifecycle/pooling integration remain required future work. A crash
 inside an unfinished node may repeat that node/provider operation: completed
 boundary recovery does not guarantee exactly-once external effects.
 
-## Planned — application integration and future work
+## Implemented — session-only reviewer batch integration
 
-Authentication, approved-job persistence, API/UI integration and production
+The JD chat offers **Review screening criteria** from the recruiter requirements
+validated before generation. Suggested skills/education/experience are initially
+preferred; generated JD additions do not silently become mandatory. The reviewer
+can edit/remove/add criteria, choose category and mandatory/preferred flags, then
+explicitly confirm 1–50 criteria for the CV workspace's Job Reference. Changes
+invalidate confirmation. One active snapshot is retained in browser memory across
+workspace navigation; reload clears it. This is not durable job-profile persistence
+or formal JD publication approval. Job Reference ownership remains unverified.
+
+`backend/app/api/routers/screening.py` exposes
+`POST /api/v1/cv-uploads/{job_reference}/{batch_id}/screen`. Its bounded body is a
+`ReviewedJobSnapshot`: title, matching Job Reference, explicit boolean confirmation
+and validated criteria. It accepts no candidate qualifications, verdict, provider
+configuration or filesystem path. A reference mismatch fails before parsing.
+
+`BatchScreeningService` uses the existing `CandidateProfileService.parse_batch()`
+once per screening request, which resolves stored originals and reuses extraction,
+OCR and grounded parsing. Each profile contributes upload ID, parsing status and
+qualifications only to the unchanged `CandidateScreeningWorkflow.screen()`.
+Contact data never enters evaluation state/results. Candidates are processed
+sequentially; source/provider failures retain existing no-decision semantics and
+unexpected candidate exceptions yield a separate fixed processing error. The
+endpoint returns contact-free results with the reviewed snapshot and batch IDs.
+
+The CV workspace displays outcomes and per-requirement exact/semantic evidence,
+including digital/OCR page/block locators. It validates response identity, criterion
+coverage and hard-decision consistency before displaying results. A response from
+an older selected JD is discarded after its review context changes. There is no
+candidate ranking, weighted scoring, new graph or checkpoint call in this route.
+
+**Automated verification only:** synthetic stored-PDF upload/extraction/parsing and
+actual Screening graph execution passed with mocked external providers. Tests cover
+reference association, explicit confirmation, per-candidate failure isolation,
+semantic decisions/provenance and UI validation/rendering. No live Groq call or
+manual browser screening verification is claimed. Use synthetic local data only.
+Each new request may repeat parsing/OCR/provider calls; originals are unchanged.
+Durable profiles/applications/results, ownership/authentication, retention/deletion,
+ranking and production processing remain planned.
+
+## Planned — production integration and future work
+
+Authentication, approved-job persistence, production API/UI ownership controls and
 privacy controls remain separate work. Tests exercise the actual graph with
 synthetic inputs and mocked Groq calls, including both source paths, preparation
 compatibility, direct-match bypass, semantic evidence validation, failure states,

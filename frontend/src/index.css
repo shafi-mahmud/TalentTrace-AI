@@ -236,6 +236,16 @@ fieldset:disabled { opacity: 0.65; }
 .cv-selected-files small { color: #61766a; }
 .cv-upload-success { background: #edf6ef; padding: 18px; border-radius: 8px; margin-top: 24px; overflow-wrap: anywhere; }
 .cv-upload-success h2 { font-size: 18px; }
+.criteria-review { margin-top: 24px; padding: 18px; border: 1px solid #d4e2d9; }
+.criteria-review fieldset { border: 0; padding: 0; min-width: 0; }
+.criterion-row { display: grid; grid-template-columns: minmax(180px, 2fr) 1fr 1fr auto; gap: 12px; margin: 18px 0; align-items: end; }
+.criterion-row label { display: grid; gap: 6px; font-size: 12px; }
+.criterion-row input, .criterion-row select { width: 100%; padding: 10px; border: 1px solid #c4ddcb; border-radius: 6px; font: inherit; min-width: 0; }
+.review-confirmation { display: flex; gap: 10px; align-items: flex-start; margin: 20px 0; font-size: 13px; }
+.screening-results { margin-top: 24px; overflow-wrap: anywhere; }
+.requirement-evidence { margin: 12px 0; padding: 12px; border: 1px solid #d4e2d9; border-radius: 6px; }
+.requirement-evidence summary { cursor: pointer; }
+@media (max-width: 760px) { .criterion-row { grid-template-columns: 1fr; } }
 @media (max-width: 520px) {
   .workspace-modes { padding: 0 16px; }
   .cv-intake-card { padding: 16px; }

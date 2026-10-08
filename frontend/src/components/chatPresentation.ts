@@ -7,7 +7,8 @@ import type { JobDescriptionGenerationResponse } from "../types/jobDescription";
 export function replyToChatMessage(reply: RecruiterChatResponse): ChatMessage {
   return { role: "assistant", text: reply.assistant_message,
     ...(reply.status === "clarification" ? { missingFields: reply.missing_fields } : {}),
-    ...(reply.status === "jd_generated" ? { jobDescriptionResult: reply.job_description_result, publishingContext: reply.publishing_context } : {}),
+    ...(reply.status === "jd_generated" ? { jobDescriptionResult: reply.job_description_result, publishingContext: reply.publishing_context,
+      screeningSuggestions: reply.screening_suggestions ?? undefined } : {}),
   };
 }
 
@@ -85,14 +86,16 @@ function DraftMessage({ result, publication = {status: "idle"}, onPublish, onRev
 }
 
 // All recruiter/provider content renders as escaped React text, never raw HTML.
-export function ChatMessageView({ message, onPublish, onRevise, actionsDisabled }: {
-  message: ChatMessage; onPublish?: () => void; onRevise?: () => void; actionsDisabled?: boolean;
+export function ChatMessageView({ message, onPublish, onRevise, onReviewCriteria, actionsDisabled }: {
+  message: ChatMessage; onPublish?: () => void; onRevise?: () => void; onReviewCriteria?: () => void; actionsDisabled?: boolean;
 }) {
   return h("div", { className: `chat-message chat-${message.role}` },
     h("strong", null, message.role === "recruiter" ? "You" : "TalentTrace AI"),
     h("p", null, message.text),
     message.missingFields?.length ? h("ul", { "aria-label": "Information needed" },
       ...message.missingFields.map(field => h("li", { key: field }, MISSING_FIELD_LABELS[field]))) : null,
+    message.role === "assistant" && message.screeningSuggestions && onReviewCriteria
+      ? h("button", {type: "button", className: "button button-secondary", onClick: onReviewCriteria, disabled: actionsDisabled}, "Review screening criteria") : null,
     message.role === "assistant" && message.jobDescriptionResult
       ? h(DraftMessage, { result: message.jobDescriptionResult, publication: message.publication, onPublish, onRevise, actionsDisabled }) : null);
 }
