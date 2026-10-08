@@ -1,7 +1,9 @@
 """Bounded conversational orchestration around the existing JD workflow, not a new graph."""
 
 import asyncio
+import hashlib
 import json
+import logging
 import re
 import time
 import unicodedata
@@ -11,8 +13,10 @@ from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
+from app.agents.jd.errors import GenerationProviderError, GenerationTimeoutError, MissingGenerationConfigurationError
 from app.agents.jd.workflow import JobDescriptionWorkflow, get_job_description_workflow
 from app.integrations.llm.recruiter_chat import RecruiterConversationContext, RecruiterInstructionInterpreter
+from app.rag.retrieval import PolicyRetrievalError
 from app.schemas.job_description import JobDescriptionGenerationRequest
 from app.services.batch_screening import screening_suggestions
 from app.schemas.recruiter_chat import (
@@ -198,6 +202,21 @@ FIELD_QUESTIONS = {
     "minimum_experience_years": "What minimum experience should candidates have, or is no minimum required?",
 }
 CORRECTION = re.compile(r"\b(?:actually|instead|rather than|replace|correct|change .{1,60} to|should be|no longer)\b", re.I)
+logger = logging.getLogger(__name__)
+
+
+def _failure_category(error: Exception) -> str:
+    if isinstance(error, MissingGenerationConfigurationError):
+        return "configuration_missing"
+    if isinstance(error, GenerationTimeoutError):
+        return "provider_timeout"
+    if isinstance(error, PolicyRetrievalError):
+        return "policy_retrieval_failed"
+    if isinstance(error, GenerationProviderError):
+        return "provider_or_output_validation_failed"
+    return "unexpected_internal_error"
+
+
 class RecruiterChatService:
     def __init__(self, interpreter: RecruiterInstructionInterpreter, *,
         workflow_factory: Callable[[], JobDescriptionWorkflow] = get_job_description_workflow,
@@ -207,8 +226,9 @@ class RecruiterChatService:
         self._workflow_factory = workflow_factory
         self._conversations = conversation_store or _SHARED_CONVERSATIONS
 
-    async def respond(self, request: RecruiterChatRequest) -> RecruiterChatResponse:
+    async def respond(self, request: RecruiterChatRequest, *, correlation_id: str | None = None) -> RecruiterChatResponse:
         session = self._conversations.get_or_create(request.conversation_id)
+        diagnostic_id = correlation_id or hashlib.sha256(session.conversation_id.bytes).hexdigest()[:12]
         async with session.lock:
             if len(session.messages) >= self._conversations.MAX_TURNS or session.total_characters + len(request.message) > self._conversations.MAX_CHARACTERS:
                 self._conversations.discard(session)
@@ -218,8 +238,16 @@ class RecruiterChatService:
                 self._conversations.add_message(session, request.message)
                 return UnsupportedResponse(conversation_id=session.conversation_id,
                     assistant_message="Job posting by chat instruction is not available. Review the draft and use its explicit Publish to Discord action.")
-            context = self._provider_context(session)
-            interpretation = await self._interpreter.interpret(request, context)
+            context = self._provider_context(session, diagnostic_id)
+            try:
+                interpretation = await self._interpreter.interpret(request, context)
+            except Exception as error:
+                logger.warning(
+                    "talenttrace_failure correlation_id=%s stage=recruiter_interpretation "
+                    "category=%s exception_class=%s",
+                    diagnostic_id, _failure_category(error), type(error).__name__,
+                )
+                raise
             if interpretation.intent == "unsupported":
                 self._conversations.add_message(session, request.message)
                 return UnsupportedResponse(conversation_id=session.conversation_id,
@@ -227,7 +255,7 @@ class RecruiterChatService:
             requirements = interpretation.requirements
             updated_fields: set[str] = set()
             if requirements is not None:
-                updated_fields = self._merge_requirements(session, requirements, request.message)
+                updated_fields = self._merge_requirements(session, requirements, request.message, diagnostic_id)
             self._conversations.add_message(session, request.message)
             missing = [name for name in REQUIRED_FIELDS if name in session.uncertain_fields or not session.requirements.get(name)]
             missing.extend(name for name in FIELD_LABELS if name in session.uncertain_fields and name not in missing)
@@ -247,6 +275,11 @@ class RecruiterChatService:
                 field_name = next((str(e["loc"][0]) for e in error.errors() if e["loc"]), "required_skills")
                 if field_name not in FIELD_LABELS:
                     field_name = "required_skills"
+                logger.warning(
+                    "talenttrace_failure correlation_id=%s stage=accumulated_request_validation "
+                    "category=schema_validation exception_class=ValidationError field=%s",
+                    diagnostic_id, field_name,
+                )
                 session.uncertain_fields.add(field_name)
                 session.last_asked_field = field_name
                 return ClarificationResponse(conversation_id=session.conversation_id, missing_fields=[field_name],
@@ -254,7 +287,24 @@ class RecruiterChatService:
             signature = json.dumps(jd_request.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
             if signature == session.last_generated_requirements:
                 return DraftUnchangedResponse(conversation_id=session.conversation_id)
-            result = await self._workflow_factory().generate(jd_request)
+            try:
+                workflow = self._workflow_factory()
+            except Exception as error:
+                logger.warning(
+                    "talenttrace_failure correlation_id=%s stage=workflow_setup "
+                    "category=%s exception_class=%s",
+                    diagnostic_id, _failure_category(error), type(error).__name__,
+                )
+                raise
+            try:
+                result = await workflow.generate(jd_request, diagnostic_id=diagnostic_id)
+            except Exception as error:
+                logger.warning(
+                    "talenttrace_failure correlation_id=%s stage=jd_workflow "
+                    "category=%s exception_class=%s",
+                    diagnostic_id, _failure_category(error), type(error).__name__,
+                )
+                raise
             suggestions = screening_suggestions(jd_request)
             sources = self._suggestion_sources(session, suggestions)
             session.last_asked_field = None
@@ -263,12 +313,13 @@ class RecruiterChatService:
                 screening_suggestions=suggestions, screening_suggestion_sources=sources, publishing_context=PublishingContext(
                 location=jd_request.location, employment_type=jd_request.employment_type, work_arrangement=jd_request.work_arrangement))
 
-    def _provider_context(self, session: _Conversation) -> RecruiterConversationContext:
+    def _provider_context(self, session: _Conversation, correlation_id: str | None = None) -> RecruiterConversationContext:
         prior = {name: [{"value": item.value, "evidence": item.evidence} for item in items]
                  for name, items in session.requirements.items()}
-        return RecruiterConversationContext(tuple(session.messages[-8:]), prior, session.last_asked_field)
+        return RecruiterConversationContext(tuple(session.messages[-8:]), prior, session.last_asked_field, correlation_id)
 
-    def _merge_requirements(self, session: _Conversation, requirements, message: str) -> set[str]:
+    def _merge_requirements(self, session: _Conversation, requirements, message: str,
+                             correlation_id: str | None = None) -> set[str]:
         pending_experience = session.last_asked_field == "minimum_experience_years"
         updated_fields: set[str] = set()
         for name in FIELD_LABELS:
@@ -287,6 +338,11 @@ class RecruiterChatService:
                     previous = session.requirements.get(name, [])
                     if any(old.value == item.value and normalized(old.evidence) == normalized(item.evidence) for old in previous):
                         continue
+                    logger.warning(
+                        "talenttrace_failure correlation_id=%s stage=requirement_evidence_validation "
+                        "category=unverified_extraction exception_class=ValueError field=%s",
+                        correlation_id or "unavailable", name,
+                    )
                     invalid = True
                     break
             if invalid:

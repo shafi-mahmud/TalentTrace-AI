@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Any, TypedDict
 
@@ -31,9 +32,12 @@ from app.schemas.job_description import (
     PolicyGroundingCitation,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class JobDescriptionWorkflowState(TypedDict, total=False):
     request: JobDescriptionGenerationRequest
+    diagnostic_id: str | None
     retrieved_policy_chunks: tuple[RetrievedPolicyChunk, ...]
     generated_draft: GeneratedJobDescriptionDraft
     provider: str
@@ -65,10 +69,25 @@ class JobDescriptionWorkflow:
     async def generate(
         self,
         request: JobDescriptionGenerationRequest,
+        *,
+        diagnostic_id: str | None = None,
     ) -> JobDescriptionGenerationResponse:
-        final_state = await self.graph.ainvoke({"request": request})
+        try:
+            final_state = await self.graph.ainvoke({"request": request, "diagnostic_id": diagnostic_id})
+        except Exception as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=langgraph_execution "
+                "category=workflow_node_failed exception_class=%s",
+                diagnostic_id or "unavailable", type(error).__name__,
+            )
+            raise
         response = final_state.get("response")
         if not isinstance(response, JobDescriptionGenerationResponse):
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=response_assembly "
+                "category=validated_response_missing exception_class=GenerationProviderError",
+                diagnostic_id or "unavailable",
+            )
             raise GenerationProviderError(
                 "The job-description workflow produced no validated response."
             )
@@ -78,17 +97,33 @@ class JobDescriptionWorkflow:
         self,
         state: JobDescriptionWorkflowState,
     ) -> dict[str, Any]:
-        retrieved = await self._retriever.retrieve(state["request"])
+        try:
+            retrieved = await self._retriever.retrieve(state["request"])
+        except Exception as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=policy_retrieval "
+                "category=policy_context_unavailable exception_class=%s",
+                state.get("diagnostic_id") or "unavailable", type(error).__name__,
+            )
+            raise
         return {"retrieved_policy_chunks": retrieved}
 
     async def _generate_draft(
         self,
         state: JobDescriptionWorkflowState,
     ) -> dict[str, Any]:
-        result: JobDescriptionGenerationResult = await self._generator.generate(
-            state["request"],
-            state["retrieved_policy_chunks"],
-        )
+        try:
+            result: JobDescriptionGenerationResult = await self._generator.generate(
+                state["request"],
+                state["retrieved_policy_chunks"],
+            )
+        except Exception as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=structured_generation "
+                "category=generator_failed exception_class=%s",
+                state.get("diagnostic_id") or "unavailable", type(error).__name__,
+            )
+            raise
         return {
             "generated_draft": result.draft,
             "provider": result.provider,
@@ -106,6 +141,11 @@ class JobDescriptionWorkflow:
         citation_ids = state["generated_draft"].policy_citation_ids
         unknown_citations = set(citation_ids).difference(retrieved_by_citation)
         if unknown_citations:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=citation_validation "
+                "category=unknown_citation exception_class=GenerationProviderError",
+                state.get("diagnostic_id") or "unavailable",
+            )
             raise GenerationProviderError(
                 "The generated draft referenced unavailable policy context."
             )
@@ -128,7 +168,12 @@ class JobDescriptionWorkflow:
                 job_description=state["generated_draft"],
                 grounding_citations=citations,
             )
-        except ValidationError:
+        except ValidationError as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=response_assembly "
+                "category=response_schema_invalid exception_class=%s",
+                state.get("diagnostic_id") or "unavailable", type(error).__name__,
+            )
             raise GenerationProviderError(
                 "The generated draft could not be assembled safely."
             ) from None
