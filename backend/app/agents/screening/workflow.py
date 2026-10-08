@@ -1,10 +1,11 @@
-"""Preparation and hybrid evidence matching; final decisions remain future work."""
+"""Preparation, hybrid evidence matching and deterministic screening routing."""
 from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
 from app.schemas.screening import (
-    MatchingErrorCode, QualificationFact, RequirementContext, RequirementMatch,
+    HardRequirementEvaluation, MatchingErrorCode, QualificationFact, RequirementContext, RequirementMatch,
+    ScreeningDecisionResult, ScreeningExclusionReason,
     ScreeningCriterion, ScreeningInput, ScreeningMatchingResult, ScreeningPreparationResult,
     SemanticMatchingResponse,
 )
@@ -15,7 +16,7 @@ from app.services.screening_matching import (
 
 
 class ScreeningWorkflowState(TypedDict, total=False):
-    operation: Literal["prepare", "match"]
+    operation: Literal["prepare", "match", "screen"]
     request: ScreeningInput
     requirement_context: RequirementContext
     source_readiness: Literal["ready", "unavailable"]
@@ -25,7 +26,9 @@ class ScreeningWorkflowState(TypedDict, total=False):
     semantic_response: SemanticMatchingResponse
     validated_matches: tuple[RequirementMatch, ...]
     matching_error: MatchingErrorCode
-    result: ScreeningPreparationResult | ScreeningMatchingResult
+    matching_result: ScreeningMatchingResult
+    hard_evaluation: HardRequirementEvaluation
+    result: ScreeningPreparationResult | ScreeningMatchingResult | ScreeningDecisionResult
 
 
 class CandidateScreeningWorkflow:
@@ -41,6 +44,11 @@ class CandidateScreeningWorkflow:
         builder.add_node("interpret_unresolved_requirements", self._interpret_unresolved_requirements)
         builder.add_node("validate_matching_evidence", self._validate_matching_evidence)
         builder.add_node("build_matching_result", self._build_matching_result)
+        builder.add_node("evaluate_hard_requirements", self._evaluate_hard_requirements)
+        builder.add_node("build_eligible_result", self._build_eligible_result)
+        builder.add_node("build_excluded_result", self._build_excluded_result)
+        builder.add_node("build_insufficient_evidence_result", self._build_insufficient_evidence_result)
+        builder.add_node("build_no_decision_result", self._build_no_decision_result)
         builder.add_edge(START, "validate_screening_input")
         builder.add_edge("validate_screening_input", "prepare_requirement_context")
         builder.add_edge("prepare_requirement_context", "check_candidate_source")
@@ -50,13 +58,24 @@ class CandidateScreeningWorkflow:
             "unavailable": "build_source_unavailable_result",
         })
         builder.add_edge("build_ready_result", END)
-        builder.add_edge("build_source_unavailable_result", END)
+        builder.add_conditional_edges("build_source_unavailable_result", self._route_after_unavailable, {
+            "no_decision": "build_no_decision_result", "end": END,
+        })
         builder.add_conditional_edges("match_direct_evidence", self._route_unresolved, {
             "semantic": "interpret_unresolved_requirements", "validate": "validate_matching_evidence",
         })
         builder.add_edge("interpret_unresolved_requirements", "validate_matching_evidence")
         builder.add_edge("validate_matching_evidence", "build_matching_result")
-        builder.add_edge("build_matching_result", END)
+        builder.add_conditional_edges("build_matching_result", self._route_after_matching, {
+            "evaluate": "evaluate_hard_requirements", "no_decision": "build_no_decision_result", "end": END,
+        })
+        builder.add_conditional_edges("evaluate_hard_requirements", self._route_decision, {
+            "eligible": "build_eligible_result", "excluded": "build_excluded_result",
+            "insufficient_evidence": "build_insufficient_evidence_result",
+        })
+        for node in ("build_eligible_result", "build_excluded_result", "build_insufficient_evidence_result",
+                "build_no_decision_result"):
+            builder.add_edge(node, END)
         self.graph = builder.compile(checkpointer=False)
 
     async def prepare(self, request: ScreeningInput) -> ScreeningPreparationResult:
@@ -66,6 +85,10 @@ class CandidateScreeningWorkflow:
     async def match(self, request: ScreeningInput) -> ScreeningMatchingResult:
         final_state = await self.graph.ainvoke({"request": request, "operation": "match"})
         return ScreeningMatchingResult.model_validate(final_state["result"].model_dump())
+
+    async def screen(self, request: ScreeningInput) -> ScreeningDecisionResult:
+        final_state = await self.graph.ainvoke({"request": request, "operation": "screen"})
+        return ScreeningDecisionResult.model_validate(final_state["result"].model_dump(warnings=False))
 
     def _validate_screening_input(self, state: ScreeningWorkflowState) -> dict:
         # Revalidate nested values too: upstream models contain mutable lists.
@@ -89,7 +112,7 @@ class CandidateScreeningWorkflow:
     def _route_source(self, state: ScreeningWorkflowState) -> Literal["prepare", "match", "unavailable"]:
         if state["source_readiness"] == "unavailable":
             return "unavailable"
-        return state.get("operation", "prepare")
+        return "prepare" if state.get("operation", "prepare") == "prepare" else "match"
 
     def _result(self, state: ScreeningWorkflowState,
                 status: Literal["ready_for_matching", "source_unavailable"]) -> dict:
@@ -104,12 +127,13 @@ class CandidateScreeningWorkflow:
         return self._result(state, "ready_for_matching")
 
     def _build_source_unavailable_result(self, state: ScreeningWorkflowState) -> dict:
-        if state.get("operation") == "match":
+        if state.get("operation") in {"match", "screen"}:
             request = state["request"]
-            return {"result": ScreeningMatchingResult(job_reference=request.job_reference,
+            matching = ScreeningMatchingResult(job_reference=request.job_reference,
                 upload_id=request.upload_id, parsing_status=request.parsing_status,
                 requirement_context=state["requirement_context"], status="source_unavailable",
-                matches=(), error_code=None)}
+                matches=(), error_code=None)
+            return {"result": matching, "matching_result": matching}
         return self._result(state, "source_unavailable")
 
     def _match_direct_evidence(self, state: ScreeningWorkflowState) -> dict:
@@ -143,8 +167,47 @@ class CandidateScreeningWorkflow:
     def _build_matching_result(self, state: ScreeningWorkflowState) -> dict:
         request = state["request"]
         error = state.get("matching_error")
-        return {"result": ScreeningMatchingResult(job_reference=request.job_reference,
+        matching = ScreeningMatchingResult(job_reference=request.job_reference,
             upload_id=request.upload_id, parsing_status=request.parsing_status,
             requirement_context=state["requirement_context"],
             status="matching_failed" if error else "matching_complete",
-            matches=state["validated_matches"], error_code=error)}
+            matches=state["validated_matches"], error_code=error)
+        return {"result": matching, "matching_result": matching}
+
+    def _route_after_unavailable(self, state: ScreeningWorkflowState) -> Literal["no_decision", "end"]:
+        return "no_decision" if state.get("operation") == "screen" else "end"
+
+    def _route_after_matching(self, state: ScreeningWorkflowState) -> Literal["evaluate", "no_decision", "end"]:
+        if state.get("operation") != "screen":
+            return "end"
+        return "evaluate" if state["matching_result"].status == "matching_complete" else "no_decision"
+
+    def _evaluate_hard_requirements(self, state: ScreeningWorkflowState) -> dict:
+        return {"hard_evaluation": HardRequirementEvaluation.from_matching_result(state["matching_result"])}
+
+    def _route_decision(self, state: ScreeningWorkflowState) -> Literal["eligible", "excluded", "insufficient_evidence"]:
+        return state["hard_evaluation"].outcome
+
+    def _decision_result(self, state: ScreeningWorkflowState) -> dict:
+        matching = state["matching_result"]
+        evaluation = state.get("hard_evaluation")
+        missing = evaluation.unmet_hard_requirement_ids if evaluation is not None else ()
+        return {"result": ScreeningDecisionResult(job_reference=matching.job_reference,
+            upload_id=matching.upload_id,
+            status="decision_complete" if evaluation is not None else matching.status,
+            screening_decision=evaluation.outcome if evaluation is not None else None,
+            matching_result=matching, unmet_hard_requirement_ids=missing,
+            ambiguous_hard_requirement_ids=evaluation.ambiguous_hard_requirement_ids if evaluation is not None else (),
+            exclusion_reasons=tuple(ScreeningExclusionReason(criterion_id=identity) for identity in missing))}
+
+    def _build_eligible_result(self, state: ScreeningWorkflowState) -> dict:
+        return self._decision_result(state)
+
+    def _build_excluded_result(self, state: ScreeningWorkflowState) -> dict:
+        return self._decision_result(state)
+
+    def _build_insufficient_evidence_result(self, state: ScreeningWorkflowState) -> dict:
+        return self._decision_result(state)
+
+    def _build_no_decision_result(self, state: ScreeningWorkflowState) -> dict:
+        return self._decision_result(state)

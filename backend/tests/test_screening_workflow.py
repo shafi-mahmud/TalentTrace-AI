@@ -73,7 +73,7 @@ def test_empty_skills_not_exclusion_and_profile_compatibility():
     assert set(ScreeningWorkflowState.__annotations__) == {
         "operation", "request", "requirement_context", "source_readiness", "result",
         "facts", "deterministic_results", "unresolved_criteria", "semantic_response",
-        "validated_matches", "matching_error"}
+        "validated_matches", "matching_error", "matching_result", "hard_evaluation"}
     assert "contact" not in supplied.model_dump()
 
 

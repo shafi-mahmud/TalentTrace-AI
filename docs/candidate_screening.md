@@ -1,6 +1,6 @@
-# Candidate Screening foundation — #647495 and #647496
+# Candidate Screening foundation — #647495–#647497
 
-## Implemented — preparation and hybrid evidence matching
+## Implemented — preparation, matching and hard-requirement decisions
 
 `backend/app/agents/screening/workflow.py` contains a bounded, multi-node
 LangGraph workflow. It has no API or frontend integration yet. Its async
@@ -8,6 +8,8 @@ LangGraph workflow. It has no API or frontend integration yet. Its async
 result, not an eligibility verdict. `match()` uses the same graph in matching mode
 and returns requirement-level evidence statuses. Preparation behavior is preserved;
 matching is an internal interface, not a new endpoint or frontend feature.
+`screen()` reuses the same matching path and adds deterministic hard-requirement
+evaluation and three-way screening routing. It makes no additional Groq call.
 
 ### Inputs and state
 
@@ -26,7 +28,8 @@ unavailable input requires null qualifications.
 
 Typed state contains only the request, grouped requirement context, source
 readiness and result, plus matching facts, unresolved criteria and intermediate
-matching results when matching is requested. Contact data, protected-attribute fields and
+matching results when matching is requested. Screening mode additionally retains
+the validated matching result and hard-requirement evaluation. Contact data, protected-attribute fields and
 raw CV text are not accepted. Qualifications retain existing page/block and
 digital/OCR locators. This workflow assumes a trusted internal caller passes
 the existing parser's validated output: it cannot independently prove grounding
@@ -38,12 +41,21 @@ Groq using qualifications only, as described below.
 ```text
 START -> validate_screening_input -> prepare_requirement_context
       -> check_candidate_source
-         unavailable -> build_source_unavailable_result -> END
+         unavailable -> build_source_unavailable_result
+                        -> screen: build_no_decision_result -> END
+                        -> prepare/match: END
          ready, prepare mode -> build_ready_result       -> END
-         ready, match mode -> match_direct_evidence
+         ready, match/screen mode -> match_direct_evidence
            unresolved -> interpret_unresolved_requirements
-                      -> validate_matching_evidence -> build_matching_result -> END
-           all resolved -> validate_matching_evidence -> build_matching_result -> END
+                      -> validate_matching_evidence -> build_matching_result
+           all resolved -> validate_matching_evidence -> build_matching_result
+         after matching:
+           match mode -> END
+           screen, matching_failed -> build_no_decision_result -> END
+           screen, matching_complete -> evaluate_hard_requirements
+             eligible -> build_eligible_result -> END
+             excluded -> build_excluded_result -> END
+             insufficient_evidence -> build_insufficient_evidence_result -> END
 ```
 
 - `validate_screening_input` revalidates the request and nested qualifications,
@@ -68,7 +80,7 @@ START -> validate_screening_input -> prepare_requirement_context
 This is a workflow rather than another parser: it prepares requirements and
 routes downstream work by source readiness. Named nodes and a conditional edge
 provide explicit extension points. Source failure is not missing qualifications;
-empty skills do not mean exclusion. `ready_for_matching` means ready for a future
+empty skills alone are not a parsing failure. `ready_for_matching` means ready for a future
 step, not eligible, verified or suitable. Matching adds explicit deterministic,
 semantic and validation stages to that existing workflow, not another agent.
 
@@ -150,8 +162,50 @@ Each match has criterion ID, `supported` / `not_found` / `ambiguous`, method
   `semantic_not_configured`, `semantic_provider_failed`, `invalid_semantic_response`
   and `semantic_input_limit`. Timeout/provider failures never become `not_found`.
 
-Hard/non-hard flags remain context only. Neither supported evidence nor completed
-matching produces eligibility, exclusion, a suitability score or ranking.
+`prepare()` and `match()` retain null decisions. Only `screen()` applies the
+explicit hard/non-hard flags to complete validated matching evidence.
+
+### Implemented — trainer-approved hard-requirement policy (#647497)
+
+The project owner supplied the authoritative trainer clarification: automatically
+exclude when a mandatory skill or qualification is not demonstrated in the CV.
+The deterministic `evaluate_hard_requirements` node consumes only a complete,
+validated `ScreeningMatchingResult` produced by this graph. It applies these rules:
+
+1. Any hard `not_found` -> `excluded`, even if another hard criterion is ambiguous.
+2. Otherwise any hard `ambiguous` -> `insufficient_evidence`.
+3. Otherwise all hard criteria are supported -> `eligible` for subsequent scoring.
+   With no hard criteria, the outcome is also eligible; preferred evidence cannot
+   independently exclude or cause insufficient evidence.
+
+Source/parsing unavailability and matching failures route around evaluation and
+return **no candidate decision**, including when there are no hard criteria.
+Ambiguity never counts as a hard-requirement pass. This policy does not change
+the evidence statuses or the education record-group safeguard.
+
+`ScreeningDecisionResult` contains the Job Reference, upload UUID, operational
+status (`decision_complete`, `source_unavailable` or `matching_failed`), nullable
+`screening_decision`, the original validated `matching_result`, unmet and ambiguous
+hard-requirement IDs, and structured exclusion reasons. Matching provenance is
+preserved; the nested matching result still has a null decision. Output validation
+checks identity, operational status, complete evidence coverage, precedence and
+reason IDs against that result. Screening input accepts no client-supplied verdict,
+exclusion flag or matching result; there is no new public endpoint.
+
+Every missing hard criterion receives code `hard_requirement_not_demonstrated`
+and message **"Hard requirement was not demonstrated in the parsed CV."** No
+negative quotation or claim that the person definitely lacks a qualification is
+created. All missing hard IDs are retained in criterion order. Exclusion is an
+evidence-based gate; eligibility means progression to future scoring, not hiring
+or recommendation. No suitability score, ranking or experience total is computed.
+
+**Remaining risk:** incomplete CVs, extraction omissions and semantic matching
+errors can produce false exclusions. A successfully parsed profile with empty
+relevant qualification lists can yield `not_found` and, for a hard criterion,
+exclusion under this clarified policy. That is distinct from parsing failure,
+which never excludes. Evidence validation establishes provenance, not real-world
+truth or guaranteed semantic correctness; review/correction governance remains
+future work. Only trusted, appropriate job criteria should be supplied.
 
 ### Privacy and boundaries
 
@@ -172,9 +226,6 @@ fallback occurs. Candidate parsing/OCR behavior is unchanged.
 
 ## Planned — next WBS tasks
 
-- **#647497:** evaluate verified hard requirements and implement the planned
-  three-way outcomes. No such final decision is produced now; unavailable
-  evidence must not be converted into automatic rejection.
 - **#647498:** integrate the existing PostgreSQL checkpoint foundation with
   validated workflow/thread identity. This graph currently compiles with
   `checkpointer=False`; persistence and resumability are not claimed.
@@ -182,6 +233,13 @@ fallback occurs. Candidate parsing/OCR behavior is unchanged.
 Authentication, approved-job persistence, API/UI integration and production
 privacy controls remain separate work. Tests exercise the actual graph with
 synthetic inputs and mocked Groq calls, including both source paths, preparation
-compatibility, direct-match bypass, semantic evidence validation and failure states.
-No live Groq call was performed for #647496; strict provider-schema acceptance
-and real semantic quality are not established by mocked tests.
+compatibility, direct-match bypass, semantic evidence validation, failure states,
+hard/preferred criteria, missing-over-ambiguous precedence and all decision routes.
+Scoring, ranking and job-profile persistence remain planned.
+
+**Verified — 08 Oct 2026:** one authorized synthetic #647496 smoke call through
+the actual `match()` graph returned HTTP 200 from Groq `openai/gpt-oss-120b` with
+strict schema accepted, Pydantic validation passed and one server-validated
+semantic evidence reference. Django REST API work supported Python web development;
+no verdict or score was produced. This verifies one integration case, not general
+semantic accuracy. #647497 adds deterministic routing; it made no live Groq call.

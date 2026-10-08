@@ -278,11 +278,11 @@ checkpointed, and JD approval/revision is not implemented.
   is not persisted; profiles stay in request/component memory. CVs do not enter JD,
   RAG or MCP. Repeated processing may repeat extraction/OCR/provider calls.
 - Grounding confirms textual support, not verified candidate truth. Candidate
-  persistence, final screening decisions, hard exclusion, scoring/
+  persistence, scoring/
   ranking, background workers, authentication and production consent/retention remain
   **Planned**. Future merit evaluation must exclude contact identity.
 
-## Implemented — Screening preparation and hybrid matching (#647495–#647496)
+## Implemented — Screening preparation, hybrid matching and decisions (#647495–#647497)
 
 - `backend/app/schemas/screening.py` validates explicit bounded criteria and
   qualifications-only inputs using existing candidate source-status semantics
@@ -297,19 +297,28 @@ checkpointed, and JD approval/revision is not implemented.
 - Matching returns `supported`, `not_found` or `ambiguous` evidence statuses,
   not verdicts. Operational failure returns `matching_failed` with a safe code
   and no partial conclusions. Parsing failure bypasses matching; empty skills
-  do not cause exclusion. All results retain a null screening decision.
+  alone do not cause exclusion during matching. `prepare()` and `match()` retain
+  null screening decisions.
+- `screen()` reuses matching and adds deterministic hard-requirement evaluation
+  with conditional eligible/excluded/insufficient-evidence result nodes. Any
+  completed hard `not_found` excludes; otherwise hard ambiguity yields insufficient
+  evidence; otherwise the candidate is eligible for later scoring. Non-hard
+  criteria do not independently exclude. Source/provider failures bypass decisions.
+  Results preserve matching provenance and list all unmet hard IDs with structured
+  "not demonstrated in the parsed CV" reasons; no negative evidence is fabricated.
+  Incomplete CVs or extraction/matching errors can cause false exclusions.
 - **Privacy:** semantic matching can transmit CV-derived qualification values to
   Groq. Inputs/outputs are bounded, evidence IDs/values are allowlisted and
   source locators are server-derived; validation does not prove semantic truth.
   Only synthetic/sample data is appropriate for the current demo.
-- Hard-requirement evaluation (#647497), scoring, ranking, persistence,
+- Scoring, ranking, persistence,
   checkpoint integration (#647498) and API/frontend integration remain **Planned**.
   See [Candidate Screening](candidate_screening.md) for graph flow, limits and
   failure behavior. This increment made no live Groq calls.
 
 ## Planned — future functionality
 
-- `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the trainer-demo workflow described above; `screening` has preparation and hybrid evidence matching. Screening decisions, `copilot` and `evaluation` remain planned. These are Python modules inside the FastAPI modular monolith, not separate microservices.
+- `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the trainer-demo workflow described above; `screening` has preparation, hybrid evidence matching and hard-requirement decisions. `copilot` and `evaluation` remain planned. These are Python modules inside the FastAPI modular monolith, not separate microservices.
 - Other ORM business models, a production Docker Compose PostgreSQL service, and other repositories remain planned. The disposable database used for the successful live validation does not implement the production service.
 - A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
 - Background processing and integrations other than the implemented LLM and MCP job-publishing paths remain planned; their packages are architectural boundaries only.

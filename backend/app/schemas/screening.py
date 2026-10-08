@@ -1,4 +1,4 @@
-"""Preparation and matching evidence contracts; no contact identity or verdicts."""
+"""Preparation, matching evidence and hard-requirement screening contracts."""
 import unicodedata
 from typing import Annotated, Literal
 from uuid import UUID
@@ -180,4 +180,77 @@ class ScreeningMatchingResult(ProfileContract):
                 raise ValueError("Completed matching requires exactly one result per criterion.")
         elif self.matches or (self.status == "matching_failed") != (self.error_code is not None):
             raise ValueError("Incomplete matching must not contain evidence conclusions.")
+        return self
+
+
+ScreeningOutcome = Literal["eligible", "excluded", "insufficient_evidence"]
+
+
+class HardRequirementEvaluation(ProfileContract):
+    """Deterministic policy over complete, validated evidence results only."""
+    outcome: ScreeningOutcome
+    unmet_hard_requirement_ids: tuple[CriterionId, ...] = Field(max_length=50)
+    ambiguous_hard_requirement_ids: tuple[CriterionId, ...] = Field(max_length=50)
+
+    @model_validator(mode="after")
+    def consistent_evaluation(self):
+        missing, ambiguous = self.unmet_hard_requirement_ids, self.ambiguous_hard_requirement_ids
+        expected = "excluded" if missing else "insufficient_evidence" if ambiguous else "eligible"
+        if (self.outcome != expected or len(set(missing)) != len(missing)
+                or len(set(ambiguous)) != len(ambiguous) or set(missing).intersection(ambiguous)):
+            raise ValueError("Hard-requirement evaluation must follow evidence precedence without duplicate IDs.")
+        return self
+
+    @classmethod
+    def from_matching_result(cls, matching: ScreeningMatchingResult) -> "HardRequirementEvaluation":
+        matching = ScreeningMatchingResult.model_validate(matching.model_dump(warnings=False))
+        if matching.status != "matching_complete":
+            raise ValueError("A complete validated matching result is required for a decision.")
+        hard_ids = set(matching.requirement_context.hard_requirement_ids)
+        missing = tuple(m.criterion_id for m in matching.matches
+            if m.criterion_id in hard_ids and m.match_status == "not_found")
+        ambiguous = tuple(m.criterion_id for m in matching.matches
+            if m.criterion_id in hard_ids and m.match_status == "ambiguous")
+        return cls(outcome="excluded" if missing else "insufficient_evidence" if ambiguous else "eligible",
+            unmet_hard_requirement_ids=missing, ambiguous_hard_requirement_ids=ambiguous)
+
+
+class ScreeningExclusionReason(ProfileContract):
+    criterion_id: CriterionId
+    code: Literal["hard_requirement_not_demonstrated"] = "hard_requirement_not_demonstrated"
+    message: Literal["Hard requirement was not demonstrated in the parsed CV."] = (
+        "Hard requirement was not demonstrated in the parsed CV."
+    )
+
+
+class ScreeningDecisionResult(ProfileContract):
+    job_reference: JobReference
+    upload_id: UUID
+    status: Literal["decision_complete", "source_unavailable", "matching_failed"]
+    screening_decision: ScreeningOutcome | None
+    # Preserve the entire evidence result without rebuilding its references.
+    matching_result: ScreeningMatchingResult = Field(repr=False)
+    unmet_hard_requirement_ids: tuple[CriterionId, ...] = Field(max_length=50)
+    ambiguous_hard_requirement_ids: tuple[CriterionId, ...] = Field(max_length=50)
+    exclusion_reasons: tuple[ScreeningExclusionReason, ...] = Field(max_length=50)
+
+    @model_validator(mode="after")
+    def consistent_decision(self):
+        matching = ScreeningMatchingResult.model_validate(self.matching_result.model_dump(warnings=False))
+        if self.job_reference != matching.job_reference or self.upload_id != matching.upload_id:
+            raise ValueError("Decision identity must match the evidence result.")
+        expected_status = "decision_complete" if matching.status == "matching_complete" else matching.status
+        if self.status != expected_status:
+            raise ValueError("Decision status must match the evidence result.")
+        if self.status == "decision_complete":
+            evaluation = HardRequirementEvaluation.from_matching_result(matching)
+            if (self.screening_decision != evaluation.outcome
+                    or self.unmet_hard_requirement_ids != evaluation.unmet_hard_requirement_ids
+                    or self.ambiguous_hard_requirement_ids != evaluation.ambiguous_hard_requirement_ids):
+                raise ValueError("Decision must follow the validated hard-requirement evidence.")
+            if tuple(r.criterion_id for r in self.exclusion_reasons) != self.unmet_hard_requirement_ids:
+                raise ValueError("Exclusion reasons must identify exactly the unmet hard requirements.")
+        elif (self.screening_decision is not None or self.unmet_hard_requirement_ids
+                or self.ambiguous_hard_requirement_ids or self.exclusion_reasons):
+            raise ValueError("Source or operational failure must not produce a candidate decision.")
         return self
