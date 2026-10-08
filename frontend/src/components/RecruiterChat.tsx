@@ -4,10 +4,11 @@ import { isValidRecruiterMessage, sendRecruiterMessage } from "../api/recruiterC
 import { publishDraft } from "../api/jobPublishing";
 import type { ChatMessage } from "../types/recruiterChat";
 import { ChatMessageView, replyToChatMessage } from "./chatPresentation";
+import type { ScreeningSuggestions } from "../types/screening";
 
 const DEMO_INSTRUCTION = "Create a Backend AI Engineer JD for a team building FastAPI services. Responsibilities include building APIs and automated tests. Required skills are Python, FastAPI and PostgreSQL.";
 
-export default function RecruiterChat() {
+export default function RecruiterChat({onReviewCriteria}: {onReviewCriteria?: (suggestions: ScreeningSuggestions) => void}) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState("");
@@ -83,7 +84,8 @@ export default function RecruiterChat() {
         <button type="button" className="button button-secondary" disabled={sending} onClick={() => { setInput(DEMO_INSTRUCTION); setError(""); }}>Load demo</button>
       </div>
       <div ref={history} className="chat-history" role="log" aria-label="Recruiter conversation" aria-live="polite">
-        {messages.length ? messages.map((message, index) => <ChatMessageView key={index} message={message} onPublish={() => void publish(index)} onRevise={() => revise(message)} actionsDisabled={sending} />)
+        {messages.length ? messages.map((message, index) => <ChatMessageView key={index} message={message} onPublish={() => void publish(index)} onRevise={() => revise(message)}
+          onReviewCriteria={message.screeningSuggestions && onReviewCriteria ? () => onReviewCriteria(message.screeningSuggestions!) : undefined} actionsDisabled={sending} />)
           : <p className="helper-text">Tell me the job title, role purpose, responsibilities and required skills. I’ll ask for missing information rather than invent it.</p>}
         {sending && <p role="status">Interpreting requirements and preparing your grounded draft…</p>}
       </div>

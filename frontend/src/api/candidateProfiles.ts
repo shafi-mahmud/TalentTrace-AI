@@ -17,6 +17,7 @@ function attribute(value: unknown): boolean {
       : source.kind === "block" && Number(source.number) <= 10000 && source.method === "digital" && (source.block_type === "paragraph" || source.block_type === "table_cell"));
 }
 const optional = (value: unknown) => value === null || attribute(value);
+export { attribute as isGroundedAttribute };
 const attributes = (value: unknown, maximum: number) => Array.isArray(value) && value.length <= maximum && value.every(attribute);
 function contact(value: unknown): boolean {
   return keys(value, ["candidate_name", "emails", "phones", "links", "location"]) && optional(value.candidate_name)

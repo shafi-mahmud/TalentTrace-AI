@@ -278,8 +278,7 @@ checkpointed, and JD approval/revision is not implemented.
   is not persisted; profiles stay in request/component memory. CVs do not enter JD,
   RAG or MCP. Repeated processing may repeat extraction/OCR/provider calls.
 - Grounding confirms textual support, not verified candidate truth. Candidate
-  persistence, scoring/
-  ranking, background workers, authentication and production consent/retention remain
+  persistence, weighted scoring, background workers, authentication and production consent/retention remain
   **Planned**. Future merit evaluation must exclude contact identity.
 
 ## Implemented — Screening preparation, hybrid matching and decisions (#647495–#647497)
@@ -319,10 +318,65 @@ checkpointed, and JD approval/revision is not implemented.
   cross-process recovery (local checkpoint configuration missing; Docker
   unavailable on 08 Oct 2026). The opt-in proof uses synthetic data and mocked
   semantic calls; the earlier checkpoint foundation proof is separate.
-- Scoring, ranking, business candidate persistence, API/frontend checkpoint
+- Weighted scoring, business candidate persistence, API/frontend checkpoint
   integration and production access/retention controls remain **Planned**.
   See [Candidate Screening](candidate_screening.md) for graph flow, limits and
   failure behavior. This increment made no live Groq calls.
+
+## Implemented — reviewed criteria and native CV batch screening
+
+- Successful recruiter-chat JD responses now include `screening_suggestions`
+  built from source-backed recruiter requirements, not additional generated JD
+  qualifications. All suggestions start as preferred; the reviewer edits their
+  descriptions, categories and mandatory/preferred flags and explicitly confirms
+  them in the CV workspace. This confirms screening criteria, not formal JD approval.
+- The confirmed snapshot is bound to the manually entered demo Job Reference and
+  stays in React session memory. Editing criteria/reference or selecting another
+  JD invalidates confirmation/results. Nothing claims saved PostgreSQL job profiles;
+  the reference is syntactic demo association, not verified job ownership.
+- `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/screen` accepts the reviewed
+  snapshot only. It resolves the private batch through `CandidateProfileService`,
+  reuses digital extraction/OCR and profile grounding, and supplies qualifications
+  without contact fields to the existing `CandidateScreeningWorkflow.screen()`.
+  Candidate-level source/provider failures stay separate from eligibility decisions;
+  unexpected candidate failures do not abort later candidates or become exclusions.
+- Results show eligible/excluded/needs-review outcomes and expandable requirement
+  statuses, evidence and page/block/digital/OCR provenance. Contact information
+  remains in the separate existing profile view. Requirement-based ranking is
+  implemented below; weighted suitability scoring remains planned.
+- No database/migration, graph, checkpoint wiring, upload replacement, MCP call or
+  background worker was added. Processing is sequential and request-scoped; each
+  screening attempt reparses stored originals and may repeat provider calls.
+  Criteria/results disappear on reload. Authentication, durable job/application
+  persistence, weighted scoring and automatic Drive import remain **Planned**.
+- **Verified by automated tests:** actual FastAPI upload/stored PDF extraction,
+  grounded parsing and real Screening graph execution with mocked providers;
+  semantic outcomes/OCR provenance, batch isolation, confirmed reference binding,
+  malformed requests and frontend validation/rendering. This is not live Groq or
+  manual browser end-to-end verification. Synthetic local demonstrations only.
+
+## Implemented — Milestone 1 requirement-based candidate ranking
+
+- `services/screening_ranking.py` ranks only completed `eligible` decisions in one
+  confirmed job-reference/batch snapshot. It counts `supported` requirements,
+  treating validated deterministic and semantic support equally. Mandatory flags
+  still control eligibility through the unchanged Screening graph; preferred
+  ambiguity does not add support. Zero-support eligible candidates remain ranked.
+- The batch response includes validated ranking entries: upload ID, rank, tie flag,
+  supported/ambiguous/not-found counts and total requirements. Descending support
+  uses competition ranks (`1, 1, 3`); upload UUID orders tied display only. Neither
+  contact attributes nor a new provider call participates in ranking.
+- The CV workspace displays eligible ranking with expandable unchanged evidence
+  and digital/OCR provenance. Exclusions, insufficient evidence, unavailable sources
+  and processing failures remain visible in separate unranked sections.
+- **Classification gap:** `supported`, `ambiguous` and `not_found` are evidence
+  statuses, not an automatic Met / Partially Met / Unmet classification. Ambiguity
+  means uncertainty and does not establish partial fulfilment. A future partial-match
+  policy would require explicit reviewed subcriteria and validation; none is inferred.
+- No weighted 0–100 suitability score, cross-job/batch ranking, durable job-profile
+  persistence, extra graph/agent or database is added. Snapshots/results remain
+  session-only. Automated verification uses synthetic data and mocked providers;
+  live provider/browser ranking verification is not claimed.
 
 ## Planned — future functionality
 

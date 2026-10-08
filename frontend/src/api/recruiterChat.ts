@@ -1,4 +1,5 @@
 import { isGenerationResponse } from "./jobDescriptions.ts";
+import { isScreeningSuggestions } from "./screening.ts";
 import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
 import type { RecruiterChatResponse, PublishingContext } from "../types/recruiterChat";
 
@@ -15,6 +16,7 @@ export function isRecruiterChatResponse(value: unknown): value is RecruiterChatR
   if (value.status === "unsupported") return value.intent === "unsupported";
   if (value.intent !== "create_job_description") return false;
   if (value.status === "jd_generated") return isGenerationResponse(value.job_description_result)
+    && (value.screening_suggestions == null || isScreeningSuggestions(value.screening_suggestions))
     && (value.publishing_context === undefined || isPublishingContext(value.publishing_context));
   return value.status === "clarification" && Array.isArray(value.missing_fields)
     && value.missing_fields.length > 0 && value.missing_fields.length <= Object.keys(MISSING_FIELD_LABELS).length
