@@ -1,3 +1,6 @@
+import logging
+from uuid import uuid4
+
 from app.integrations.job_publishing.mcp_client import get_job_publisher, PublicationUnavailable
 from app.schemas.job_publication import PublicationResult, RecruiterPublishRequest
 
@@ -12,6 +15,7 @@ from app.rag.retrieval import PolicyRetrievalError
 from app.schemas.recruiter_chat import RecruiterChatRequest, RecruiterChatResponse
 from app.services.recruiter_chat import ConversationUnavailableError, RecruiterChatService
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/recruiter-chat", tags=["recruiter chat"])
 
@@ -23,26 +27,33 @@ router = APIRouter(prefix="/recruiter-chat", tags=["recruiter chat"])
     409: {"description": "The bounded in-memory conversation expired or reached its limit."},
 })
 async def recruiter_chat(request: RecruiterChatRequest) -> RecruiterChatResponse | JSONResponse:
+    correlation_id = uuid4().hex[:12]
     try:
-        return await RecruiterChatService(get_recruiter_interpreter()).respond(request)
-    except ConversationUnavailableError:
+        return await RecruiterChatService(get_recruiter_interpreter()).respond(request, correlation_id=correlation_id)
+    except ConversationUnavailableError as error:
+        logger.warning("talenttrace_failure correlation_id=%s stage=api_response category=conversation_unavailable exception_class=%s", correlation_id, type(error).__name__)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={
             "code": "recruiter_conversation_unavailable",
             "message": "This conversation is no longer available. Start a new chat.",
         })
-    except MissingGenerationConfigurationError:
+    except MissingGenerationConfigurationError as error:
+        logger.warning("talenttrace_failure correlation_id=%s stage=api_response category=configuration_missing exception_class=%s", correlation_id, type(error).__name__)
         return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={
             "code": "recruiter_chat_not_configured", "message": "Recruiter chat is not configured.",
         })
-    except GenerationTimeoutError:
+    except GenerationTimeoutError as error:
+        logger.warning("talenttrace_failure correlation_id=%s stage=api_response category=provider_timeout exception_class=%s", correlation_id, type(error).__name__)
         return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT, content={
             "code": "recruiter_chat_timeout", "message": "Recruiter chat timed out. Please try again.",
         })
-    except (GenerationProviderError, PolicyRetrievalError):
+    except (GenerationProviderError, PolicyRetrievalError) as error:
+        category = "policy_retrieval_failed" if isinstance(error, PolicyRetrievalError) else "provider_or_output_validation_failed"
+        logger.warning("talenttrace_failure correlation_id=%s stage=api_response category=%s exception_class=%s", correlation_id, category, type(error).__name__)
         return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content={
             "code": "recruiter_chat_failed", "message": "Recruiter chat could not be completed.",
         })
-    except Exception:
+    except Exception as error:
+        logger.warning("talenttrace_failure correlation_id=%s stage=api_response category=unexpected_internal_error exception_class=%s", correlation_id, type(error).__name__)
         return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content={
             "code": "recruiter_chat_failed", "message": "Recruiter chat could not be completed.",
         })

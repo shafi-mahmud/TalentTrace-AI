@@ -1,6 +1,7 @@
 """Replaceable interpretation boundary. Never generates the final JD."""
 
 import json
+import logging
 from dataclasses import dataclass
 from collections.abc import Callable
 from typing import Protocol
@@ -14,6 +15,8 @@ from app.agents.jd.errors import (
 from app.core.config import Settings, settings
 from app.schemas.recruiter_chat import RecruiterChatRequest, RecruiterInterpretation
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class RecruiterConversationContext:
@@ -22,6 +25,7 @@ class RecruiterConversationContext:
     prior_user_messages: tuple[str, ...]
     validated_requirements: dict[str, list[dict[str, object]]]
     last_asked_field: str | None
+    correlation_id: str | None = None
 
 
 class RecruiterInstructionInterpreter(Protocol):
@@ -68,6 +72,13 @@ class GroqRecruiterInstructionInterpreter:
                 "include ' may be removed. No other paraphrasing is supported. For role_summary "
                 "use the provided role-purpose clause, even without an explicit summary label; "
                 "do not write polished prose or return null when that context exists. "
+                "When last_asked_field is set, treat a direct answer to that question as "
+                "the primary target: extract it into exactly that field from the current "
+                "message, even when the answer is a short fragment. Do not return null "
+                "when the current message provides evidence for the requested field. For "
+                "example, last_asked_field=role_summary and current message='Build FastAPI "
+                "services.' means role_summary.value and role_summary.evidence are both "
+                "'Build FastAPI services.' Do not use prior or assistant text as evidence. "
                 "Employment/work arrangement may use canonical enum spellings backed by copied "
                 "evidence. Years must refer explicitly to required experience. A short duration "
                 "may answer a pending minimum-experience question. Explicit no-minimum answers "
@@ -98,13 +109,46 @@ class GroqRecruiterInstructionInterpreter:
                 )
             content = response.choices[0].message.content
             if not content:
+                logger.warning(
+                    "talenttrace_failure correlation_id=%s stage=recruiter_interpretation "
+                    "category=empty_structured_response exception_class=GenerationProviderError",
+                    context.correlation_id if context and context.correlation_id else "unavailable",
+                )
                 raise GenerationProviderError("Recruiter interpretation returned no structured result.")
             return RecruiterInterpretation.model_validate_json(content)
-        except APITimeoutError:
+        except APITimeoutError as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=recruiter_interpretation "
+                "category=provider_timeout exception_class=%s",
+                context.correlation_id if context and context.correlation_id else "unavailable",
+                type(error).__name__,
+            )
             raise GenerationTimeoutError("Recruiter interpretation timed out.") from None
         except GenerationProviderError:
             raise
-        except (APIError, GroqError, ValidationError, AttributeError, IndexError, TypeError):
+        except (APIError, GroqError) as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=recruiter_interpretation "
+                "category=provider_api_error exception_class=%s",
+                context.correlation_id if context and context.correlation_id else "unavailable",
+                type(error).__name__,
+            )
+            raise GenerationProviderError("Recruiter interpretation failed at the provider boundary.") from None
+        except ValidationError as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=recruiter_interpretation "
+                "category=structured_output_invalid exception_class=%s",
+                context.correlation_id if context and context.correlation_id else "unavailable",
+                type(error).__name__,
+            )
+            raise GenerationProviderError("Recruiter interpretation returned an invalid result.") from None
+        except (AttributeError, IndexError, TypeError) as error:
+            logger.warning(
+                "talenttrace_failure correlation_id=%s stage=recruiter_interpretation "
+                "category=malformed_provider_response exception_class=%s",
+                context.correlation_id if context and context.correlation_id else "unavailable",
+                type(error).__name__,
+            )
             raise GenerationProviderError("Recruiter interpretation returned an invalid result.") from None
 
 

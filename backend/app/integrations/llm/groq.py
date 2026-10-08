@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
@@ -19,6 +20,8 @@ from app.schemas.job_description import (
     JobDescriptionGenerationRequest,
     ModelName,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class JobDescriptionGenerationResult(BaseModel):
@@ -92,17 +95,45 @@ class GroqJobDescriptionGenerator:
 
             content = response.choices[0].message.content
             if not content:
+                logger.warning(
+                    "talenttrace_failure stage=structured_generation category=empty_structured_response "
+                    "exception_class=GenerationProviderError"
+                )
                 raise GenerationProviderError(
                     "The generation provider returned no structured draft."
                 )
             draft = GeneratedJobDescriptionDraft.model_validate_json(content)
-        except APITimeoutError:
+        except APITimeoutError as error:
+            logger.warning(
+                "talenttrace_failure stage=structured_generation category=provider_timeout exception_class=%s",
+                type(error).__name__,
+            )
             raise GenerationTimeoutError(
                 "The generation provider timed out."
             ) from None
         except GenerationProviderError:
             raise
-        except (APIError, GroqError, ValidationError, AttributeError, IndexError, TypeError):
+        except (APIError, GroqError) as error:
+            logger.warning(
+                "talenttrace_failure stage=structured_generation category=provider_api_error exception_class=%s",
+                type(error).__name__,
+            )
+            raise GenerationProviderError(
+                "The generation provider did not return a valid structured draft."
+            ) from None
+        except ValidationError as error:
+            logger.warning(
+                "talenttrace_failure stage=structured_generation category=structured_output_invalid exception_class=%s",
+                type(error).__name__,
+            )
+            raise GenerationProviderError(
+                "The generation provider did not return a valid structured draft."
+            ) from None
+        except (AttributeError, IndexError, TypeError) as error:
+            logger.warning(
+                "talenttrace_failure stage=structured_generation category=malformed_provider_response exception_class=%s",
+                type(error).__name__,
+            )
             raise GenerationProviderError(
                 "The generation provider did not return a valid structured draft."
             ) from None

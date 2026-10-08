@@ -59,7 +59,7 @@ class RecordingWorkflow:
         self.requests = []
         self.error = error
 
-    async def generate(self, request):
+    async def generate(self, request, *, diagnostic_id=None):
         self.requests.append(request)
         if self.error:
             raise self.error
@@ -124,6 +124,48 @@ def test_progressive_conversation_collects_requirements_and_generates_once():
     assert workflow.requests[0].minimum_experience_years == 2
     assert interpreter.contexts[-1][1].prior_user_messages == tuple(message for message, _ in turns[:-1])
     assert interpreter.contexts[-1][1].validated_requirements["job_title"][0]["value"] == "AI/ML Engineer"
+
+
+def test_short_answer_to_requested_role_summary_preserves_prior_grounded_fields():
+    first = extracted_data()
+    first["requirements"]["job_title"] = evidence("Backend AI Engineer")
+    first["requirements"]["role_summary"] = None
+    first["requirements"]["responsibilities"] = [evidence("Build APIs", "building APIs"), evidence("automated tests")]
+    first["requirements"]["required_skills"] = [evidence("Python"), evidence("FastAPI"), evidence("PostgreSQL")]
+    second = empty_extraction(role_summary=evidence("Build FastAPI services."))
+    interpreter = SequenceInterpreter([first, second])
+    workflow = RecordingWorkflow()
+    service = RecruiterChatService(interpreter, workflow_factory=lambda: workflow, conversation_store=ConversationStore())
+    message = "Create a Backend AI Engineer JD for a team building FastAPI services. Responsibilities include building APIs and automated tests. Required skills are Python, FastAPI and PostgreSQL. No minimum experience required."
+
+    clarification = asyncio.run(service.respond(RecruiterChatRequest(message=message)))
+    result = asyncio.run(service.respond(RecruiterChatRequest(
+        message="Build FastAPI services.", conversation_id=clarification.conversation_id)))
+
+    assert clarification.status == "clarification"
+    assert clarification.missing_fields == ["role_summary"]
+    assert result.status == "jd_generated"
+    assert workflow.requests[0].job_title == "Backend AI Engineer"
+    assert workflow.requests[0].required_skills == ["Python", "FastAPI", "PostgreSQL"]
+    assert workflow.requests[0].minimum_experience_years == 0
+    assert interpreter.contexts[-1][1].last_asked_field == "role_summary"
+
+
+def test_evidence_rejection_logs_only_safe_stage_metadata(caplog):
+    import logging
+
+    data = extracted_data()
+    data["requirements"]["required_skills"].append(evidence("PRIVATE_SKILL_MARKER"))
+    service = RecruiterChatService(FakeInterpreter(data), workflow_factory=lambda: pytest.fail("Unverified skill must not generate."), conversation_store=ConversationStore())
+    caplog.set_level(logging.WARNING, logger="app.services.recruiter_chat")
+    result = asyncio.run(service.respond(RecruiterChatRequest(message=MESSAGE)))
+
+    assert result.status == "clarification"
+    assert "stage=requirement_evidence_validation" in caplog.text
+    assert "category=unverified_extraction" in caplog.text
+    assert "field=required_skills" in caplog.text
+    assert "PRIVATE_SKILL_MARKER" not in caplog.text
+    assert MESSAGE not in caplog.text
 
 
 def test_explicit_no_minimum_experience_is_a_valid_requirement():
@@ -334,6 +376,8 @@ def test_interpreter_receives_server_context_as_prior_turns():
     assert payload["prior_recruiter_messages"] == ["I need a Backend Engineer JD."]
     assert payload["validated_server_requirements"]["job_title"][0]["value"] == "Backend Engineer"
     assert payload["last_asked_field"] == "role_summary"
+    assert "last_asked_field=role_summary" in captured["messages"][0]["content"]
+    assert "Build FastAPI services." in captured["messages"][0]["content"]
 
 
 @pytest.mark.parametrize("content", ["not-json", "{}", json.dumps({"intent": "publish_job", "requirements": None})])
@@ -507,13 +551,19 @@ def test_unicode_and_whitespace_evidence_normalization():
 
 
 @pytest.mark.parametrize("error,status", [(PolicyRetrievalError("PRIVATE_PATH"), 502), (GenerationProviderError("PRIVATE_PROVIDER"), 502), (GenerationTimeoutError("PRIVATE_TIMEOUT"), 504), (MissingGenerationConfigurationError("PRIVATE_CONFIG"), 503)])
-def test_workflow_failures_sanitized(monkeypatch, error, status):
+def test_workflow_failures_sanitized(monkeypatch, error, status, caplog):
+    import logging
+
+    caplog.set_level(logging.WARNING)
     monkeypatch.setattr(route, "get_recruiter_interpreter", lambda: FakeInterpreter())
     original = RecruiterChatService
     monkeypatch.setattr(route, "RecruiterChatService", lambda interpreter: original(interpreter, workflow_factory=lambda: RecordingWorkflow(error)))
     response = asyncio.run(send({"message": MESSAGE}))
     assert response.status_code == status
     assert "PRIVATE" not in response.text
+    assert "PRIVATE" not in caplog.text
+    assert "correlation_id=" in caplog.text
+    assert "stage=api_response" in caplog.text
 
 
 def test_generation_and_clarification_have_no_publication_side_effects(monkeypatch):
