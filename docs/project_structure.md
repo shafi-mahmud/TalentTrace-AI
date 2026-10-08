@@ -278,13 +278,27 @@ checkpointed, and JD approval/revision is not implemented.
   is not persisted; profiles stay in request/component memory. CVs do not enter JD,
   RAG or MCP. Repeated processing may repeat extraction/OCR/provider calls.
 - Grounding confirms textual support, not verified candidate truth. Candidate
-  persistence, screening LangGraph, semantic job matching, hard exclusion, scoring/
+  persistence, semantic job matching, hard exclusion, scoring/
   ranking, background workers, authentication and production consent/retention remain
   **Planned**. Future merit evaluation must exclude contact identity.
 
+## Implemented — Screening preparation workflow (#647495)
+
+- `backend/app/schemas/screening.py` validates explicit bounded criteria and
+  qualifications-only inputs using existing candidate source-status semantics
+  and the syntactic demo Job Reference. It accepts no contact or raw CV fields.
+- `backend/app/agents/screening/workflow.py` implements input validation,
+  requirement grouping, source-readiness checking and conditional result nodes.
+  Results are `ready_for_matching` or `source_unavailable`, with a null screening
+  decision. Empty skills and parsing failure do not cause exclusion.
+- No matching, hard-requirement evaluation, scoring, ranking, persistence,
+  checkpoint integration, Groq calls or API/frontend integration is implemented
+  by this increment. See [Candidate Screening](candidate_screening.md) for the
+  graph and planned #647496–#647498 extensions.
+
 ## Planned — future functionality
 
-- `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the limited trainer-demo workflow described above; the other three remain planned. They are Python modules inside the FastAPI modular monolith, not separate microservices.
+- `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the trainer-demo workflow described above; `screening` has the preparation-only graph. Screening decisions, `copilot` and `evaluation` remain planned. These are Python modules inside the FastAPI modular monolith, not separate microservices.
 - Other ORM business models, a production Docker Compose PostgreSQL service, and other repositories remain planned. The disposable database used for the successful live validation does not implement the production service.
 - A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
 - Background processing and integrations other than the implemented LLM and MCP job-publishing paths remain planned; their packages are architectural boundaries only.
