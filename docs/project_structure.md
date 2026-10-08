@@ -278,27 +278,38 @@ checkpointed, and JD approval/revision is not implemented.
   is not persisted; profiles stay in request/component memory. CVs do not enter JD,
   RAG or MCP. Repeated processing may repeat extraction/OCR/provider calls.
 - Grounding confirms textual support, not verified candidate truth. Candidate
-  persistence, semantic job matching, hard exclusion, scoring/
+  persistence, final screening decisions, hard exclusion, scoring/
   ranking, background workers, authentication and production consent/retention remain
   **Planned**. Future merit evaluation must exclude contact identity.
 
-## Implemented — Screening preparation workflow (#647495)
+## Implemented — Screening preparation and hybrid matching (#647495–#647496)
 
 - `backend/app/schemas/screening.py` validates explicit bounded criteria and
   qualifications-only inputs using existing candidate source-status semantics
   and the syntactic demo Job Reference. It accepts no contact or raw CV fields.
 - `backend/app/agents/screening/workflow.py` implements input validation,
   requirement grouping, source-readiness checking and conditional result nodes.
-  Results are `ready_for_matching` or `source_unavailable`, with a null screening
-  decision. Empty skills and parsing failure do not cause exclusion.
-- No matching, hard-requirement evaluation, scoring, ranking, persistence,
-  checkpoint integration, Groq calls or API/frontend integration is implemented
-  by this increment. See [Candidate Screening](candidate_screening.md) for the
-  graph and planned #647496–#647498 extensions.
+  `prepare()` preserves `ready_for_matching` or `source_unavailable` results.
+  `match()` extends the same graph with conservative whole-value deterministic
+  matching, one Groq call for unresolved criteria when needed, evidence-reference
+  validation and ordered requirement-level results. Provider inputs contain only
+  unresolved requirements and relevant qualification facts, without contact fields.
+- Matching returns `supported`, `not_found` or `ambiguous` evidence statuses,
+  not verdicts. Operational failure returns `matching_failed` with a safe code
+  and no partial conclusions. Parsing failure bypasses matching; empty skills
+  do not cause exclusion. All results retain a null screening decision.
+- **Privacy:** semantic matching can transmit CV-derived qualification values to
+  Groq. Inputs/outputs are bounded, evidence IDs/values are allowlisted and
+  source locators are server-derived; validation does not prove semantic truth.
+  Only synthetic/sample data is appropriate for the current demo.
+- Hard-requirement evaluation (#647497), scoring, ranking, persistence,
+  checkpoint integration (#647498) and API/frontend integration remain **Planned**.
+  See [Candidate Screening](candidate_screening.md) for graph flow, limits and
+  failure behavior. This increment made no live Groq calls.
 
 ## Planned — future functionality
 
-- `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the trainer-demo workflow described above; `screening` has the preparation-only graph. Screening decisions, `copilot` and `evaluation` remain planned. These are Python modules inside the FastAPI modular monolith, not separate microservices.
+- `backend/app/agents/` contains four bounded workflow packages: `jd`, `screening`, `copilot`, and `evaluation`. The `jd` package has the trainer-demo workflow described above; `screening` has preparation and hybrid evidence matching. Screening decisions, `copilot` and `evaluation` remain planned. These are Python modules inside the FastAPI modular monolith, not separate microservices.
 - Other ORM business models, a production Docker Compose PostgreSQL service, and other repositories remain planned. The disposable database used for the successful live validation does not implement the production service.
 - A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
 - Background processing and integrations other than the implemented LLM and MCP job-publishing paths remain planned; their packages are architectural boundaries only.

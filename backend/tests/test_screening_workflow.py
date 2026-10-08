@@ -71,7 +71,9 @@ def test_empty_skills_not_exclusion_and_profile_compatibility():
     assert result.status == "ready_for_matching"
     assert result.screening_decision is None
     assert set(ScreeningWorkflowState.__annotations__) == {
-        "request", "requirement_context", "source_readiness", "result"}
+        "operation", "request", "requirement_context", "source_readiness", "result",
+        "facts", "deterministic_results", "unresolved_criteria", "semantic_response",
+        "validated_matches", "matching_error"}
     assert "contact" not in supplied.model_dump()
 
 
@@ -96,13 +98,13 @@ def test_only_hard_and_non_hard_classes_and_stable_input_order():
     assert result.requirement_context.hard_requirement_ids == ("a",)
 
 
-def test_workflow_has_no_external_integration_dependencies():
+def test_workflow_has_no_database_or_rag_dependencies():
     import ast
     import inspect
     from app.agents.screening import workflow
     imports = [node.module for node in ast.walk(ast.parse(inspect.getsource(workflow)))
         if isinstance(node, ast.ImportFrom)]
-    assert imports == ["typing", "langgraph.graph", "app.schemas.screening"]
+    assert not any(module.startswith(("app.db", "app.rag", "app.repositories")) for module in imports)
 
 
 @pytest.mark.parametrize("updates", [
