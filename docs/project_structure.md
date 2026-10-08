@@ -311,8 +311,16 @@ checkpointed, and JD approval/revision is not implemented.
   Groq. Inputs/outputs are bounded, evidence IDs/values are allowlisted and
   source locators are server-derived; validation does not prove semantic truth.
   Only synthetic/sample data is appropriate for the current demo.
-- Scoring, ranking, persistence,
-  checkpoint integration (#647498) and API/frontend integration remain **Planned**.
+- **Implemented — #647498:** trusted internal PostgreSQL checkpoint start/resume
+  for the same Screening graph, with opaque thread identity, exact request
+  snapshot guards and strict JSON-safe state boundaries. Default methods remain
+  non-persistent. Actual-graph unit tests verify resumed evaluation without
+  repeating completed matching. **Unverified:** live Screening PostgreSQL
+  cross-process recovery (local checkpoint configuration missing; Docker
+  unavailable on 08 Oct 2026). The opt-in proof uses synthetic data and mocked
+  semantic calls; the earlier checkpoint foundation proof is separate.
+- Scoring, ranking, business candidate persistence, API/frontend checkpoint
+  integration and production access/retention controls remain **Planned**.
   See [Candidate Screening](candidate_screening.md) for graph flow, limits and
   failure behavior. This increment made no live Groq calls.
 

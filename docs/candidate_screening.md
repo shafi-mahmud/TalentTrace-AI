@@ -1,4 +1,4 @@
-# Candidate Screening foundation — #647495–#647497
+# Candidate Screening foundation — #647495–#647498
 
 ## Implemented — preparation, matching and hard-requirement decisions
 
@@ -217,18 +217,83 @@ external Groq.** Use synthetic/sample data only for current verification; no
 production consent/provider governance or authorization is implemented.
 
 No raw qualifications, prompts, responses or secrets are logged by this increment.
-Content is not persisted and does not enter candidate RAG. Prompts treat all input
+Default `prepare()`, `match()` and `screen()` calls do not persist content. The
+explicit checkpointed interface below persists qualifications in the separate
+checkpoint database; content does not enter candidate RAG. Prompts treat all input
 as untrusted data; structured shape and allowlisted evidence reduce fabrication
 risk but do not eliminate injection, prove real-world truth or guarantee semantic
 relevance. Copying a valid fact ID alone cannot prove a semantic conclusion.
 Bounded payloads can fail rather than support large profiles; no retry or lexical
 fallback occurs. Candidate parsing/OCR behavior is unchanged.
 
-## Planned — next WBS tasks
+## Implemented — internal checkpoint recovery (#647498)
 
-- **#647498:** integrate the existing PostgreSQL checkpoint foundation with
-  validated workflow/thread identity. This graph currently compiles with
-  `checkpointer=False`; persistence and resumability are not claimed.
+`backend/app/agents/screening/checkpointed.py` provides trusted internal
+`start_checkpointed_screening()` and `resume_checkpointed_screening()` functions.
+They keep the existing `open_checkpointer()` context open for the entire graph
+invocation and state inspection, then close it. The existing graph definition,
+nodes, decision policy and default non-checkpointed methods are preserved.
+Supplied-saver compilation wraps node/route boundaries; it does not duplicate
+the graph or change the default methods into persistent interfaces.
+With a supplied checkpointer, direct `prepare()`, `match()` and `screen()` calls
+are explicitly rejected before graph invocation; use the start/resume functions
+so input encoding, saver lifetime and thread guards cannot be bypassed by these methods.
+
+Each new execution gets `screening:<opaque UUID>`. An already stored thread is
+rejected on start; resume requires pending state and the exact original validated
+request, including job reference, upload UUID, qualifications and requirements.
+These guards prevent accidental snapshot reuse. They are not authorization or
+an atomic concurrency lock: use one trusted writer per thread.
+
+`checkpoint_state.py` converts only registered workflow fields to JSON primitives
+and reconstructs strict Pydantic models at graph boundaries. UUID and tuple
+representations are restored explicitly without relaxing validation. Evidence,
+record groups and digital/OCR provenance are retained. The existing strict saver
+serializer is unchanged; there is no pickle fallback, custom module allowance,
+new storage system or implicit `saver.setup()`. Missing/unavailable storage raises
+a sanitized infrastructure error, not a candidate decision. No memory fallback
+exists in production.
+
+Normal checkpointed screening runs through to completion. The optional
+`pause_before_evaluation` flag is for controlled verification only: it creates a
+static graph boundary after complete matching and before hard evaluation.
+Resume invokes the same graph with no new input and the saved thread identity.
+Synchronous checkpoint durability is requested before continuing to later nodes.
+This introduces no mandatory human approval or additional semantic call.
+
+**Verified by unit tests — 08 Oct 2026:** the actual graph pauses with complete
+matching, closes/reopens its saver context, and resumes to the expected decision.
+Guards fail if completed deterministic or semantic matching runs again. Strict
+serialization, cross-record education safeguards, provenance, identity rejection,
+decision routes and sanitized storage failures are covered. The in-memory saver
+is an explicit test fixture only; it is not evidence of PostgreSQL persistence.
+
+**Unverified against live PostgreSQL — 08 Oct 2026:** the actual Screening
+cross-process proof could not run because local checkpoint configuration is
+missing and Docker is unavailable. `backend/tests/screening_resume_worker.py`
+implements the two-process proof with synthetic qualifications and a mocked
+semantic provider. With a configured, explicitly provisioned checkpoint database,
+run from `backend/` (Windows/Psycopg uses the helper's selector event loop):
+
+```powershell
+$env:TALENTTRACE_RUN_SCREENING_CHECKPOINT_LIVE = '1'
+.\.venv\Scripts\python.exe -m pytest tests/test_screening_checkpoints.py::test_live_postgres_cross_process_screening_recovery -q
+Remove-Item Env:TALENTTRACE_RUN_SCREENING_CHECKPOINT_LIVE
+```
+
+The proof checks committed matching through a fresh PostgreSQL connection, exits
+the first process, then recovers/evaluates in a second process without repeating
+matching. It performs no live Groq call and does not automatically provision
+checkpoint tables. The earlier foundation's toy-graph proof is separate evidence.
+
+Checkpoint qualifications remain privacy-sensitive even without contact fields.
+Runtime state excludes clients, sessions, secrets and raw CV files; payloads are
+not logged. Access control, retention/deletion, encrypted transport/backups and
+production lifecycle/pooling integration remain required future work. A crash
+inside an unfinished node may repeat that node/provider operation: completed
+boundary recovery does not guarantee exactly-once external effects.
+
+## Planned — application integration and future work
 
 Authentication, approved-job persistence, API/UI integration and production
 privacy controls remain separate work. Tests exercise the actual graph with
