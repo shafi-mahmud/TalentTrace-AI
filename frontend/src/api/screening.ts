@@ -80,14 +80,33 @@ function decision(value: unknown, snapshot: ReviewedJobSnapshot, uploadId: strin
       && reason.code === "hard_requirement_not_demonstrated" && reason.message === "Hard requirement was not demonstrated in the parsed CV.");
 }
 export function isBatchScreeningResponse(v: unknown): v is BatchScreeningResponse {
-  if (!keys(v, ["status", "job_reference", "batch_id", "snapshot", "processed_count", "candidates"])
+  if (!keys(v, ["status", "job_reference", "batch_id", "snapshot", "processed_count", "candidates", "ranking"])
     || v.status !== "processed" || typeof v.batch_id !== "string" || !UUID.test(v.batch_id)
     || !isReviewedSnapshot(v.snapshot) || v.job_reference !== v.snapshot.job_reference
     || !Array.isArray(v.candidates) || v.candidates.length < 1 || v.candidates.length > 20 || v.processed_count !== v.candidates.length) return false;
   const snapshot = v.snapshot;
-  return new Set(v.candidates.map(c => record(c) ? c.upload_id : null)).size === v.candidates.length
+  if (!(new Set(v.candidates.map(c => record(c) ? c.upload_id : null)).size === v.candidates.length
     && v.candidates.every(c => keys(c, ["upload_id", "result", "error_code"]) && typeof c.upload_id === "string" && UUID.test(c.upload_id)
-      && (c.result === null ? c.error_code === "screening_processing_failed" : c.error_code === null && decision(c.result, snapshot, c.upload_id)));
+      && (c.result === null ? c.error_code === "screening_processing_failed" : c.error_code === null && decision(c.result, snapshot, c.upload_id))))) return false;
+  // Verify server ranks against validated evidence; never trust a client/provider score.
+  const candidates = v.candidates as BatchScreeningResponse["candidates"];
+  const expected = candidates.filter(c => c.result?.status === "decision_complete" && c.result.screening_decision === "eligible").map(c => {
+    const matches = c.result!.matching_result.matches;
+    return {upload_id: c.upload_id, supported_count: matches.filter(m => m.match_status === "supported").length,
+      ambiguous_count: matches.filter(m => m.match_status === "ambiguous").length,
+      not_found_count: matches.filter(m => m.match_status === "not_found").length, total_requirements: snapshot.criteria.length};
+  }).sort((a, b) => b.supported_count - a.supported_count || (a.upload_id < b.upload_id ? -1 : a.upload_id > b.upload_id ? 1 : 0));
+  if (!Array.isArray(v.ranking) || v.ranking.length !== expected.length) return false;
+  const ranking = v.ranking;
+  return expected.every((row, i) => {
+    const entry = ranking[i];
+    const rank = 1 + expected.filter(other => other.supported_count > row.supported_count).length;
+    const tied = expected.filter(other => other.supported_count === row.supported_count).length > 1;
+    return keys(entry, ["upload_id", "rank", "tied", "supported_count", "ambiguous_count", "not_found_count", "total_requirements"])
+      && entry.upload_id === row.upload_id && entry.rank === rank && entry.tied === tied
+      && entry.supported_count === row.supported_count && entry.ambiguous_count === row.ambiguous_count
+      && entry.not_found_count === row.not_found_count && entry.total_requirements === row.total_requirements;
+  });
 }
 export async function screenCvBatch(batch: CvUploadResponse, snapshot: ReviewedJobSnapshot): Promise<BatchScreeningResponse> {
   if (!isCvUploadResponse(batch) || !isReviewedSnapshot(snapshot) || batch.job_reference !== snapshot.job_reference) {

@@ -79,6 +79,11 @@ def test_real_screening_graph_semantic_outcomes_and_ocr_evidence(monkeypatch, st
     assert len(matcher.calls) == 1 and len(profiles.calls) == 1
     assert "contact" not in response.text and "qualifications" not in response.text
     assert not any(name in response.json() for name in ["score", "rank"])
+    ranking = response.json()["ranking"]
+    assert len(ranking) == (1 if outcome == "eligible" else 0)
+    if ranking:
+        assert ranking[0]["supported_count"] == ranking[0]["rank"] == 1
+        assert ranking[0]["upload_id"] == str(profile.upload_id)
 
 
 def test_batch_isolates_source_provider_and_unexpected_candidate_failures(monkeypatch):
@@ -98,6 +103,9 @@ def test_batch_isolates_source_provider_and_unexpected_candidate_failures(monkey
     assert rows[0]["result"]["screening_decision"] == rows[-1]["result"]["screening_decision"] == "eligible"
     assert rows[1]["result"]["screening_decision"] is None and rows[2]["result"]["screening_decision"] is None
     assert "PRIVATE" not in response.text
+    ranking = response.json()["ranking"]
+    assert {r["upload_id"] for r in ranking} == {str(values[0].upload_id), str(values[-1].upload_id)}
+    assert all(r["rank"] == 1 and r["tied"] for r in ranking)
 
 
 @pytest.mark.parametrize("confirmation", [False, None, "true", 1])

@@ -1,4 +1,4 @@
-"""One request-scoped parser/screening execution; no ranking or persistence."""
+"""One request-scoped parser/screening execution with deterministic ranking."""
 from uuid import UUID
 
 from app.agents.screening.workflow import CandidateScreeningWorkflow
@@ -6,6 +6,7 @@ from app.schemas.batch_screening import BatchScreeningItem, BatchScreeningRespon
 from app.schemas.job_description import JobDescriptionGenerationRequest
 from app.schemas.screening import ScreeningCriterion, ScreeningInput
 from app.services.candidate_profile import CandidateProfileService
+from app.services.screening_ranking import rank_eligible_candidates
 
 
 class JobSnapshotMismatch(ValueError):
@@ -50,4 +51,6 @@ class BatchScreeningService:
                 candidates.append(BatchScreeningItem(upload_id=profile.upload_id,
                     result=None, error_code="screening_processing_failed"))
         return BatchScreeningResponse(job_reference=job_reference, batch_id=batch_id,
-            snapshot=snapshot, processed_count=len(candidates), candidates=candidates)
+            snapshot=snapshot, processed_count=len(candidates), candidates=candidates,
+            ranking=rank_eligible_candidates([c.result for c in candidates if c.result is not None],
+                job_reference=job_reference, criteria=snapshot.criteria))

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.schemas.cv_upload import JobReference
 from app.schemas.job_description import JobTitle
 from app.schemas.screening import ScreeningCriterion, ScreeningDecisionResult
+from app.services.screening_ranking import rank_eligible_candidates
 
 
 class ScreeningSuggestions(BaseModel):
@@ -60,6 +61,23 @@ class BatchScreeningItem(BaseModel):
         return self
 
 
+class CandidateRankingEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    upload_id: UUID
+    rank: int = Field(strict=True, ge=1, le=20)
+    supported_count: int = Field(strict=True, ge=0, le=50)
+    ambiguous_count: int = Field(strict=True, ge=0, le=50)
+    not_found_count: int = Field(strict=True, ge=0, le=50)
+    total_requirements: int = Field(strict=True, ge=1, le=50)
+    tied: bool = Field(strict=True)
+
+    @model_validator(mode="after")
+    def complete_counts(self):
+        if self.supported_count + self.ambiguous_count + self.not_found_count != self.total_requirements:
+            raise ValueError("Evidence counts must cover all confirmed requirements.")
+        return self
+
+
 class BatchScreeningResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     status: Literal["processed"] = "processed"
@@ -68,6 +86,7 @@ class BatchScreeningResponse(BaseModel):
     snapshot: ReviewedJobSnapshot
     processed_count: int = Field(ge=1, le=20)
     candidates: list[BatchScreeningItem] = Field(min_length=1, max_length=20)
+    ranking: list[CandidateRankingEntry] = Field(max_length=20)
 
     @model_validator(mode="after")
     def consistent_batch(self):
@@ -82,4 +101,9 @@ class BatchScreeningResponse(BaseModel):
                 if (item.result.job_reference != self.job_reference or set(actual) != set(expected)
                     or context.hard_requirement_ids != tuple(c.criterion_id for c in self.snapshot.criteria if c.is_hard)):
                     raise ValueError("Results must refer to the confirmed requirements.")
+        expected_ranking = rank_eligible_candidates(
+            [item.result for item in self.candidates if item.result is not None],
+            job_reference=self.job_reference, criteria=self.snapshot.criteria)
+        if [entry.model_dump() for entry in self.ranking] != expected_ranking:
+            raise ValueError("Ranking must reflect exactly the eligible candidates and confirmed evidence.")
         return self

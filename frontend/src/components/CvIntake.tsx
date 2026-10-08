@@ -103,7 +103,7 @@ export default function CvIntake({suggestions = null}: {suggestions?: ScreeningS
   return <div className="app-shell chat-page">
     <header className="site-header"><a className="brand" href="/">TalentTrace AI</a><span className="workspace-label">Recruiter workspace</span></header>
     <main>
-      <div className="page-intro"><h1>CV intake and screening</h1><p className="page-description">Review job criteria and screen a synthetic CV batch. No ranking or scoring.</p></div>
+      <div className="page-intro"><h1>CV intake and screening</h1><p className="page-description">Review criteria, screen a synthetic CV batch and rank eligible candidates by supported requirements.</p></div>
       <section className="card cv-intake-card" aria-label="Native CV upload">
         <form onSubmit={submit}>
           <fieldset disabled={busy}>

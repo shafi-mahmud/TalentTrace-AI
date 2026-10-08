@@ -36,8 +36,13 @@ export interface ScreeningDecision {
   ambiguous_hard_requirement_ids: string[];
   exclusion_reasons: {criterion_id: string; code: "hard_requirement_not_demonstrated"; message: string}[];
 }
+export interface CandidateRankingEntry {
+  upload_id: string; rank: number; tied: boolean;
+  supported_count: number; ambiguous_count: number; not_found_count: number; total_requirements: number;
+}
 export interface BatchScreeningResponse {
   status: "processed"; job_reference: string; batch_id: string;
   snapshot: ReviewedJobSnapshot; processed_count: number;
   candidates: {upload_id: string; result: ScreeningDecision | null; error_code: "screening_processing_failed" | null}[];
+  ranking: CandidateRankingEntry[];
 }

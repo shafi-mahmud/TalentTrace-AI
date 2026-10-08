@@ -18,6 +18,7 @@ const batch: CvUploadResponse = {status: "uploaded", job_reference: reference, b
   files: [{upload_id: id, file_type: "pdf", size_bytes: 200}]};
 function result(): BatchScreeningResponse {
   return {status: "processed", job_reference: reference, batch_id: batchId, snapshot: structuredClone(snapshot), processed_count: 1,
+    ranking: [{upload_id: id, rank: 1, tied: false, supported_count: 1, ambiguous_count: 0, not_found_count: 0, total_requirements: 1}],
     candidates: [{upload_id: id, error_code: null, result: {job_reference: reference, upload_id: id, status: "decision_complete",
       screening_decision: "eligible", unmet_hard_requirement_ids: [], ambiguous_hard_requirement_ids: [], exclusion_reasons: [],
       matching_result: {job_reference: reference, upload_id: id, parsing_status: "parsed", status: "matching_complete", error_code: null,
@@ -121,6 +122,7 @@ test("results render outcome, mandatory requirement and semantic OCR evidence se
 test("exclusion and ambiguity retain evidence and never show as eligibility", () => {
   for (const status of ["not_found", "ambiguous"] as const) {
     const value = result(), row = value.candidates[0].result!;
+    value.ranking = [];
     row.matching_result.matches[0].match_status = status;
     if (status === "not_found") {
       row.matching_result.matches[0].evidence = [];
@@ -130,12 +132,12 @@ test("exclusion and ambiguity retain evidence and never show as eligibility", ()
     assert.ok(isBatchScreeningResponse(value));
     const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
     assert.ok(html.includes(status === "not_found" ? "Excluded" : "Needs review"));
-    assert.ok(!html.includes("Eligible"));
+    assert.ok(!html.includes("Rank 1"));
   }
 });
 
 test("candidate processing failure is visible and has no exclusion verdict", () => {
-  const value = result(); value.candidates[0].result = null; value.candidates[0].error_code = "screening_processing_failed";
+  const value = result(); value.ranking = []; value.candidates[0].result = null; value.candidates[0].error_code = "screening_processing_failed";
   assert.ok(isBatchScreeningResponse(value));
   const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
   assert.ok(html.includes("Processing failed") && html.includes("no candidate decision"));
@@ -145,6 +147,7 @@ test("candidate processing failure is visible and has no exclusion verdict", () 
 test("provider and source failure remain non-decisions", () => {
   for (const status of ["matching_failed", "source_unavailable"] as const) {
     const value = result(), row = value.candidates[0].result!;
+    value.ranking = [];
     row.status = status; row.screening_decision = null;
     row.matching_result.status = status; row.matching_result.matches = [];
     row.matching_result.parsing_status = status === "source_unavailable" ? "parsing_failed" : "parsed";
@@ -165,4 +168,67 @@ test("React escapes evidence and job text rather than interpreting markup", () =
 
 test("unsupported chat behavior remains unchanged", () => {
   assert.ok(isRecruiterChatResponse({status: "unsupported", intent: "unsupported", assistant_message: "Use the draft action."}));
+});
+
+test("ranking displays explicit ties in server order with expandable provenance", () => {
+  const value = result();
+  const otherId = "12345678-1234-4234-8234-123456789abc";
+  const other = structuredClone(value.candidates[0]);
+  other.upload_id = otherId; other.result!.upload_id = otherId; other.result!.matching_result.upload_id = otherId;
+  value.candidates.push(other); value.processed_count = 2;
+  value.ranking[0].tied = true;
+  value.ranking.unshift({...value.ranking[0], upload_id: otherId});
+  assert.ok(isBatchScreeningResponse(value));
+  const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
+  assert.equal((html.match(/Rank 1/g) ?? []).length, 2);
+  assert.equal((html.match(/Tied/g) ?? []).length, 2);
+  assert.ok(html.indexOf("Upload 2") < html.indexOf("Upload 1"));
+  assert.ok(html.includes("1 of 1 requirements supported") && html.includes("<details") && html.includes("OCR"));
+  assert.ok(!html.includes("Partially Met") && !html.includes("100"));
+  value.ranking.reverse();
+  assert.ok(!isBatchScreeningResponse(value));
+});
+
+test("zero-support eligible candidates retain separate ambiguous and not-found counts", () => {
+  const value = result(), row = value.candidates[0].result!;
+  value.snapshot.criteria[0].is_hard = false;
+  row.matching_result.requirement_context.hard_requirement_ids = [];
+  row.matching_result.matches[0].match_status = "ambiguous";
+  value.ranking[0].supported_count = 0; value.ranking[0].ambiguous_count = 1;
+  assert.ok(isBatchScreeningResponse(value));
+  let html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
+  assert.ok(html.includes("0 of 1 requirements supported") && html.includes("1 ambiguous"));
+  row.matching_result.matches[0].match_status = "not_found";
+  row.matching_result.matches[0].evidence = [];
+  value.ranking[0].ambiguous_count = 0; value.ranking[0].not_found_count = 1;
+  assert.ok(isBatchScreeningResponse(value));
+  html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
+  assert.ok(html.includes("1 not found"));
+});
+
+test("runtime validation rejects falsified ranks/counts, missing rankings and noneligible members", () => {
+  for (const mutate of [
+    (r: BatchScreeningResponse) => {r.ranking[0].supported_count = 0;},
+    (r: BatchScreeningResponse) => {r.ranking[0].rank = 2;},
+    (r: BatchScreeningResponse) => {r.ranking[0].rank = 1.5;},
+    (r: BatchScreeningResponse) => {r.ranking[0].tied = true;},
+    (r: BatchScreeningResponse) => {r.ranking[0].upload_id = batchId;},
+    (r: BatchScreeningResponse) => {r.ranking = [];},
+    (r: BatchScreeningResponse) => {r.candidates[0].result = null; r.candidates[0].error_code = "screening_processing_failed";},
+  ]) {const value = result(); mutate(value); assert.ok(!isBatchScreeningResponse(value));}
+});
+
+test("higher supported counts precede lower counts and do not count preferred ambiguity", () => {
+  const value = result(), other = structuredClone(value.candidates[0]);
+  value.snapshot.criteria[0].is_hard = false;
+  value.candidates[0].result!.matching_result.requirement_context.hard_requirement_ids = [];
+  other.upload_id = batchId; other.result!.upload_id = batchId; other.result!.matching_result.upload_id = batchId;
+  other.result!.matching_result.requirement_context.hard_requirement_ids = [];
+  other.result!.matching_result.matches[0].match_status = "ambiguous";
+  value.candidates.push(other); value.processed_count = 2;
+  value.ranking.push({upload_id: batchId, rank: 2, tied: false, supported_count: 0, ambiguous_count: 1, not_found_count: 0, total_requirements: 1});
+  assert.ok(isBatchScreeningResponse(value));
+  const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
+  assert.ok(html.indexOf("Upload 1") < html.indexOf("Upload 2"));
+  assert.ok(html.includes("Rank 2") && html.includes("1 ambiguous"));
 });

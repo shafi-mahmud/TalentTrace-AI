@@ -322,8 +322,9 @@ endpoint returns contact-free results with the reviewed snapshot and batch IDs.
 The CV workspace displays outcomes and per-requirement exact/semantic evidence,
 including digital/OCR page/block locators. It validates response identity, criterion
 coverage and hard-decision consistency before displaying results. A response from
-an older selected JD is discarded after its review context changes. There is no
-candidate ranking, weighted scoring, new graph or checkpoint call in this route.
+an older selected JD is discarded after its review context changes. The route now
+adds deterministic requirement-based ranking as described below; weighted scoring,
+new graphs and checkpoint calls are not part of this integration.
 
 **Automated verification only:** synthetic stored-PDF upload/extraction/parsing and
 actual Screening graph execution passed with mocked external providers. Tests cover
@@ -332,7 +333,32 @@ semantic decisions/provenance and UI validation/rendering. No live Groq call or
 manual browser screening verification is claimed. Use synthetic local data only.
 Each new request may repeat parsing/OCR/provider calls; originals are unchanged.
 Durable profiles/applications/results, ownership/authentication, retention/deletion,
-ranking and production processing remain planned.
+weighted scoring and production processing remain planned.
+
+## Implemented — requirement-based ranking
+
+`screening_ranking.rank_eligible_candidates()` counts supported requirements only
+for completed eligible decisions from the same reviewed snapshot. Deterministic
+and semantic support count equally, including preferred requirements. Sort order
+is descending supported count; ties share competition rank (`1, 1, 3`) and UUID
+controls display order only. Zero supported requirements can still be eligible
+when no mandatory requirement fails; the count remains visibly zero.
+
+The validated batch ranking contract preserves supported, ambiguous and not-found
+counts. The CV workspace places eligible candidates in ranking order, retaining
+expandable evidence/provenance. Excluded, insufficient-evidence, source-unavailable
+and processing-failed candidates remain visible outside the ranking. Operational
+failure never becomes exclusion. No contact data, new LLM ranking call, graph,
+database or 0–100 suitability score is used. Ranking is session-only and local to
+one job reference, batch and confirmed criteria snapshot.
+
+**Trainer classification gap:** evidence statuses do not automatically establish
+Met / Partially Met / Unmet. In particular, ambiguous means uncertain, not partially
+met. Defining partial fulfilment needs an explicit reviewed criterion policy; this
+increment preserves the existing evidence statuses instead of guessing.
+
+Synthetic tests cover rank/count validation, ties, failure isolation, evidence and
+contact independence; no live provider or manual browser ranking test is claimed.
 
 ## Planned — production integration and future work
 
@@ -341,7 +367,7 @@ privacy controls remain separate work. Tests exercise the actual graph with
 synthetic inputs and mocked Groq calls, including both source paths, preparation
 compatibility, direct-match bypass, semantic evidence validation, failure states,
 hard/preferred criteria, missing-over-ambiguous precedence and all decision routes.
-Scoring, ranking and job-profile persistence remain planned.
+Weighted scoring and job-profile persistence remain planned.
 
 **Verified — 08 Oct 2026:** one authorized synthetic #647496 smoke call through
 the actual `match()` graph returned HTTP 200 from Groq `openai/gpt-oss-120b` with
