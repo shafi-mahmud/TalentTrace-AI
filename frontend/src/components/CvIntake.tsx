@@ -6,7 +6,7 @@ import type { CvExtractionResponse } from "../types/cvExtraction";
 import { extractCvs } from "../api/cvExtraction";
 import { runCvOcr } from "../api/cvOcr";
 import type { CvOcrResponse } from "../types/cvOcr";
-import { CvExtractionSummary, CvOcrSummary, CvUploadConfirmation, SelectedCvFiles } from "./cvIntakePresentation";
+import { CvExtractionSummary, CvOcrSummary, CvUploadConfirmation, SelectedCvFiles, ScreeningWorkflowSteps, screeningPrerequisiteMessage } from "./cvIntakePresentation";
 import { extractCandidateProfiles } from "../api/candidateProfiles";
 import type { CandidateProfilesResponse } from "../types/candidateProfile";
 import { CandidateProfileAction, CandidateProfilesSummary } from "./candidateProfilesPresentation";
@@ -33,6 +33,8 @@ export default function CvIntake({suggestions = null}: {suggestions?: ScreeningS
   const [screeningBusy, setScreeningBusy] = useState(false);
   const screeningRevision = useRef(0);
   const busy = loading || extracting || processingOcr || parsing || screeningBusy;
+  const screeningPrerequisite = screeningPrerequisiteMessage({busy, hasSuggestions: Boolean(suggestions), hasBatch: Boolean(result),
+    hasSnapshot: Boolean(snapshot), referenceMatches: Boolean(result && snapshot && snapshot.job_reference === result.job_reference)});
   function invalidateCriteria() { screeningRevision.current++; setSnapshot(null); setScreening(null); }
   useEffect(() => { invalidateCriteria(); }, [suggestions]);
   function clearProfiles() { setProfiles(null); setOcrAttempted(false); }
@@ -101,9 +103,9 @@ export default function CvIntake({suggestions = null}: {suggestions?: ScreeningS
   }
 
   return <div className="app-shell chat-page">
-    <header className="site-header"><a className="brand" href="/">TalentTrace AI</a><span className="workspace-label">Recruiter workspace</span></header>
     <main>
-      <div className="page-intro"><h1>CV intake and screening</h1><p className="page-description">Review criteria, screen a synthetic CV batch and rank eligible candidates by supported requirements.</p></div>
+      <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>CV intake and screening</h1><p className="page-description">Review the job requirements, add a CV batch and inspect evidence-backed screening results.</p></div>
+      <ScreeningWorkflowSteps hasSuggestions={Boolean(suggestions)} hasSnapshot={Boolean(snapshot)} hasBatch={Boolean(result)} isScreened={Boolean(screening)} />
       <section className="card cv-intake-card" aria-label="Native CV upload">
         <form onSubmit={submit}>
           <fieldset disabled={busy}>
@@ -134,9 +136,12 @@ export default function CvIntake({suggestions = null}: {suggestions?: ScreeningS
         {suggestions ? <ScreeningCriteriaReview key={JSON.stringify(suggestions) + reference} suggestions={suggestions} jobReference={reference} disabled={busy}
           onInvalidate={invalidateCriteria} onConfirm={value => {setSnapshot(value); setScreening(null); setError("");}} />
           : <p className="helper-text">Generate a JD in the assistant and choose Review screening criteria to begin.</p>}
-        {snapshot && <p role="status">Criteria confirmed for {snapshot.job_reference} · Session only, not saved in PostgreSQL.</p>}
-        <button type="button" className="button button-primary" disabled={busy || !result || !snapshot || snapshot.job_reference !== result.job_reference} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
-        <p className="helper-text">Resolves the stored files and parses once per screening request. Synthetic data only; provider calls may repeat on another attempt.</p>
+        {snapshot && <p role="status" className="session-confirmation">Criteria confirmed for <strong>{snapshot.job_reference}</strong><span> Session only; not saved as a job profile.</span></p>}
+        <div className="screening-action">
+          <div><h2>Screen this CV batch</h2><p className="helper-text">Uses the stored files and confirmed criteria. Parsing runs as part of screening.</p></div>
+          <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
+        </div>
+        {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
         {screening && <ScreeningResults result={screening} />}
       </section>
     </main>

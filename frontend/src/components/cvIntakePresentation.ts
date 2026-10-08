@@ -5,10 +5,42 @@ import type { CvOcrResponse } from "../types/cvOcr";
 
 export type WorkspaceMode = "jd" | "cv";
 
+export function screeningPrerequisiteMessage({busy, hasSuggestions, hasBatch, hasSnapshot, referenceMatches}: {
+  busy: boolean; hasSuggestions: boolean; hasBatch: boolean; hasSnapshot: boolean; referenceMatches: boolean;
+}): string | null {
+  if (busy) return "Wait for the current operation to finish.";
+  if (!hasSuggestions) return "Generate a JD and choose Review screening criteria first.";
+  if (!hasBatch) return "Upload a CV batch for this Job Reference first.";
+  if (!hasSnapshot) return "Review and explicitly confirm screening criteria for this job.";
+  if (!referenceMatches) return "The confirmed Job Reference must match the uploaded batch.";
+  return null;
+}
+
 export function WorkspaceNavigation({mode, onChange}: {mode: WorkspaceMode; onChange: (mode: WorkspaceMode) => void}) {
-  return h("nav", {className: "workspace-modes", "aria-label": "Recruiter workspace views"},
-    h("button", {type: "button", "aria-pressed": mode === "jd", onClick: () => onChange("jd")}, "JD Assistant"),
-    h("button", {type: "button", "aria-pressed": mode === "cv", onClick: () => onChange("cv")}, "CV Intake"));
+  return h("header", {className: "app-topbar"},
+    h("div", {className: "app-topbar-inner"},
+      h("a", {className: "brand", href: "/", "aria-label": "TalentTrace AI home"},
+        h("span", {className: "brand-mark", "aria-hidden": true}, "T"),
+        h("span", null, "TalentTrace", h("span", {className: "brand-ai"}, " AI"))),
+      h("nav", {className: "workspace-modes", "aria-label": "Recruiter workspace views"},
+        h("button", {type: "button", "aria-pressed": mode === "jd", onClick: () => onChange("jd")}, "JD Assistant"),
+        h("button", {type: "button", "aria-pressed": mode === "cv", onClick: () => onChange("cv")}, "CV Intake"))));
+}
+
+export function ScreeningWorkflowSteps({hasSuggestions, hasSnapshot, hasBatch, isScreened}: {
+  hasSuggestions: boolean; hasSnapshot: boolean; hasBatch: boolean; isScreened: boolean;
+}) {
+  const steps = [
+    {label: "Review job criteria", complete: hasSnapshot, available: hasSuggestions},
+    {label: "Upload CV batch", complete: hasBatch, available: hasSnapshot},
+    {label: "Screen candidates", complete: isScreened, available: hasBatch && hasSnapshot},
+    {label: "Review results", complete: isScreened, available: isScreened},
+  ];
+  return h("ol", {className: "workflow-steps", "aria-label": "Screening workflow progress"},
+    ...steps.map((step, index) => h("li", {key: step.label, className: step.complete ? "is-complete" : step.available ? "is-current" : "is-upcoming"},
+      h("span", {className: "workflow-step-number", "aria-hidden": true}, step.complete ? "✓" : String(index + 1)),
+      h("span", null, step.label),
+      h("span", {className: "sr-only"}, step.complete ? " complete" : step.available ? " available" : " not yet available"))));
 }
 
 export function SelectedCvFiles({files, onRemove, disabled}: {

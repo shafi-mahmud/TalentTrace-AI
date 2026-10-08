@@ -6,29 +6,51 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
   const labels = {eligible: "Eligible", excluded: "Excluded", insufficient_evidence: "Needs review"};
   const coverageLabels = {met: "Met", partially_met: "Partially met", unmet: "Unmet — not demonstrated in the CV",
     uncertain: "Uncertain", not_evaluated: "Not evaluated"};
+  const excludedCount = result.candidates.filter(candidate => candidate.result?.screening_decision === "excluded").length;
+  const reviewCount = result.candidates.filter(candidate => candidate.result?.screening_decision === "insufficient_evidence").length;
+  const notEvaluatedCount = result.candidates.filter(candidate => candidate.overall_coverage === "not_evaluated").length;
   return h("section", {className: "screening-results", "aria-label": "Candidate screening results"},
-    h("h2", null, "Screening results"),
-    h("p", null, `${result.snapshot.job_title} · ${result.job_reference}`),
+    h("div", {className: "results-heading"}, h("div", null, h("p", {className: "eyebrow"}, "Batch complete"),
+      h("h2", null, "Screening results"), h("p", {className: "results-job-title"}, `${result.snapshot.job_title} · ${result.job_reference}`)),
+      h("span", {className: "results-session-badge"}, "Session results")),
     h("p", {className: "helper-text"}, "Session-only ranking within this job, batch and confirmed criteria. Supported requirements count equally; no suitability score. Human review required."),
     h("p", {className: "helper-text"}, "Ties share a rank; upload ID only controls display order. Ambiguous means uncertain evidence, not partially met."),
+    h("div", {className: "results-summary", "aria-label": "Candidate outcome summary"},
+      summaryCard("Candidates processed", result.processed_count, "All batch files"),
+      summaryCard("Eligible", result.ranking.length, "Ranked by supported requirements"),
+      summaryCard("Excluded", excludedCount, "Mandatory requirement not demonstrated"),
+      summaryCard("Needs review", reviewCount, "Uncertain evidence"),
+      summaryCard("Not evaluated", notEvaluatedCount, "Source or processing issue")),
     renderGroups());
+
+  function summaryCard(label: string, count: number, description: string) {
+    return h("article", {key: label, className: "results-summary-card"},
+      h("span", null, label), h("strong", null, count), h("small", null, description));
+  }
 
   function card(candidate: BatchScreeningResponse["candidates"][number], ranking?: CandidateRankingEntry) {
       const index = result.candidates.findIndex(c => c.upload_id === candidate.upload_id);
       const decision = candidate.result;
-      return h("article", {key: candidate.upload_id, className: "cv-candidate-profile"},
-        h("h3", null, `Upload ${index + 1}`),
-        h("p", null, `Overall requirement coverage: ${coverageLabels[candidate.overall_coverage]}`),
+      const supported = decision?.status === "decision_complete" ? decision.matching_result.matches.filter(m => m.match_status === "supported").length : 0;
+      const ambiguous = decision?.status === "decision_complete" ? decision.matching_result.matches.filter(m => m.match_status === "ambiguous").length : 0;
+      const notFound = decision?.status === "decision_complete" ? decision.matching_result.matches.filter(m => m.match_status === "not_found").length : 0;
+      const outcome = !decision ? "Processing failed — no candidate decision."
+        : decision.status === "source_unavailable" ? "Source unavailable — no candidate decision."
+        : decision.status === "matching_failed" ? "Matching failed — no candidate decision."
+        : labels[decision.screening_decision!];
+      return h("article", {key: candidate.upload_id, className: "cv-candidate-profile candidate-result-card"},
+        h("div", {className: "candidate-card-heading"}, h("h4", null, `Candidate ${String(index + 1).padStart(2, "0")} · Upload ${index + 1}`),
+          h("span", {className: `outcome-badge outcome-${decision?.screening_decision ?? decision?.status ?? "failed"}`}, outcome)),
+        h("div", {className: "candidate-facts"},
+          h("p", {className: "coverage-label"}, `Overall requirement coverage: ${coverageLabels[candidate.overall_coverage]}`),
+          ranking ? h("p", {className: "rank-label"}, h("strong", null, `Rank ${ranking.rank}${ranking.tied ? " · Tied" : ""}`),
+            h("span", null, `${ranking.supported_count} of ${ranking.total_requirements} supported`)) : null),
         decision?.status === "decision_complete" ? h("p", {className: "helper-text"},
-          `${decision.matching_result.matches.filter(m => m.match_status === "supported").length} of ${result.snapshot.criteria.length} requirements supported. Overall coverage is separate from the screening decision.`) : null,
-        ranking ? h("p", {className: "helper-text"}, `Rank ${ranking.rank}${ranking.tied ? " · Tied" : ""} · ${ranking.supported_count} of ${ranking.total_requirements} requirements supported · ${ranking.ambiguous_count} ambiguous · ${ranking.not_found_count} not found`) : null,
-        h("p", {role: "status"}, !decision ? "Processing failed — no candidate decision."
-          : decision.status === "source_unavailable" ? "Source unavailable — no candidate decision."
-          : decision.status === "matching_failed" ? "Matching failed — no candidate decision."
-          : labels[decision.screening_decision!]),
+          `${supported} of ${result.snapshot.criteria.length} requirements supported · ${ambiguous} ambiguous · ${notFound} not found. Overall coverage is separate from the screening decision.`) : null,
         decision?.exclusion_reasons.length ? h("ul", null, ...decision.exclusion_reasons.map(reason =>
           h("li", {key: reason.criterion_id}, `${criteria.get(reason.criterion_id)?.description}: ${reason.message}`))) : null,
-        decision?.matching_result.matches.map(match => {
+        decision?.status === "decision_complete" ? h("details", {className: "evidence-disclosure"}, h("summary", null, "Review requirement evidence"),
+          ...decision.matching_result.matches.map(match => {
           const criterion = criteria.get(match.criterion_id)!;
           return h("details", {key: match.criterion_id, className: "requirement-evidence"},
             h("summary", null, `${criterion.description} · ${criterion.is_hard ? "Mandatory" : "Preferred"} · ${match.match_status.replaceAll("_", " ")}`),
@@ -36,7 +58,7 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
             match.evidence.length ? h("ul", null, ...match.evidence.map(evidence => h("li", {key: evidence.fact_id}, evidence.value,
               h("small", {className: "helper-text"}, ` — ${evidence.source.kind === "page" ? "Page" : "Block"} ${evidence.source.number} · ${evidence.source.method === "ocr" ? "OCR" : "Digital"}`))))
               : h("p", null, "No supporting evidence identified in supplied qualifications."));
-        }));
+        })) : null);
   }
   function renderGroups() {
     const byId = new Map(result.candidates.map(c => [c.upload_id, c]));

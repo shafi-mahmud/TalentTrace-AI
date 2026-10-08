@@ -142,7 +142,7 @@ test("candidate processing failure is visible and has no exclusion verdict", () 
   assert.ok(isBatchScreeningResponse(value));
   const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
   assert.ok(html.includes("Processing failed") && html.includes("no candidate decision"));
-  assert.ok(!html.includes("Excluded"));
+  assert.ok(!html.includes("outcome-excluded"));
 });
 
 test("provider and source failure remain non-decisions", () => {
@@ -156,7 +156,7 @@ test("provider and source failure remain non-decisions", () => {
     row.matching_result.error_code = status === "matching_failed" ? "semantic_provider_failed" : null;
     assert.ok(isBatchScreeningResponse(value));
     const html = renderToStaticMarkup(createElement(ScreeningResults, {result: value}));
-    assert.ok(html.includes("no candidate decision") && !html.includes("Excluded"));
+    assert.ok(html.includes("no candidate decision") && !html.includes("outcome-excluded"));
   }
 });
 
