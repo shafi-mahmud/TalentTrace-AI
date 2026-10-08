@@ -14,10 +14,6 @@ export function replyToChatMessage(reply: RecruiterChatResponse): ChatMessage {
 
 export function RecruiterChatPage({ children }: { children: ReactNode }) {
   return h("div", { className: "app-shell chat-page" },
-    h("header", { className: "site-header" },
-      h("a", { className: "brand", href: "/", "aria-label": "TalentTrace AI home" },
-        h("span", { className: "brand-mark", "aria-hidden": true }, "T"), "TalentTrace AI"),
-      h("span", { className: "workspace-label" }, "Recruiter workspace")),
     h("main", null,
       h("div", { className: "page-intro" },
         h("h1", null, "Job description assistant"),
