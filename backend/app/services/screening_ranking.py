@@ -5,6 +5,22 @@ from collections.abc import Sequence
 from app.schemas.screening import ScreeningCriterion, ScreeningDecisionResult
 
 
+def validate_screening_snapshot(supplied: ScreeningDecisionResult, *, job_reference: str,
+                                criteria: Sequence[ScreeningCriterion]) -> ScreeningDecisionResult:
+    """Revalidate evidence and category/hard-flag association before deriving summaries."""
+    criteria = tuple(ScreeningCriterion.model_validate(c.model_dump(warnings=False)) for c in criteria)
+    if not 1 <= len(criteria) <= 50 or len({c.criterion_id.casefold() for c in criteria}) != len(criteria):
+        raise ValueError("Summaries require bounded unique confirmed requirements.")
+    result = ScreeningDecisionResult.model_validate(supplied.model_dump(warnings=False))
+    context = result.matching_result.requirement_context
+    if (result.job_reference != job_reference or any(getattr(context, f"{category}_ids") != tuple(
+            c.criterion_id for c in criteria if c.category == category)
+            for category in ("skill", "experience", "education"))
+            or context.hard_requirement_ids != tuple(c.criterion_id for c in criteria if c.is_hard)):
+        raise ValueError("Results must share the confirmed job snapshot.")
+    return result
+
+
 def rank_eligible_candidates(results: Sequence[ScreeningDecisionResult], *,
                              job_reference: str, criteria: Sequence[ScreeningCriterion]) -> list[dict]:
     """Competition ranks (1, 1, 3); UUID ordering only stabilizes tied display."""
@@ -15,14 +31,9 @@ def rank_eligible_candidates(results: Sequence[ScreeningDecisionResult], *,
         raise ValueError("Ranking requires unique requirements.")
     rows, seen = [], set()
     for supplied in results:
-        result = ScreeningDecisionResult.model_validate(supplied.model_dump(warnings=False))
-        context = result.matching_result.requirement_context
-        if (result.job_reference != job_reference or result.upload_id in seen
-                or any(getattr(context, f"{category}_ids") != tuple(
-                    c.criterion_id for c in criteria if c.category == category)
-                    for category in ("skill", "experience", "education"))
-                or context.hard_requirement_ids != tuple(c.criterion_id for c in criteria if c.is_hard)):
-            raise ValueError("Ranking results must share one confirmed job snapshot.")
+        result = validate_screening_snapshot(supplied, job_reference=job_reference, criteria=criteria)
+        if result.upload_id in seen:
+            raise ValueError("Ranking requires unique uploads.")
         seen.add(result.upload_id)
         if result.status != "decision_complete":
             continue
