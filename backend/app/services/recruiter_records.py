@@ -126,6 +126,7 @@ def _validated_job_view(job):
     from app.schemas.batch_screening import ScreeningSuggestions
     from app.schemas.job_description import JobDescriptionGenerationResponse
     from app.schemas.recruiter_chat import ScreeningSuggestionSource
+    from app.schemas.candidate_score import ScoringWeights
     suggestions = ScreeningSuggestions.model_validate(job.suggestions)
     sources = [ScreeningSuggestionSource.model_validate(source) for source in job.sources]
     snapshot = ReviewedJobSnapshot.model_validate(job.confirmed_snapshot) if job.confirmed_snapshot else None
@@ -134,6 +135,7 @@ def _validated_job_view(job):
         snapshot.criteria != suggestions.criteria))):
         raise ValueError("Invalid stored job association.")
     return {"id": str(job.id), "job_reference": job.job_reference, "job_title": job.job_title,
+            "scoring_weights": ScoringWeights.model_validate(job.scoring_weights or {}).model_dump(),
             "revision": job.revision, "conversation_id": str(job.conversation_id) if job.conversation_id else None,
             "suggestions": suggestions.model_dump(mode="json"),
             "sources": [s.model_dump(mode="json", exclude_none=True) for s in sources],

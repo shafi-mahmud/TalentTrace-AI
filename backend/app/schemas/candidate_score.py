@@ -51,7 +51,7 @@ class CandidateScore(BaseModel):
     upload_id: UUID
     screening_decision: ScreeningOutcome | None
     status: Literal["scored", "not_evaluated"]
-    reason: Literal["screening_incomplete", "not_eligible", "uncertain_evidence", "missing_dimension_criteria"] | None
+    reason: Literal["processing_failed", "screening_incomplete", "not_eligible", "uncertain_evidence", "missing_dimension_criteria"] | None
     weights: ScoringWeights
     score: float | None = Field(ge=0, le=100)
     dimensions: tuple[DimensionScore, ...] = Field(max_length=3)

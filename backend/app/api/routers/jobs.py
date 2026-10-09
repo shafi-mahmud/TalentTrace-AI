@@ -11,6 +11,8 @@ from app.schemas.batch_screening import ReviewedJobSnapshot, ScreeningSuggestion
 from app.schemas.job_description import JobTitle
 from app.schemas.recruiter_chat import RecruiterChatResponse
 from app.schemas.screening import ScreeningCriterion
+from app.schemas.candidate_score import ScoringWeights
+from app.services.score_records import load_scores, ScoringBatch
 from app.services.recruiter_records import job_view, owned_job
 from pydantic import TypeAdapter, ValidationError
 
@@ -32,6 +34,7 @@ class CriteriaUpdate(BaseModel):
     revision: int = Field(ge=1)
     criteria: list[ScreeningCriterion] = Field(min_length=1, max_length=50)
     confirmed: bool
+    weights: ScoringWeights = Field(default_factory=ScoringWeights)
 
     @field_validator("criteria")
     @classmethod
@@ -70,6 +73,7 @@ async def update_criteria(job_id: UUID, body: CriteriaUpdate, user=Depends(curre
     ids = {item.criterion_id for item in body.criteria}
     job.sources = [source for source in job.sources if source["criterion_id"] in ids]
     job.confirmed_snapshot = snapshot.model_dump(mode="json") if body.confirmed else None
+    job.scoring_weights = body.weights.model_dump()
     job.revision += 1
     await session.commit()
     return job_view(job)
@@ -80,6 +84,12 @@ async def conversations(user=Depends(current_recruiter), session=Depends(databas
     rows = (await session.scalars(select(RecruiterConversation).where(RecruiterConversation.recruiter_id == user.id)
                                  .order_by(RecruiterConversation.expires_at.desc()).limit(100))).all()
     return [{"id": str(row.id), "expires_at": row.expires_at.isoformat()} for row in rows]
+
+
+@router.get("/jobs/{job_id}/batches/{batch_id}/scores", response_model=ScoringBatch)
+async def saved_scores(job_id: UUID, batch_id: UUID, user=Depends(current_recruiter), session=Depends(database_session)):
+    job = await owned_job(session, user.id, job_id, lock=True)
+    return await load_scores(session, job, batch_id)
 
 
 @router.get("/conversations/{conversation_id}")

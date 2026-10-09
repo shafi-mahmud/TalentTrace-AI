@@ -2,7 +2,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, CheckConstraint, Float
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -56,3 +56,21 @@ class JobProfile(Base):
     # Exact validated approved API snapshot. Edits/revisions clear it atomically.
     confirmed_snapshot: Mapped[dict | None] = mapped_column(JSONB)
     revision: Mapped[int] = mapped_column(default=1)
+    scoring_weights: Mapped[dict] = mapped_column(JSONB, default=lambda: {"skill": 50, "experience": 30, "education": 20})
+
+
+class CandidateScoreRecord(Base):
+    __tablename__ = "candidate_scores"
+    __table_args__ = (
+        UniqueConstraint("job_id", "batch_id", "upload_id", "criteria_revision", "scoring_version", name="uq_candidate_score_version"),
+        CheckConstraint("criteria_revision >= 1", name="ck_score_revision"),
+        CheckConstraint("score IS NULL OR (score >= 0 AND score <= 100)", name="ck_score_range"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    job_id: Mapped[UUID] = mapped_column(ForeignKey("job_profiles.id"), index=True)
+    batch_id: Mapped[UUID] = mapped_column(index=True)
+    upload_id: Mapped[UUID] = mapped_column()
+    criteria_revision: Mapped[int] = mapped_column()
+    scoring_version: Mapped[str] = mapped_column(String(40))
+    score: Mapped[float | None] = mapped_column(Float)
+    payload: Mapped[dict] = mapped_column(JSONB)

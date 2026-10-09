@@ -9,6 +9,7 @@ from app.schemas.cv_upload import JobReference
 from app.schemas.job_description import JobTitle
 from app.schemas.screening import ScreeningCriterion, ScreeningDecisionResult
 from app.services.screening_ranking import rank_eligible_candidates
+from app.services.score_records import ScoringBatch
 
 
 class ScreeningSuggestions(BaseModel):
@@ -110,6 +111,7 @@ class BatchScreeningResponse(BaseModel):
     processed_count: int = Field(ge=1, le=20)
     candidates: list[BatchScreeningItem] = Field(min_length=1, max_length=20)
     ranking: list[CandidateRankingEntry] = Field(max_length=20)
+    scoring: ScoringBatch | None = None
 
     @model_validator(mode="after")
     def consistent_batch(self):
@@ -129,4 +131,15 @@ class BatchScreeningResponse(BaseModel):
             job_reference=self.job_reference, criteria=self.snapshot.criteria)
         if [entry.model_dump() for entry in self.ranking] != expected_ranking:
             raise ValueError("Ranking must reflect exactly the eligible candidates and confirmed evidence.")
+        if self.scoring is not None:
+            from app.services.candidate_scoring import score_candidate
+            if self.scoring.job_reference != self.job_reference or self.scoring.batch_id != self.batch_id or {c.upload_id for c in self.scoring.candidates} != set(ids):
+                raise ValueError("Scoring must match this batch.")
+            for item in self.candidates:
+                score = next(c for c in self.scoring.candidates if c.upload_id == item.upload_id)
+                if item.result is not None and score != score_candidate(item.result, job_reference=self.job_reference,
+                    criteria=self.snapshot.criteria, weights=self.scoring.weights):
+                    raise ValueError("Scores must reflect validated screening evidence.")
+                if item.result is None and score.reason != "processing_failed":
+                    raise ValueError("Processing errors must not have scores.")
         return self
