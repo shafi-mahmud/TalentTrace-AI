@@ -3,10 +3,13 @@
 ## Implemented
 
 `schemas/candidate_score.py` and `services/candidate_scoring.py` provide an
-internal deterministic score from existing server-validated Screening results.
-No new matching, provider calls, workflow, tables or candidate contact fields.
-The current batch API, UI, requirement-count ranking and eligibility policy are
-unchanged. This is a foundation, not a connected scoring demonstration.
+deterministic score from existing server-validated Screening results.
+No new matching, provider calls, workflow or candidate contact fields.
+The authenticated batch-screening API now calculates scores server-side after
+the existing workflow. The UI displays weighted scores, dimension breakdowns,
+original explanations/provenance, explicit ties and separate not-scored outcomes.
+The existing requirement-count ranking remains in the API; the F2 UI uses the
+additional eligible-only score ranking. Hard-requirement decisions are unchanged.
 
 Weights are strict integer percentages for skill, experience and education,
 bounded 0–100 and totaling 100. Callers can supply `ScoringWeights`; provisional
@@ -38,26 +41,67 @@ categories and hard flags. Callers must supply the current server-confirmed snap
 the existing result contract does not encode criterion-description revisions.
 No public client-supplied score/result endpoint is introduced.
 
+## Implemented integration; live persistence verification pending
+
+Recruiters edit integer weights in Candidate Screening and confirm them with the
+criteria. Editing either invalidates local approval/results while retaining uploaded
+CVs. The existing owner-protected `PUT /api/v1/jobs/{job_id}/criteria` validates and
+saves weights, increments the job revision and records explicit confirmation.
+The frontend sends `X-TalentTrace-Job-Revision` when screening; stale revisions are
+rejected before provider execution. Older clients without the header use current
+server-approved weights, not client scores.
+
+Migration `0003_candidate_scores` adds job weights and `candidate_scores`. Each
+record belongs to a job, batch, upload, criteria revision and `f2-coverage-v1` scoring
+version. Batch/upload identities refer to existing private filesystem intake,
+not invented database candidate/upload tables. Records store original validated
+evidence, no contact fields. They are still privacy-sensitive: protect database
+access/backups and apply the project's retention policy before production use.
+
+The job row lock prevents edits during screening and serializes same-run writes.
+All candidates persist in one transaction; reruns replace only that exact
+job/batch/revision/version. Historical revisions remain. Owned
+`GET /api/v1/jobs/{job_id}/batches/{batch_id}/scores` reads only the current approved
+revision, validates stored payloads and returns safe errors for invalid records.
+The UI can reload those saved scores while the matching batch evidence is present.
+Restoring the whole upload/screening workspace after a browser restart is **Planned**.
+
+**Verified by automated tests:** calculation/rounding, weights, exclusions,
+uncertainty, source errors, ties, owner isolation, approval/stale revision checks,
+JSON payload round-trip, corrupted-record rejection, response consistency and UI
+runtime validation/rendering. API persistence tests use a transaction-capable SQL
+double; Alembic SQL is checked offline. This is not a live PostgreSQL F2 test or
+a real-provider/browser scoring demonstration. No migration was automatically applied.
+
+**Recommended manual verification:** back up/choose an isolated development DB,
+inspect Alembic current revision, explicitly approve and apply `alembic upgrade head`
+with the existing backend environment. Start isolated F2 backend/frontend ports;
+leave the preserved demo untouched. Sign in as a provisioned recruiter, confirm
+criteria/weights, upload synthetic CVs and screen. Check eligible scores/ties,
+not-scored reasons, original OCR evidence, unchanged exclusions and reload saved
+scores. Edit weights and verify re-confirmation is required. Another recruiter
+must receive 404 for the owned job's score endpoint. Do not publish to Discord.
+
 ## Documented references and assumptions
 
 README references BID v1.0 and `docs/wbs.md`, but the BID and WBS scoring rules were
 not available in this local checkout during implementation. No numeric weights,
 partial-credit rule, mandatory weighting or task identifier could be verified.
 Defaults, equal per-criterion credit, conservative ambiguity handling and missing-
-dimension behavior therefore require trainer/product review before API/UI adoption.
+dimension behavior therefore require trainer/product review before evaluated use.
 An atomic criterion does not gain partial credit from vague similarity.
 
 ## Recommended progress note — not applied to WBS/Redmine
 
-F2 candidate-scoring foundation implemented and tested internally: configurable
-weights, bounded deterministic score, source-backed breakdown and no-score failure
-handling. Eligibility and Milestone 1 ranking unchanged. Do not mark F2 complete:
-approved formula/weights, job-bound weight review, API/UI integration, durable score
-records and live synthetic demonstration remain **Planned**. No Redmine percentage
-or trainer-owned WBS was modified.
+F2 scoring foundation and API/UI integration implemented: reviewed job-bound weights,
+server-calculated 0–100 coverage, source-backed breakdown, conservative no-score
+handling, owner-protected persistence/read APIs and eligible-only score ranking.
+Automated and offline-migration checks are complete; live migration/persistence and
+synthetic browser demonstration remain **Pending verification**. Do not mark F2
+complete before policy/formula review and live verification. No Redmine percentage,
+task identifier or trainer-owned WBS was modified.
 
 ## Next recommended increment
 
-Confirm scoring policy, then attach reviewed weights to the job snapshot and expose
-validated scoring alongside screening in one bounded API/UI increment. Preserve
-existing rank ordering until a separate approved policy specifies score-based order.
+Verify this increment against an explicitly approved isolated migrated PostgreSQL
+database and synthetic browser batch; confirm BID/WBS scoring policy with the trainer.

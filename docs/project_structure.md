@@ -415,9 +415,19 @@ checkpointed, and JD approval/revision is not implemented.
 Production access governance, candidate/application persistence, formal human approval/revision, the remaining hiring workflows, publication audit/deduplication and additional external publishing destinations remain planned work. Recruiter authentication, owned job records and conversation history are implemented in this branch, subject to the deployment/validation limits documented above.
 
 
-## Implemented - internal F2 scoring foundation
+## Implemented - F2 scoring integration; live validation pending
 
 `schemas/candidate_score.py` defines validated weights and score breakdowns;
 `services/candidate_scoring.py` derives scores from existing validated Screening
-evidence. No batch API/UI or ranking behavior changes. Policy assumptions and
-remaining integration work are described in [F2 scoring](f2_scoring.md).
+evidence. The authenticated batch API adds server-calculated scores; the CV UI
+reviews weights with criteria and displays eligible-only weighted-score ranking,
+breakdowns and separate not-scored cases. Hard-requirement decisions and the
+original requirement-count ranking contract are preserved.
+Migration `0003_candidate_scores` adds reviewed job weights and owner-linked
+revision/version-bound score records. It has not been applied to a live database.
+Earlier sections describe their individual increments; weighted scoring is now
+implemented in code, not yet live-verified. Policy assumptions, offline/automated
+test boundaries and manual verification are in [F2 scoring](f2_scoring.md).
+
+[LiveKit feasibility](livekit_feasibility.md) documents a possible isolated
+audio/video proof. No credentials, live proof or interview implementation exists.
