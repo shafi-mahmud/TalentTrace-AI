@@ -413,3 +413,11 @@ checkpointed, and JD approval/revision is not implemented.
 - Background processing and integrations other than the implemented LLM and MCP job-publishing paths remain planned; their packages are architectural boundaries only.
 
 Production access governance, candidate/application persistence, formal human approval/revision, the remaining hiring workflows, publication audit/deduplication and additional external publishing destinations remain planned work. Recruiter authentication, owned job records and conversation history are implemented in this branch, subject to the deployment/validation limits documented above.
+
+
+## Implemented - internal F2 scoring foundation
+
+`schemas/candidate_score.py` defines validated weights and score breakdowns;
+`services/candidate_scoring.py` derives scores from existing validated Screening
+evidence. No batch API/UI or ranking behavior changes. Policy assumptions and
+remaining integration work are described in [F2 scoring](f2_scoring.md).

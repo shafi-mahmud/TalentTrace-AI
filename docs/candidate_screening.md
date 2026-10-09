@@ -405,3 +405,12 @@ strict schema accepted, Pydantic validation passed and one server-validated
 semantic evidence reference. Django REST API work supported Python web development;
 no verdict or score was produced. This verifies one integration case, not general
 semantic accuracy. #647497 adds deterministic routing; it made no live Groq call.
+
+
+## Implemented - internal F2 scoring foundation
+
+See [F2 scoring](f2_scoring.md) for configurable dimension weights, conservative
+no-score cases and source-backed deterministic coverage scores. Batch API/UI and
+Milestone 1 ranking are unchanged; weighted scoring integration remains Planned.
+The formula/defaults are provisional because local BID/WBS scoring rules were
+unavailable. No per-atomic-requirement partial-credit semantics are introduced.
