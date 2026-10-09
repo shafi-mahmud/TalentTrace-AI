@@ -49,9 +49,10 @@ test("review panel exposes descriptions/categories/flags and starts unconfirmed"
   const html = renderToStaticMarkup(createElement(ScreeningCriteriaReview, {suggestions, criteria: suggestions.criteria,
     sources: [], reviewed: false, jobReference: reference, disabled: false,
     onConfirm: () => assert.fail("Rendering must not approve"), onChange: () => {}, onReviewedChange: () => {}}));
-  for (const label of ["Review screening criteria", "Session-only snapshot", "Category", "Requirement type", "Python", "explicitly confirm"]) assert.ok(html.includes(label));
+  for (const label of ["Review screening criteria", "Awaiting your review", "Category", "Requirement type", "Python", "Confirmation does not approve"]) assert.ok(html.includes(label));
   assert.match(html, /value="preferred" selected/);
-  assert.match(html, /disabled="">Confirm criteria/);
+  assert.match(html, /Confirm requirements/);
+  assert.ok(!html.includes('type="checkbox"'));
   assert.ok(!html.includes('checked=""'));
   assert.equal(confirmReviewedCriteria(suggestions, reference, suggestions.criteria, false), null);
   const confirmed = confirmReviewedCriteria(suggestions, reference, suggestions.criteria, true)!;
@@ -68,7 +69,7 @@ test("manual criteria editor clearly labels recruiter-entered criteria as not po
     onConfirm: () => {}, onChange: () => {}, onReviewedChange: () => {}}));
   assert.match(html, /Recruiter-entered criteria/);
   assert.match(html, /not policy-backed/);
-  assert.match(html, /Confirm criteria for this job/);
+  assert.match(html, /Confirm requirements/);
 });
 
 test("changing a manual requirement updates its flag and clears prior confirmation", () => {

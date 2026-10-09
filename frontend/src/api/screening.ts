@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "./session.ts";
 import { isGroundedAttribute } from "./candidateProfiles.ts";
 import { isCvUploadResponse } from "./cvUploads.ts";
 import type { CvUploadResponse } from "../types/cvUpload";
@@ -23,6 +24,9 @@ function criteria(v: unknown, maximum: number): boolean {
 }
 export function isScreeningSuggestions(v: unknown): v is ScreeningSuggestions {
   return keys(v, ["job_title", "criteria"]) && text(v.job_title, 120) && criteria(v.criteria, 71);
+}
+export function isEmptyManualSuggestions(v: unknown): v is ScreeningSuggestions {
+  return keys(v, ["job_title", "criteria"]) && text(v.job_title, 120) && Array.isArray(v.criteria) && v.criteria.length === 0;
 }
 export function isReviewedSnapshot(v: unknown): v is ReviewedJobSnapshot {
   return keys(v, ["job_title", "criteria", "job_reference", "criteria_confirmed"])
@@ -122,7 +126,7 @@ export async function screenCvBatch(batch: CvUploadResponse, snapshot: ReviewedJ
   }
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/v1/cv-uploads/${batch.job_reference}/${batch.batch_id}/screen`, {
+    response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads/${batch.job_reference}/${batch.batch_id}/screen`, {
       method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(snapshot),
     });
   } catch { throw new Error("Screening was not confirmed. Check before retrying; provider calls may repeat."); }

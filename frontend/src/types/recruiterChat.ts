@@ -1,5 +1,5 @@
 import type { JobDescriptionGenerationResponse } from "./jobDescription";
-import type { ScreeningCriterion, ScreeningSuggestions } from "./screening";
+import type { ScreeningCriterion, ScreeningSuggestions, ReviewedJobSnapshot } from "./screening";
 
 export const MISSING_FIELD_LABELS = {
   job_title: "Job title",
@@ -25,9 +25,12 @@ export interface PublishingContext {
 }
 export interface PublicationResult { destination: "discord"; status: "published"; external_id: string; }
 export type PublicationState = {status: "idle" | "loading"} | {status: "success"; result: PublicationResult} | {status: "failed"; message: string};
-export interface ScreeningSuggestionSource { criterion_id: string; source: "recruiter_input"; evidence: string; }
+export interface ScreeningSuggestionSource { criterion_id: string; source: "recruiter_input" | "company_policy"; evidence: string; citation_id?: string | null; source_title?: string | null; }
 export interface WorkingCriteriaDraft {
   draftId: string;
+  jobReference?: string;
+  revision?: number;
+  savedSnapshot?: ReviewedJobSnapshot | null;
   origin?: "job_description" | "manual";
   suggestions: ScreeningSuggestions;
   sources: ScreeningSuggestionSource[];
@@ -39,7 +42,7 @@ export type RecruiterChatResponse =
   | { status: "clarification"; intent: "create_job_description"; conversation_id: string; assistant_message: string; missing_fields: MissingField[] }
   | { status: "unsupported"; intent: "unsupported"; conversation_id: string; assistant_message: string }
   | { status: "draft_unchanged"; intent: "create_job_description"; conversation_id: string; assistant_message: string }
-  | { status: "jd_generated"; intent: "create_job_description"; conversation_id: string; draft_id: string; assistant_message: string; job_description_result: JobDescriptionGenerationResponse; publishing_context: PublishingContext; screening_suggestions: ScreeningSuggestions; screening_suggestion_sources: ScreeningSuggestionSource[] };
+  | { status: "jd_generated"; intent: "create_job_description"; conversation_id: string; draft_id: string; job_reference?: string | null; job_revision?: number; assistant_message: string; job_description_result: JobDescriptionGenerationResponse; publishing_context: PublishingContext; screening_suggestions: ScreeningSuggestions; screening_suggestion_sources: ScreeningSuggestionSource[] };
 
 export interface ChatMessage {
   role: "recruiter" | "assistant";

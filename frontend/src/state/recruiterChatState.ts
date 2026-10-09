@@ -17,10 +17,12 @@ export type RecruiterChatAction =
   | {type: "send_failed"; messageId: string; text: string; message: string; uncertain: boolean; retryAvailable: boolean}
   | {type: "send_succeeded"; messageId: string; submittedText: string; reply: ChatMessage; conversationId: string}
   | {type: "replace_message"; index: number; message: ChatMessage}
-  | {type: "new_chat"; preserveInput: boolean};
+  | {type: "new_chat"; preserveInput: boolean}
+  | {type: "conversation_restored"; conversationId: string; messages: ChatMessage[]};
 
 export function recruiterChatReducer(state: RecruiterChatState, action: RecruiterChatAction): RecruiterChatState {
   switch (action.type) {
+    case "conversation_restored": return {...state, input: "", error: "", sending: false, messages: action.messages, conversationId: action.conversationId};
     case "input_changed": return {...state, input: action.value, error: ""};
     case "input_error": return {...state, error: action.message};
     case "send_started": {

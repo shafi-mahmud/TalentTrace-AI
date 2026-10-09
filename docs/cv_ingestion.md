@@ -15,8 +15,10 @@ contents, hashes or storage paths. The browser shows selected names/sizes locall
 and sends File objects without rendering or extracting their contents.
 
 The reference must match `TT-JOB-` followed by 16 uppercase hexadecimal characters.
-It is syntactically validated only. There is no authoritative persisted job
-profile, foreign key, candidate record or verified job ownership.
+The authenticated API verifies the reference against the recruiter-owned saved
+job before storing or processing files. Candidate/application records and
+file-manifest foreign keys are not implemented. See
+[recruiter job ownership](recruiter_job_ownership.md) for setup and validation limits.
 
 ## Validation and resource limits
 
@@ -52,11 +54,14 @@ Repository-local overrides must stay under `data/`, not frontend/docs/RAG/tests.
 Import/startup creates no upload folders. Existing ignore rules already cover
 `data/`; no sample CVs or binary fixtures are tracked.
 
-Layout: `<private-root>/<job_reference>/<batch_uuid>/<upload_uuid>.pdf|.docx`.
+Layout: `<private-root>/<recruiter_uuid>/<job_reference>/<batch_uuid>/<upload_uuid>.pdf|.docx`.
+Old shared-root files are not automatically migrated or assigned to recruiters.
 There is no download/static-serving endpoint. Newly created upload directories
 request owner-only POSIX permissions. On Windows, verify inherited ACLs restrict
 the storage directory to the trusted application operator. There is no encryption
-at rest, authentication, tenant isolation or production privacy-compliance claim.
+at rest or production privacy-compliance claim. Authentication, job ownership
+and recruiter-specific file roots are implemented in code; live deployment of
+the new migration and account flow remains unverified.
 A future Docker named volume can mount at the configured path; it is not wired yet.
 
 One invalid file or write failure rejects the batch and removes the directory/files
@@ -257,7 +262,7 @@ classification**. OCR errors and ambiguous documents can still affect results.
 
 **Candidate CV-derived source text is sent to the configured external Groq provider
 for profile extraction.** This differs from local digital extraction/OCR. Use only
-synthetic/sample CVs in this unauthenticated localhost training demo. CVs still never
+synthetic/sample CVs in this local training demo, even with recruiter authentication. CVs still never
 enter JD generation, Company Policy/Technical Reference RAG or MCP publication.
 This is not production consent/provider/privacy governance.
 

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "./session.ts";
 import { isGenerationResponse } from "./jobDescriptions.ts";
 import { isScreeningSuggestions } from "./screening.ts";
 import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
@@ -35,13 +36,15 @@ export function isRecruiterChatResponse(value: unknown): value is RecruiterChatR
         || !isScreeningSuggestions(value.screening_suggestions)
         || !isPublishingContext(value.publishing_context)
         || !Array.isArray(value.screening_suggestion_sources)) return false;
+    if (value.job_reference != null && (typeof value.job_reference !== "string" || !/^TT-JOB-[A-F0-9]{16}$/.test(value.job_reference))) return false;
+    if (value.job_revision != null && (!Number.isInteger(value.job_revision) || Number(value.job_revision) < 1)) return false;
     const suggestions = value.screening_suggestions;
     return value.screening_suggestion_sources.length <= suggestions.criteria.length
       && new Set(value.screening_suggestion_sources.map(source => isRecord(source) ? source.criterion_id : null)).size === value.screening_suggestion_sources.length
       && value.screening_suggestion_sources.every(source => isRecord(source)
-        && Object.keys(source).length === 3 && Object.hasOwn(source, "criterion_id") && Object.hasOwn(source, "source") && Object.hasOwn(source, "evidence")
+        && Object.keys(source).every(key => ["criterion_id", "source", "evidence", "citation_id", "source_title"].includes(key)) && Object.hasOwn(source, "criterion_id") && Object.hasOwn(source, "source") && Object.hasOwn(source, "evidence")
         && typeof source.criterion_id === "string" && suggestions.criteria.some(c => c.criterion_id === source.criterion_id)
-        && source.source === "recruiter_input" && typeof source.evidence === "string" && !!source.evidence.trim() && source.evidence.length <= 1000
+        && (source.source === "recruiter_input" || (source.source === "company_policy" && typeof source.citation_id === "string" && typeof source.source_title === "string")) && typeof source.evidence === "string" && !!source.evidence.trim() && source.evidence.length <= 1000
         && !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(source.evidence));
   }
   return value.status === "clarification" && Array.isArray(value.missing_fields)
@@ -52,7 +55,7 @@ export function isRecruiterChatResponse(value: unknown): value is RecruiterChatR
 export async function sendRecruiterMessage(message: string, conversationId?: string): Promise<RecruiterChatResponse> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/v1/recruiter-chat`, {
+    response = await authenticatedFetch(`${API_BASE_URL}/api/v1/recruiter-chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, ...(conversationId ? {conversation_id: conversationId} : {}) }),
     });

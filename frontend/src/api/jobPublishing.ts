@@ -1,14 +1,15 @@
+import { authenticatedFetch } from "./session.ts";
 import type { JobDescriptionGenerationResponse } from "../types/jobDescription";
 import type { PublicationResult, PublishingContext } from "../types/recruiterChat";
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 
-export async function publishDraft(result: JobDescriptionGenerationResponse, context: PublishingContext = {}): Promise<PublicationResult> {
+export async function publishDraft(result: JobDescriptionGenerationResponse, context: PublishingContext = {}, jobId?: string): Promise<PublicationResult> {
   const draft = result.job_description;
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/v1/recruiter-chat/publish`, {
+    response = await authenticatedFetch(`${API_BASE_URL}/api/v1/recruiter-chat/publish`, {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({title: draft.title, summary: draft.summary,
+      body: JSON.stringify({...(jobId ? {job_id: jobId} : {}), title: draft.title, summary: draft.summary,
         responsibilities: draft.responsibilities, required_skills: draft.required_skills,
         preferred_skills: draft.preferred_skills, qualifications: draft.qualifications,
         ...(context.location ? {location: context.location} : {}),

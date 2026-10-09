@@ -108,10 +108,10 @@ test("generated draft is inside the rich assistant message with review and citat
   assert.match(html, /chat-assistant/);
   assert.match(html, /chat-draft/);
   for (const text of ["Draft", "Human review required", "Engineer", "Summary", "Responsibilities", "Required Skills", "Qualifications", "Policy Grounding", "Synthetic Demo Company Policy", "Technical details", "synthetic"]) assert.ok(html.includes(text));
-  assert.match(html, /has not been approved, saved, or published/);
+  assert.match(html, /Draft saved to your job/);
 });
 
-test("generated chat card includes editable recruiter-grounded criteria and review state", async (t) => {
+test("generated chat card leaves criteria review in the shared Candidate Screening workspace", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json(result()));
   const message = replyToChatMessage(await sendRecruiterMessage("Create a JD."));
   if (!message.draftId || !message.screeningSuggestions || !message.screeningSuggestionSources) assert.fail("Expected criteria suggestions");
@@ -119,11 +119,11 @@ test("generated chat card includes editable recruiter-grounded criteria and revi
     draftId: message.draftId, suggestions: message.screeningSuggestions, sources: message.screeningSuggestionSources,
     criteria: message.screeningSuggestions.criteria, reviewed: false,
   }, onCriteriaChange: () => {}, onCriteriaReviewed: () => {}, onContinue: () => {}}));
-  assert.match(html, /Suggested screening criteria/);
-  assert.match(html, /Original recruiter excerpt/);
-  assert.match(html, /I reviewed the descriptions/);
-  assert.match(html, /Continue to CV screening/);
-  assert.match(html, /disabled=""/);
+  assert.match(html, /Screening requirements are available in Candidate Screening/);
+  assert.ok(!html.includes("Editable screening criteria"));
+  assert.ok(!html.includes("Continue to CV screening"));
+  assert.ok(!html.includes('type="checkbox"'));
+
 });
 
 test("clarification maps directly into an assistant conversation message", () => {

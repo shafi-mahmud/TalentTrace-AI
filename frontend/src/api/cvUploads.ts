@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "./session.ts";
 import type { CvUploadResponse } from "../types/cvUpload";
 
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
@@ -54,7 +55,7 @@ export async function uploadCvs(jobReference: string, files: readonly File[]): P
   for (const file of files) form.append("files", file);
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/v1/cv-uploads`, {method: "POST", body: form});
+    response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads`, {method: "POST", body: form});
   } catch {
     throw new Error("Upload was not confirmed. Check with the local demo operator before uploading again.");
   }

@@ -71,22 +71,20 @@ publication fails rather than truncating a link or job.
 5. Open the form owner's Drive upload folder and verify the sample file was
    collected. This proves external collection, not TalentTrace ingestion.
 
-Every published demo circular contains a bounded **Job Reference**. The backend
-creates `TT-JOB-` plus the first 16 uppercase SHA-256 hex characters of the
-normalized publication fields serialized as sorted compact JSON. Identical
-fields retain the reference across restarts; revisions or list-order changes
-produce a different reference. The application URL is excluded from this hash.
-Recruiter payloads and LLM output cannot supply a reference. The standalone MCP
-contract requires trusted clients to provide a safe uppercase/digit/hyphen
-reference of at most 40 characters; its fixed manual smoke job uses
-`TT-DEMO-SMOKE-001`.
+Every published demo circular contains a bounded **Job Reference**. The
+TalentTrace backend supplies `TT-JOB-` plus 16 uppercase hexadecimal characters
+from the owned persistent job UUID. Draft revisions keep that job reference;
+recruiter payloads and LLM output cannot supply a reference. The standalone MCP
+contract still requires trusted clients to provide their own safe reference of
+at most 40 characters; its fixed manual smoke job uses `TT-DEMO-SMOKE-001`.
 
-This is a temporary demo content fingerprint, not persisted job-profile identity,
-publication deduplication or a guaranteed unique identifier. Identical content
-shares a reference; truncated-hash collisions remain possible. No fake database
-or counter was added. Native job-profile persistence and automatic form
-prefilling remain planned. The configured form is shared across publications;
-reference entry is manual, with no database association or per-job routing.
+The new owned-job code replaces the prior content-derived reference in the
+TalentTrace API path. Its live database migration is not yet verified; see
+[recruiter job ownership](recruiter_job_ownership.md). This is not publication
+idempotency or candidate/application persistence. Automatic form prefilling
+remains planned. The configured form is shared across publications; reference
+entry is manual, and Google Form submissions are not synchronized into native
+candidate records or routed automatically per job.
 The frontend success state reports publication metadata only and does not
 claim that a form is configured or an application has been received.
 

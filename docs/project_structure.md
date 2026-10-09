@@ -114,22 +114,20 @@ checkpointed, and JD approval/revision is not implemented.
   and locks that card after one attempt. Revision loads the last recruiter message
   into the composer. Citations remain accessible in a compact collapsible section. Text posting instructions direct
   recruiters to the reviewed draft action instead of automatically publishing.
-- **Limitations:** this is a trusted local synthetic demo endpoint, without
-  authentication, authorization, persisted approval, publication audit or server
-  deduplication. Client-submitted fields are validated but their provenance is
-  not authenticated. Page reload/new requests can publish again. Check Discord
+- **Limitations:** formal publication approval, audit and server deduplication
+  are not implemented. Publication now requires an authenticated recruiter-owned saved
+  draft whose generated content matches the server record. Page reload/new requests can publish again. Check Discord
   before another attempt after an unconfirmed result. Automated SDK/server
   protocol tests replace Discord. On 07 Oct 2026, the project owner confirmed
   live UI-to-FastAPI-to-MCP-to-Discord publication.
-- Recruiter conversations now use a server-managed in-memory session with a
-  30-minute idle lifetime, 20-turn and 12,000-character limits, and a 100-session
-  process limit. The browser sends only a conversation UUID; requirements and
-  their evidence are revalidated server-side on each turn. A server restart,
-  multiple workers or another backend process does not share this state. It is
-  not saved to PostgreSQL. After the required title, purpose, responsibilities,
-  skills and minimum experience (including explicit no-minimum) are validated,
-  the existing JD workflow runs. A corrected requirement can create a new draft;
-  an unchanged complete request does not create a duplicate draft.
+- Recruiter conversations are now owner-scoped PostgreSQL records, with a
+  30-minute idle lifetime, 20-turn and 12,000-character limits. The browser sends
+  only an opaque conversation UUID; server-side validated state is restored per
+  request under a row lock. Successful turns and generated drafts are committed
+  together. Unchanged complete requirements do not repeat JD generation.
+  Saved history remains readable after conversation expiry, but new turns require
+  a fresh conversation. See [Recruiter job ownership](recruiter_job_ownership.md)
+  for deployment prerequisites and validation limits.
   Bounded input accepts multiline text, tabs,
   comparisons and job descriptions involving resume/transcript processing.
   React renders messages as escaped text. Input rejects unsafe control characters,
@@ -144,27 +142,32 @@ checkpointed, and JD approval/revision is not implemented.
   the existing JD graph with those boundaries replaced. The chat interpreter/provider
   schema and full grounded JD API path passed live verification on 07 Oct 2026. The project owner confirmed manual chat-first UI verification. Existing
   BGE query-length limits still apply to extracted requirements.
-- **Planned:** persisted JD approval/revision, publication authorization/audit,
-  server deduplication, persistent conversation history and
-  authentication/authorization. The JD LangGraph remains unchanged.
+- **Planned:** formal JD approval/revision, publication audit/deduplication and
+  production access/retention governance. Recruiter authentication, job ownership
+  and stored conversation history are implemented in code; live deployment of
+  the new migration and account provisioning remain unverified in this increment.
+  The JD LangGraph remains unchanged.
 
-### Implemented — recruiter-grounded criteria review and shared workspace state
+### Implemented — shared saved-job screening requirements
 
-- Each generated JD response includes deterministic screening suggestions built
-  from the validated recruiter requirements. Suggestions start as preferred and
-  carry a recruiter-input evidence excerpt where one is available. Recruiters can
-  edit, add or remove criteria and choose mandatory/preferred inside the JD card.
-- The same in-memory criteria draft is shown in the CV workspace for each JD
-  draft. Any edit clears the shared review flag and invalidates the confirmed
-  screening snapshot and results. The recruiter explicitly reviews the criteria
-  in the chat and confirms them against the manually entered Job Reference in
-  Candidate Screening before screening. Different JD draft IDs keep their criteria separate.
-- **Limitation:** the current RAG result supplies reference text and citations,
-  but not validated hiring-criterion assertions. Therefore this increment does
-  not derive policy-backed screening criteria or label recruiter suggestions as
-  policy-grounded. Suggestions are recruiter-grounded only. No default-mandatory
-  policy is inferred, no criteria are silently approved, and the session-only
-  state is not a persisted job profile.
+- Generated JDs automatically select one owned saved job in both workspaces;
+  there is no transfer/setup button inside the JD card. Candidate Screening is the
+  single place to edit and confirm requirements. Manual job creation remains
+  available without JD generation. References are generated from persistent job
+  UUIDs, not typed by the recruiter or invented by the LLM.
+- Recruiter-grounded suggestions start preferred. Two curated, concrete synthetic
+  demo-policy practices may also be suggested for security/privacy-related roles:
+  access controls and incident reporting. The mapping pins the approved source
+  UUID, version and normalized content hash, requires retrieved source excerpts,
+  and retains citations. General policy prose is not automatically converted into
+  hiring criteria. Policy suggestions remain preferred until explicitly changed
+  and confirmed by the recruiter; this is not a policy-ingestion/rule engine.
+- Criteria confirmation saves an exact PostgreSQL snapshot with an optimistic job
+  revision check. Editing clears local confirmation/results; confirming saves the
+  new snapshot. Server-side screening rejects any snapshot differing from the
+  saved approved criteria. Draft regeneration clears saved approval. Saved jobs
+  and history can be reloaded; result and uploaded-batch selection remain in React
+  memory. Switching jobs keeps uploaded files but prevents mismatched screening.
 
 ## Implemented — standalone MCP job-publishing foundation
 
@@ -191,8 +194,9 @@ checkpointed, and JD approval/revision is not implemented.
   is bounded to 40 safe uppercase/digit/hyphen characters. Discord displays
   **Job Reference** immediately before **Apply for this role**; candidates copy it
   into the external form. HTTP recruiter requests and LLM output cannot supply it.
-  This is a stable demo content fingerprint, not persisted job-profile identity or
-  publication deduplication. Native job-profile persistence and automatic form
+  The authenticated backend now supplies its stable saved-job UUID-derived
+  reference; standalone MCP clients remain responsible for their own references.
+  This is not publication deduplication. Automatic form
   prefilling remain planned.
 - The standalone MCP contract accepts the optional link, and the Discord adapter
   includes **Apply for this role** while enforcing existing embed limits and
@@ -205,7 +209,7 @@ checkpointed, and JD approval/revision is not implemented.
   dependency, not native TalentTrace storage. See [CV collection demo](cv_collection_demo.md)
   for setup, Google sign-in requirements and a single synthetic manual demo.
 - **Planned:** native candidate portal, Drive API synchronization, automatic CV
-  import, candidate persistence, CV parsing/OCR, screening/scoring, candidate
+  import, candidate persistence, weighted scoring, candidate
   authentication and retention/deletion automation. Production approval/audit
   and additional publishing destinations remain planned. No CV data is sent
   through the JD workflow or MCP publishing by this link feature.
@@ -214,14 +218,14 @@ checkpointed, and JD approval/revision is not implemented.
 
 - **Candidate Screening** is a separate top-level frontend mode; JD Assistant
   remains the default chat-first experience. Screening works without generating
-  a JD: recruiters can enter a job title, demo Job Reference and requirements
+  a JD: recruiters can create an owned job title and enter requirements
   directly, then explicitly review and confirm mandatory/preferred flags using
   the same `ReviewedJobSnapshot` contract. Manually entered criteria are not
   presented as policy-backed. JD-generated criteria remain isolated by draft ID.
 - Criteria setup and CV batch upload can happen in either order. Changing the
   Job Reference invalidates criteria confirmation and screening results while
   preserving the already uploaded batch, so recruiters can finish setup without
-  re-uploading it. Confirmed criteria remain session-only, not a saved job profile.
+  re-uploading it. Confirmed criteria are now stored against an owned job profile.
 - Recruiters select 1-20 PDF/DOCX files, remove selections and see controlled
   upload status.
 - `POST /api/v1/cv-uploads` accepts bounded multipart UploadFile parts, validates
@@ -230,10 +234,12 @@ checkpointed, and JD approval/revision is not implemented.
   upload IDs and sizes only. A failed batch cleans up its own stored files.
 - `CV_UPLOAD_ROOT` defaults to ignored `data/cv_uploads/`; no files are web-served.
   No candidate data is logged, sent to JD/RAG/MCP or stored in candidate tables.
-  This is trusted local-demo intake, without authentication or production
-  retention/deletion controls. Reference association is not database integrity.
+  Intake now requires recruiter authentication and uses owner-specific storage.
+  It still lacks production
+  retention/deletion controls. Job association is checked against the owned saved
+  record; file manifests are not candidate/application database records.
 - The external Google Form/Drive demo remains separate and already verified.
-  Automatic Drive import, screening/scoring,
+  Automatic Drive import, weighted scoring,
   candidate persistence and Docker volume integration remain **Planned**.
   See [native CV ingestion](cv_ingestion.md) for limits, storage and security caveats.
 
@@ -254,7 +260,7 @@ checkpointed, and JD approval/revision is not implemented.
 - Per-file parser failures are sanitized; other files remain independently
   processable. Storage validation and document/text limits are enforced. See
   [CV ingestion](cv_ingestion.md) for exact limits and heuristic limitations.
-- Candidate persistence, screening/scoring, background processing, automatic Drive import, authorization
+- Candidate persistence, screening/scoring, background processing, automatic Drive import, production authorization governance
   and production retention/deletion remain **Planned**. This is not a new agent or
   LangGraph workflow and does not send CVs to JD/RAG/MCP.
 
@@ -282,7 +288,7 @@ checkpointed, and JD approval/revision is not implemented.
   `ocr_extracted`; 31 focused OCR tests were reported passed. The earlier dependency
   blocker was resolved; English data/version were detected in the profile increment.
 - Candidate persistence, screening/scoring, automatic Drive
-  import, background processing, authentication and production retention/deletion
+  import, background processing and production retention/deletion
   remain **Planned**. No new workflow/agent was added.
 
 ## Implemented - source-backed candidate profile extraction (#647493)
@@ -306,11 +312,11 @@ checkpointed, and JD approval/revision is not implemented.
   action and compact Contact/Education/Work history/Skills results. Focused backend
   and lightweight frontend tests cover contracts, grounding, source routing and safe UI.
 - **Privacy:** this feature sends CV-derived text to external Groq. Synthetic/sample
-  data only; no authentication or production provider governance exists. Text/evidence
+  data only; recruiter authentication exists, but production provider governance does not. Text/evidence
   is not persisted; profiles stay in request/component memory. CVs do not enter JD,
   RAG or MCP. Repeated processing may repeat extraction/OCR/provider calls.
 - Grounding confirms textual support, not verified candidate truth. Candidate
-  persistence, weighted scoring, background workers, authentication and production consent/retention remain
+  persistence, weighted scoring, background workers and production consent/retention remain
   **Planned**. Future merit evaluation must exclude contact identity.
 
 ## Implemented — Screening preparation, hybrid matching and decisions (#647495–#647497)
@@ -357,36 +363,24 @@ checkpointed, and JD approval/revision is not implemented.
 
 ## Implemented — reviewed criteria and native CV batch screening
 
-- Successful recruiter-chat JD responses now include `screening_suggestions`
-  built from source-backed recruiter requirements, not additional generated JD
-  qualifications. All suggestions start as preferred; the recruiter edits their
-  descriptions, categories and mandatory/preferred flags inline in the JD chat and
-  can continue editing in Candidate Screening. Explicit review in chat and confirmation
-  in Candidate Screening are screening-criteria approval, not formal JD approval.
-- The confirmed snapshot is bound to the manually entered demo Job Reference and
-  stays in React session memory. Editing criteria/reference or selecting another
-  JD invalidates confirmation/results. Nothing claims saved PostgreSQL job profiles;
-  the reference is syntactic demo association, not verified job ownership.
-- `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/screen` accepts the reviewed
-  snapshot only. It resolves the private batch through `CandidateProfileService`,
-  reuses digital extraction/OCR and profile grounding, and supplies qualifications
-  without contact fields to the existing `CandidateScreeningWorkflow.screen()`.
-  Candidate-level source/provider failures stay separate from eligibility decisions;
-  unexpected candidate failures do not abort later candidates or become exclusions.
-- Results show eligible/excluded/needs-review outcomes and expandable requirement
-  statuses, evidence and page/block/digital/OCR provenance. Contact information
-  remains in the separate existing profile view. Requirement-based ranking is
-  implemented below; weighted suitability scoring remains planned.
-- No database/migration, graph, checkpoint wiring, upload replacement, MCP call or
-  background worker was added. Processing is sequential and request-scoped; each
-  screening attempt reparses stored originals and may repeat provider calls.
-  Criteria/results disappear on reload. Authentication, durable job/application
-  persistence, weighted scoring and automatic Drive import remain **Planned**.
-- **Verified by automated tests:** actual FastAPI upload/stored PDF extraction,
-  grounded parsing and real Screening graph execution with mocked providers;
-  semantic outcomes/OCR provenance, batch isolation, confirmed reference binding,
-  malformed requests and frontend validation/rendering. This is not live Groq or
-  manual browser end-to-end verification. Synthetic local demonstrations only.
+- Shared saved-job criteria review is described above. All suggestions start
+  preferred; explicit confirmation is criteria approval, not a hiring decision or
+  formal publication approval. The stored snapshot is job- and owner-bound.
+- `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/screen` requires authentication
+  and an exact saved approved snapshot. Files are resolved from that recruiter's
+  private upload root. Existing parsing/OCR and `CandidateScreeningWorkflow.screen()`
+  are reused. No contact fields enter evaluation; provider/source failures remain
+  distinct from exclusion. Existing evidence, hard decisions and ranking are unchanged.
+- CV upload, extraction, OCR and profile routes also require job ownership.
+  Historical uploads in the old shared root are not automatically adopted by an
+  account. Results and selected batch identities remain browser-memory state;
+  candidate/application persistence and automatic Drive import remain planned.
+- Automated business-contract tests use explicit authentication doubles. Separate
+  ownership tests exercise real authentication/authorization with a transactional
+  database double. Separately, on 09 Oct 2026 isolated real PostgreSQL migrations,
+  account provisioning, HTTP ownership/persistence and authenticated browser shared-job
+  checks passed. Provider and embedding outputs were synthetic fixtures; no live
+  Groq or Discord call was made. See the ownership document for exact boundaries.
 
 ## Implemented — Milestone 1 requirement-based candidate ranking
 
@@ -407,8 +401,8 @@ checkpointed, and JD approval/revision is not implemented.
   means uncertainty and does not establish partial fulfilment. A future partial-match
   policy would require explicit reviewed subcriteria and validation; none is inferred.
 - No weighted 0–100 suitability score, cross-job/batch ranking, durable job-profile
-  persistence, extra graph/agent or database is added. Snapshots/results remain
-  session-only. Automated verification uses synthetic data and mocked providers;
+  scoring system or extra graph/agent is added. Criteria snapshots now persist;
+  ranking results remain browser-memory only. Automated verification uses synthetic data and mocked providers;
   live provider/browser ranking verification is not claimed.
 
 ## Planned — future functionality
@@ -418,4 +412,4 @@ checkpointed, and JD approval/revision is not implemented.
 - A production policy ingestion service, recruiter/admin uploads, active/approved policy selection and replacement/deletion lifecycles for obsolete versions remain planned. The semantic JD path requires one explicitly configured stored document/version; there is no automatic active/latest selection. CVs and transcripts do not belong in either knowledge collection. Production Docker Compose remains planned as noted above.
 - Background processing and integrations other than the implemented LLM and MCP job-publishing paths remain planned; their packages are architectural boundaries only.
 
-Authentication/authorization, business-data persistence, human approval/revision, the remaining hiring workflows, publication audit/deduplication, persistent conversation history, and additional external publishing destinations remain planned work.
+Production access governance, candidate/application persistence, formal human approval/revision, the remaining hiring workflows, publication audit/deduplication and additional external publishing destinations remain planned work. Recruiter authentication, owned job records and conversation history are implemented in this branch, subject to the deployment/validation limits documented above.

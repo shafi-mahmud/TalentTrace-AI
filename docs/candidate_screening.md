@@ -16,7 +16,8 @@ evaluation and three-way screening routing. It makes no additional Groq call.
 `ScreeningInput` accepts the existing syntactic demo Job Reference, an opaque
 upload UUID, the existing `parsed` / `source_unavailable` / `parsing_failed`
 semantics, `CandidateQualifications` and 1–50 explicitly supplied criteria.
-The demo reference is not proof of a persisted or approved job; the upload UUID
+At the internal graph boundary, a reference alone is not proof of an approved job;
+the authenticated batch API additionally verifies an owned saved snapshot; the upload UUID
 is not resolved against storage in this increment.
 
 Each criterion has a safe 1–64-character ID, category `skill`, `experience` or
@@ -293,32 +294,32 @@ production lifecycle/pooling integration remain required future work. A crash
 inside an unfinished node may repeat that node/provider operation: completed
 boundary recovery does not guarantee exactly-once external effects.
 
-## Implemented — session-only reviewer batch integration
+## Implemented — owner-scoped shared-job batch integration
 
-Candidate Screening is a standalone workflow and does not require JD generation.
-Recruiters can provide a job title and Job Reference, enter criteria directly,
-edit descriptions/categories/mandatory-preferred flags, and explicitly confirm
-the same bounded `ReviewedJobSnapshot` contract used by JD-derived criteria.
-Manual criteria are recruiter-provided and are not represented as policy-backed.
-The recruiter may set up criteria or upload the CV batch first. A Job Reference
-change invalidates the review snapshot and screening results but keeps an existing
-uploaded batch available. All job/criteria state remains session-only; no durable
-job profile is created.
+Candidate Screening remains usable without JD generation. A signed-in recruiter
+creates a manual job title or selects an existing owned job. The backend assigns
+its stable Job Reference. Generated JDs automatically select their saved job in
+both workspaces; no chat-to-screening transfer action is needed.
 
-The JD chat offers **Review screening criteria** from the recruiter requirements
-validated before generation. Suggested skills/education/experience are initially
-preferred; generated JD additions do not silently become mandatory. The reviewer
-can edit/remove/add criteria, choose category and mandatory/preferred flags, then
-explicitly confirm 1–50 criteria for the Candidate Screening workspace's Job Reference. Changes
-invalidate confirmation. One active snapshot is retained in browser memory across
-workspace navigation; reload clears it. This is not durable job-profile persistence
-or formal JD publication approval. Job Reference ownership remains unverified.
+Candidate Screening is the single requirements editor and confirmation step.
+Recruiter-grounded and curated synthetic-policy suggestions start preferred.
+The recruiter can edit/remove/add criteria and choose mandatory/preferred flags,
+then confirm 1–50 criteria. Confirmation persists an exact owned-job snapshot.
+Optimistic revisions reject stale updates; edits invalidate local confirmation
+and results, and draft regeneration clears saved approval. Job switches preserve
+uploaded batches but screening still requires a matching owned reference.
+
+See [Recruiter job ownership](recruiter_job_ownership.md) for authentication,
+policy-source restrictions, setup prerequisites and unverified live persistence.
+This is not formal JD publication approval or production candidate governance.
 
 `backend/app/api/routers/screening.py` exposes
 `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/screen`. Its bounded body is a
 `ReviewedJobSnapshot`: title, matching Job Reference, explicit boolean confirmation
 and validated criteria. It accepts no candidate qualifications, verdict, provider
-configuration or filesystem path. A reference mismatch fails before parsing.
+configuration or filesystem path. Authentication and ownership are required;
+the snapshot must exactly match the stored confirmed criteria. A reference
+mismatch fails before parsing. Files use an owner-specific private storage root.
 
 `BatchScreeningService` uses the existing `CandidateProfileService.parse_batch()`
 once per screening request, which resolves stored originals and reuses extraction,
@@ -342,7 +343,7 @@ reference association, explicit confirmation, per-candidate failure isolation,
 semantic decisions/provenance and UI validation/rendering. No live Groq call or
 manual browser screening verification is claimed. Use synthetic local data only.
 Each new request may repeat parsing/OCR/provider calls; originals are unchanged.
-Durable profiles/applications/results, ownership/authentication, retention/deletion,
+Durable candidate profiles/applications/results, production retention/deletion,
 weighted scoring and production processing remain planned.
 
 ## Implemented — requirement-based ranking
@@ -390,12 +391,13 @@ need trainer clarification. This is not weighted suitability scoring.
 
 ## Planned — production integration and future work
 
-Authentication, approved-job persistence, production API/UI ownership controls and
-privacy controls remain separate work. Tests exercise the actual graph with
+Recruiter authentication, owned jobs and saved criteria approval are implemented
+in code; their live deployment is not yet verified. Production privacy governance
+and retention controls remain separate work. Tests exercise the actual graph with
 synthetic inputs and mocked Groq calls, including both source paths, preparation
 compatibility, direct-match bypass, semantic evidence validation, failure states,
 hard/preferred criteria, missing-over-ambiguous precedence and all decision routes.
-Weighted scoring and job-profile persistence remain planned.
+Weighted scoring and candidate/application/result persistence remain planned.
 
 **Verified — 08 Oct 2026:** one authorized synthetic #647496 smoke call through
 the actual `match()` graph returned HTTP 200 from Groq `openai/gpt-oss-120b` with

@@ -392,3 +392,32 @@ body { background: var(--page); color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+.account-bar,
+.active-job-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 1120px;
+  margin: 0.75rem auto;
+  padding: 0.75rem 1rem;
+}
+
+.active-job-bar label,
+.saved-conversation {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.active-job-bar select,
+.saved-conversation select {
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.5rem;
+}
+
+.active-job-bar label {
+  flex: 1 1 18rem;
+}

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "./session.ts";
 import type { CvExtractionResponse } from "../types/cvExtraction";
 import type { CvOcrResponse } from "../types/cvOcr";
 import { isCvExtractionResponse } from "./cvExtraction.ts";
@@ -29,7 +30,7 @@ export async function runCvOcr(extraction: CvExtractionResponse): Promise<CvOcrR
   if (!isCvExtractionResponse(extraction)) throw new Error("A valid extracted batch is required.");
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/v1/cv-uploads/${extraction.job_reference}/${extraction.batch_id}/ocr`, {method: "POST"});
+    response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads/${extraction.job_reference}/${extraction.batch_id}/ocr`, {method: "POST"});
   } catch {
     throw new Error("OCR could not be confirmed. Your uploaded files are unchanged.");
   }

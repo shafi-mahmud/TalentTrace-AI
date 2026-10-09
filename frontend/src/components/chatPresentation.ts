@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
 import type { ChatMessage, RecruiterChatResponse, PublicationState } from "../types/recruiterChat";
 import type { JobDescriptionGenerationResponse } from "../types/jobDescription";
-import { CriteriaEditor } from "./ScreeningCriteriaReview.ts";
 import type { WorkingCriteriaDraft } from "../types/recruiterChat";
 
 export function replyToChatMessage(reply: RecruiterChatResponse): ChatMessage {
@@ -34,7 +33,7 @@ function resultList(title: string, items: string[], skills = false) {
       ...items.map((item, index) => h("li", { key: index }, item))));
 }
 
-function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, actionsDisabled }: {
+function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, onPublish, onRevise, actionsDisabled }: {
   result: JobDescriptionGenerationResponse; publication?: PublicationState;
   criteriaDraft?: WorkingCriteriaDraft; onCriteriaChange?: (criteria: WorkingCriteriaDraft["criteria"]) => void;
   onCriteriaReviewed?: (reviewed: boolean) => void; onContinue?: () => void;
@@ -53,18 +52,14 @@ function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, o
   return h("div", { className: "chat-draft" },
     h("div", { className: "draft-notice" }, h("span", { className: "draft-badge" }, "Draft"),
       h("span", {className: "review-badge"}, "Human review required"), h("span", {className: "grounded-badge"}, "Policy grounded"),
-      h("p", null, publication.status === "success" ? "Published as a demo. Formal approval is not recorded." : "This draft has not been approved, saved, or published.")),
+      h("p", null, publication.status === "success" ? "Published as a demo. Formal approval is not recorded." : "Draft saved to your job. Review before publishing.")),
     h("article", { className: "job-description" },
       h("h2", { className: "generated-title" }, draft.title),
       h("section", { className: "result-section" }, h("h3", null, "Summary"), h("p", null, draft.summary)),
       resultList("Responsibilities", draft.responsibilities), resultList("Required Skills", draft.required_skills, true),
       draft.preferred_skills.length ? resultList("Preferred Skills", draft.preferred_skills) : null,
       resultList("Qualifications", draft.qualifications)),
-    criteriaDraft ? h("div", {className: "jd-criteria-inline"},
-      h(CriteriaEditor, {criteria: criteriaDraft.criteria, sources: criteriaDraft.sources, reviewed: criteriaDraft.reviewed,
-        disabled: Boolean(actionsDisabled), onChange: onCriteriaChange ?? (() => {}), onReviewedChange: onCriteriaReviewed ?? (() => {})}),
-      h("button", {type: "button", className: "button button-primary", disabled: !criteriaDraft.reviewed || actionsDisabled,
-        onClick: onContinue}, "Continue to CV screening")) : null,
+    criteriaDraft ? h("p", {className: "helper-text"}, "Screening requirements are available in Candidate Screening. Review and confirm them there.") : null,
     h("details", { className: "grounding-section", "aria-label": "Policy Grounding" }, h("summary", null, "Policy Grounding · Sources and citations"),
       h("div", { className: "grounding-header" }, h("h3", null, "Policy Grounding"), h("span", { className: "demo-badge" }, "Demo policy source")),
       h("p", { className: "grounding-description" }, "Grounded in synthetic company policy for this demo."),

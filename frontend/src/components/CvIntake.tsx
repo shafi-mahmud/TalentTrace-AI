@@ -6,7 +6,7 @@ import type { CvExtractionResponse } from "../types/cvExtraction";
 import { extractCvs } from "../api/cvExtraction";
 import { runCvOcr } from "../api/cvOcr";
 import type { CvOcrResponse } from "../types/cvOcr";
-import { createManualCriteriaDraft, CvExtractionSummary, CvOcrSummary, CvUploadConfirmation, SelectedCvFiles, ScreeningWorkflowSteps, screeningPrerequisiteMessage, resetCriteriaContextForNewChat } from "./cvIntakePresentation";
+import { CvExtractionSummary, CvOcrSummary, CvUploadConfirmation, SelectedCvFiles, ScreeningWorkflowSteps, screeningPrerequisiteMessage, resetCriteriaContextForNewChat } from "./cvIntakePresentation";
 import { extractCandidateProfiles } from "../api/candidateProfiles";
 import type { CandidateProfilesResponse } from "../types/candidateProfile";
 import { CandidateProfileAction, CandidateProfilesSummary } from "./candidateProfilesPresentation";
@@ -15,8 +15,12 @@ import { ScreeningResults } from "./screeningPresentation";
 import { screenCvBatch } from "../api/screening";
 import type { BatchScreeningResponse, ReviewedJobSnapshot } from "../types/screening";
 import type { WorkingCriteriaDraft } from "../types/recruiterChat";
+import { criteriaSaveStatus } from "../state/recruiterWorkspace";
+import { createJob, saveCriteria } from "../api/jobs";
+import type { SavedJob } from "../api/jobs";
 
-export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed}: {
+export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed, onJobSaved}: {
+  onJobSaved: (job: SavedJob) => void;
   contextResetKey: number;
   draft: WorkingCriteriaDraft | null; onCriteriaChange: (criteria: WorkingCriteriaDraft["criteria"]) => void;
   onCriteriaReviewed: (reviewed: boolean) => void;
@@ -48,6 +52,10 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   function invalidateCriteria() { screeningRevision.current++; setSnapshot(null); setScreening(null); }
   useLayoutEffect(() => { invalidateCriteria(); }, [criteriaDraft?.draftId, criteriaDraft?.criteria, criteriaDraft?.reviewed]);
   useLayoutEffect(() => {
+    if (criteriaDraft?.jobReference) setReference(criteriaDraft.jobReference);
+    if (criteriaDraft?.reviewed && criteriaDraft.savedSnapshot) setSnapshot(criteriaDraft.savedSnapshot);
+  }, [criteriaDraft?.draftId, criteriaDraft?.jobReference, criteriaDraft?.criteria, criteriaDraft?.reviewed, criteriaDraft?.savedSnapshot]);
+  useLayoutEffect(() => {
     if (previousContextResetKey.current === contextResetKey) return;
     previousContextResetKey.current = contextResetKey;
     const next = resetCriteriaContextForNewChat({reference, manualDraft, manualJobTitle, setupError, snapshot, screening});
@@ -63,11 +71,26 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
     if (draft) onCriteriaReviewed(reviewed);
     else setManualDraft(current => current ? {...current, reviewed} : current);
   }
-  function createManualDraft(event: FormEvent<HTMLFormElement>) {
+  async function createManualDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const created = createManualCriteriaDraft(manualJobTitle, reference);
-    if (!created) { setSetupError("Enter a job title and a valid TT-JOB reference before adding criteria."); return; }
-    setManualDraft(created); setSetupError(""); setError(""); invalidateCriteria();
+    if (busy) return;
+    const revision = screeningRevision.current;
+    setLoading(true);
+    try {const job = await createJob(manualJobTitle);
+      if (revision !== screeningRevision.current) return;
+      setReference(job.job_reference); onJobSaved(job);
+      setSetupError(""); setError(""); invalidateCriteria();}
+    catch {if (revision === screeningRevision.current) setSetupError("Job could not be saved. Check the title and service readiness.");}
+    finally {setLoading(false);}
+  }
+  async function persistCriteria(value: ReviewedJobSnapshot) {
+    if (!criteriaDraft?.revision) {setError("Reload the saved job before confirming requirements."); return;}
+    const revision = screeningRevision.current;
+    setLoading(true); setError("");
+    try {const job = await saveCriteria(criteriaDraft.draftId, criteriaDraft.revision, value.criteria, true);
+      if (revision === screeningRevision.current) {onJobSaved(job); setSnapshot(job.snapshot); setScreening(null);}}
+    catch (failure) {setError(failure instanceof Error ? failure.message : "Requirements could not be confirmed.");}
+    finally {setLoading(false);}
   }
   function clearProfiles() { setProfiles(null); setOcrAttempted(false); }
   const pending = useRef(false);
@@ -140,15 +163,16 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
       <ScreeningWorkflowSteps hasSuggestions={Boolean(criteriaDraft)} hasSnapshot={Boolean(snapshot)} hasBatch={Boolean(result)} isScreened={Boolean(screening)} />
       <section className="card cv-intake-card" aria-label="Candidate screening workspace">
         <div className="field"><label htmlFor="cv-job-reference">Job Reference</label>
-          <input id="cv-job-reference" value={reference} maxLength={23} required placeholder="TT-JOB-XXXXXXXXXXXXXXXX" onChange={event => {
+          <input id="cv-job-reference" value={reference} readOnly={Boolean(criteriaDraft?.jobReference)} maxLength={23} required placeholder="Create or select a job first" onChange={event => {
             setReference(event.target.value); invalidateCriteria(); changeReviewed(false); setError(""); setSetupError("");
           }} />
-          <p className="helper-text">Use the reference for this demo job. The reviewed criteria snapshot is session-only; no saved job profile is created.</p>
+          <p className="helper-text">This reference belongs to the active saved job. Requirements must be confirmed before screening.</p>
         </div>
+        {criteriaDraft?.jobReference && <p role="status" className="helper-text">{criteriaSaveStatus(criteriaDraft)}</p>}
         {criteriaDraft ? <ScreeningCriteriaReview suggestions={criteriaDraft.suggestions} criteria={criteriaDraft.criteria} sources={criteriaDraft.sources}
           reviewed={criteriaDraft.reviewed} jobReference={reference} disabled={busy} origin={criteriaDraft.origin}
           onChange={changeCriteria} onReviewedChange={changeReviewed}
-          onConfirm={value => {setSnapshot(value); setScreening(null); setError("");}} /> :
+          onConfirm={value => {void persistCriteria(value);}} /> :
           <section className="card criteria-review-card" aria-label="Set up screening criteria">
             <h2>Set up screening criteria</h2>
             <p className="helper-text">A generated JD is optional. Add the job title and enter the requirements you want to evaluate.</p>
@@ -160,7 +184,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
               <button className="button button-primary" type="submit" disabled={busy}>Add screening criteria</button>
             </form>
           </section>}
-        {snapshot && <p role="status" className="session-confirmation">Criteria confirmed for <strong>{snapshot.job_reference}</strong><span> Session only; not saved as a job profile.</span></p>}
+        {snapshot && <p role="status" className="session-confirmation">Requirements saved and confirmed for <strong>{snapshot.job_reference}</strong></p>}
         <section className="card cv-intake-card" aria-label="Candidate CV upload">
           <h2>Upload candidate CVs</h2>
         <form onSubmit={submit}>

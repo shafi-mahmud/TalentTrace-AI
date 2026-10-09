@@ -123,7 +123,9 @@ test("multipart request sends original File objects without reading or encoding 
   t.mock.method(globalThis, "fetch", async (url, options) => {
     assert.equal(url, "/api/v1/cv-uploads");
     assert.equal(options?.method, "POST");
-    assert.equal(options?.headers, undefined);
+    assert.equal(new Headers(options?.headers).get("X-TalentTrace-Request"), "1");
+    assert.equal(options?.credentials, "include");
+    assert.equal(new Headers(options?.headers).get("Content-Type"), null);
     assert.ok(options?.body instanceof FormData);
     assert.equal(options.body.get("job_reference"), REFERENCE);
     assert.equal(options.body.getAll("files").length, 1);
