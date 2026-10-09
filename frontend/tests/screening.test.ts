@@ -8,6 +8,9 @@ import ScreeningCriteriaReview, { confirmReviewedCriteria, CriteriaEditor } from
 import { isRecruiterChatResponse } from "../src/api/recruiterChat.ts";
 import type { BatchScreeningResponse, ReviewedJobSnapshot } from "../src/types/screening.ts";
 import type { CvUploadResponse } from "../src/types/cvUpload.ts";
+import { isScoringWeights, loadScores } from "../src/api/scoring.ts";
+import { ScoringWeightsEditor } from "../src/components/ScoringWeightsEditor.ts";
+import type { CandidateScore } from "../src/types/screening.ts";
 
 const reference = "TT-JOB-0123456789ABCDEF";
 const id = "9014cc92-9256-48e2-a5f7-52981251cc44";
@@ -26,6 +29,89 @@ function result(): BatchScreeningResponse {
         matches: [{criterion_id: "python", match_status: "supported", match_method: "semantic", explanation: "Referenced evidence supports this requirement.",
           evidence: [{fact_id: "fact:0001", value: "Built APIs using Django", source: {kind: "page", number: 2, method: "ocr", block_type: null}}]}]}}}]};
 }
+
+function scoredResult(): BatchScreeningResponse {
+  const response = result();
+  const weights = {skill: 100, experience: 0, education: 0};
+  const score: CandidateScore = {job_reference: reference, upload_id: id, screening_decision: "eligible",
+    status: "scored", reason: null, weights, score: 100,
+    dimensions: ["skill", "experience", "education"].map(category => ({category: category as "skill" | "experience" | "education",
+      weight: category === "skill" ? 100 : 0, supported_count: category === "skill" ? 1 : 0,
+      total_requirements: category === "skill" ? 1 : 0, coverage_percent: category === "skill" ? 100 : null,
+      weighted_points: category === "skill" ? 100 : 0,
+      matches: category === "skill" ? structuredClone(response.candidates[0].result!.matching_result.matches) : []}))};
+  response.scoring = {job_id: id, job_reference: reference, batch_id: batchId, criteria_revision: 2,
+    scoring_version: "f2-coverage-v1", weights, candidates: [score], ranking: [{upload_id: id, score: 100, rank: 1, tied: false}]};
+  return response;
+}
+
+test("F2 response validates scores against original evidence and eligible-only rank", () => {
+  assert.ok(isBatchScreeningResponse(scoredResult()));
+  for (const mutate of [
+    (r: BatchScreeningResponse) => {r.scoring!.candidates[0].score = 99;},
+    (r: BatchScreeningResponse) => {r.scoring!.ranking[0].rank = 2;},
+    (r: BatchScreeningResponse) => {r.scoring!.ranking[0].tied = true;},
+    (r: BatchScreeningResponse) => {r.scoring!.candidates[0].dimensions[0].matches[0].evidence[0].source.number = 9;},
+    (r: BatchScreeningResponse) => {r.scoring!.weights.skill = 99;},
+    (r: BatchScreeningResponse) => {r.scoring!.criteria_revision = 0;},
+  ]) {const value = scoredResult(); mutate(value); assert.ok(!isBatchScreeningResponse(value));}
+});
+
+test("F2 UI shows score breakdown and preserves semantic OCR evidence and screening decision", () => {
+  const html = renderToStaticMarkup(createElement(ScreeningResults, {result: scoredResult()}));
+  for (const text of ["100.00 / 100", "Score breakdown", "100% weight", "Eligible", "Django", "OCR", "Page 2", "Human review required"]) assert.ok(html.includes(text), text);
+  assert.ok(!html.includes("Ranked by supported requirements"));
+});
+
+test("missing weighted dimension stays eligible but not scored or ranked", () => {
+  const response = scoredResult();
+  const weights = {skill: 50, experience: 30, education: 20};
+  response.scoring!.weights = weights;
+  response.scoring!.candidates = [{...response.scoring!.candidates[0], weights, score: null, dimensions: [], status: "not_evaluated", reason: "missing_dimension_criteria"}];
+  response.scoring!.ranking = [];
+  assert.ok(isBatchScreeningResponse(response));
+  const html = renderToStaticMarkup(createElement(ScreeningResults, {result: response}));
+  assert.match(html, /Eligible - Not scored/);
+  assert.match(html, /weighted dimension has no approved criteria/);
+  assert.ok(!html.includes("0.00 / 100"));
+});
+
+test("weight editor supports deliberate edits, bounds and approval disclosure", () => {
+  let changed = {skill: 50, experience: 30, education: 20};
+  const props = {weights: changed, disabled: false, reviewed: false, onChange: (v: typeof changed) => {changed = v;}};
+  const tree = ScoringWeightsEditor(props);
+  const children = tree.props.children as React.ReactElement[];
+  const input = children[2].props.children[1];
+  input.props.onChange({target: {value: "60"}});
+  assert.equal(changed.skill, 60);
+  assert.ok(!isScoringWeights(changed));
+  input.props.onChange({target: {value: ""}});
+  assert.ok(!isScoringWeights(changed));
+  for (const weights of [{skill: -1, experience: 81, education: 20}, {skill: 50.5, experience: 29.5, education: 20}, {skill: "50", experience: 30, education: 20}]) assert.ok(!isScoringWeights(weights));
+  const html = renderToStaticMarkup(createElement(ScoringWeightsEditor, props));
+  assert.match(html, /min="0" max="100" step="1"/);
+  assert.match(html, /need confirmation before screening/);
+});
+
+test("saved scoring API rejects stale revisions and hides error bodies", async t => {
+  const response = scoredResult();
+  t.mock.method(globalThis, "fetch", async () => Response.json(response.scoring));
+  assert.equal((await loadScores(id, 2, response)).scoring_version, "f2-coverage-v1");
+  await assert.rejects(loadScores(id, 3, response), /could not be validated/);
+  t.mock.method(globalThis, "fetch", async () => Response.json({detail: "private database content"}, {status: 500}));
+  await assert.rejects(loadScores(id, 2, response), /^Error: Saved scores could not be loaded\.$/);
+  t.mock.method(globalThis, "fetch", async () => new Response("private malformed response"));
+  await assert.rejects(loadScores(id, 2, response), /^Error: Saved scores could not be validated\.$/);
+});
+
+test("screening sends the approved job revision without client scores", async t => {
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    assert.equal(new Headers(options!.headers).get("X-TalentTrace-Job-Revision"), "2");
+    assert.deepEqual(JSON.parse(String(options?.body)), snapshot);
+    return Response.json(scoredResult());
+  });
+  assert.ok((await screenCvBatch(batch, snapshot, 2)).scoring);
+});
 
 test("review snapshot requires explicit confirmation, bounded criteria and valid reference", () => {
   assert.ok(isReviewedSnapshot(snapshot));

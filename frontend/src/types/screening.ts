@@ -46,4 +46,20 @@ export interface BatchScreeningResponse {
   candidates: {upload_id: string; result: ScreeningDecision | null; error_code: "screening_processing_failed" | null;
     overall_coverage: "met" | "partially_met" | "unmet" | "uncertain" | "not_evaluated"}[];
   ranking: CandidateRankingEntry[];
+  scoring?: ScoringBatch | null;
+}
+
+export interface ScoringWeights { skill: number; experience: number; education: number; }
+export interface CandidateScore {
+  job_reference: string; upload_id: string; screening_decision: ScreeningDecision["screening_decision"];
+  status: "scored" | "not_evaluated";
+  reason: "processing_failed" | "screening_incomplete" | "not_eligible" | "uncertain_evidence" | "missing_dimension_criteria" | null;
+  weights: ScoringWeights; score: number | null;
+  dimensions: {category: "skill" | "experience" | "education"; weight: number; supported_count: number;
+    total_requirements: number; coverage_percent: number | null; weighted_points: number; matches: RequirementMatch[]}[];
+}
+export interface ScoringBatch {
+  job_id: string; job_reference: string; batch_id: string; criteria_revision: number; scoring_version: "f2-coverage-v1";
+  weights: ScoringWeights; candidates: CandidateScore[];
+  ranking: {upload_id: string; score: number; rank: number; tied: boolean}[];
 }

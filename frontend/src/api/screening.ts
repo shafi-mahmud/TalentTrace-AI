@@ -1,4 +1,5 @@
 import { authenticatedFetch } from "./session.ts";
+import { isScoringBatch } from "./scoring.ts";
 import { isGroundedAttribute } from "./candidateProfiles.ts";
 import { isCvUploadResponse } from "./cvUploads.ts";
 import type { CvUploadResponse } from "../types/cvUpload";
@@ -84,7 +85,8 @@ function decision(value: unknown, snapshot: ReviewedJobSnapshot, uploadId: strin
       && reason.code === "hard_requirement_not_demonstrated" && reason.message === "Hard requirement was not demonstrated in the parsed CV.");
 }
 export function isBatchScreeningResponse(v: unknown): v is BatchScreeningResponse {
-  if (!keys(v, ["status", "job_reference", "batch_id", "snapshot", "processed_count", "candidates", "ranking"])
+  if (!(keys(v, ["status", "job_reference", "batch_id", "snapshot", "processed_count", "candidates", "ranking"])
+      || keys(v, ["status", "job_reference", "batch_id", "snapshot", "processed_count", "candidates", "ranking", "scoring"]))
     || v.status !== "processed" || typeof v.batch_id !== "string" || !UUID.test(v.batch_id)
     || !isReviewedSnapshot(v.snapshot) || v.job_reference !== v.snapshot.job_reference
     || !Array.isArray(v.candidates) || v.candidates.length < 1 || v.candidates.length > 20 || v.processed_count !== v.candidates.length) return false;
@@ -118,16 +120,16 @@ export function isBatchScreeningResponse(v: unknown): v is BatchScreeningRespons
       && entry.upload_id === row.upload_id && entry.rank === rank && entry.tied === tied
       && entry.supported_count === row.supported_count && entry.ambiguous_count === row.ambiguous_count
       && entry.not_found_count === row.not_found_count && entry.total_requirements === row.total_requirements;
-  });
+  }) && (v.scoring == null || isScoringBatch(v.scoring, v as unknown as BatchScreeningResponse));
 }
-export async function screenCvBatch(batch: CvUploadResponse, snapshot: ReviewedJobSnapshot): Promise<BatchScreeningResponse> {
+export async function screenCvBatch(batch: CvUploadResponse, snapshot: ReviewedJobSnapshot, revision?: number): Promise<BatchScreeningResponse> {
   if (!isCvUploadResponse(batch) || !isReviewedSnapshot(snapshot) || batch.job_reference !== snapshot.job_reference) {
     throw new Error("Confirm criteria for this uploaded job reference before screening.");
   }
   let response: Response;
   try {
     response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads/${batch.job_reference}/${batch.batch_id}/screen`, {
-      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(snapshot),
+      method: "POST", headers: {"Content-Type": "application/json", ...(revision ? {"X-TalentTrace-Job-Revision": String(revision)} : {})}, body: JSON.stringify(snapshot),
     });
   } catch { throw new Error("Screening was not confirmed. Check before retrying; provider calls may repeat."); }
   if (!response.ok) throw new Error(response.status === 409 ? "Reviewed job reference does not match the uploaded batch."

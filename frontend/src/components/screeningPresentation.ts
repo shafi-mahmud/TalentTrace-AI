@@ -1,4 +1,5 @@
 import { createElement as h } from "react";
+import { ScoreDetails } from "./scorePresentation.ts";
 import type { BatchScreeningResponse, CandidateRankingEntry } from "../types/screening";
 
 export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
@@ -12,12 +13,12 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
   return h("section", {className: "screening-results", "aria-label": "Candidate screening results"},
     h("div", {className: "results-heading"}, h("div", null, h("p", {className: "eyebrow"}, "Batch complete"),
       h("h2", null, "Screening results"), h("p", {className: "results-job-title"}, `${result.snapshot.job_title} · ${result.job_reference}`)),
-      h("span", {className: "results-session-badge"}, "Session results")),
-    h("p", {className: "helper-text"}, "Session-only ranking within this job, batch and confirmed criteria. Supported requirements count equally; no suitability score. Human review required."),
+      h("span", {className: "results-session-badge"}, result.scoring ? "Saved scores" : "Session results")),
+    h("p", {className: "helper-text"}, result.scoring ? "Saved evidence-based scores for this approved job revision. Only eligible scored candidates are ranked; ties share a rank. Human review required." : "Session-only ranking within this job, batch and confirmed criteria. Supported requirements count equally; no suitability score. Human review required."),
     h("p", {className: "helper-text"}, "Ties share a rank; upload ID only controls display order. Ambiguous means uncertain evidence, not partially met."),
     h("div", {className: "results-summary", "aria-label": "Candidate outcome summary"},
       summaryCard("Candidates processed", result.processed_count, "All batch files"),
-      summaryCard("Eligible", result.ranking.length, "Ranked by supported requirements"),
+      summaryCard("Eligible", result.ranking.length, result.scoring ? "Complete scores ranked by weighted coverage" : "Ranked by supported requirements"),
       summaryCard("Excluded", excludedCount, "Mandatory requirement not demonstrated"),
       summaryCard("Needs review", reviewCount, "Uncertain evidence"),
       summaryCard("Not evaluated", notEvaluatedCount, "Source or processing issue")),
@@ -28,7 +29,7 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
       h("span", null, label), h("strong", null, count), h("small", null, description));
   }
 
-  function card(candidate: BatchScreeningResponse["candidates"][number], ranking?: CandidateRankingEntry) {
+  function card(candidate: BatchScreeningResponse["candidates"][number], ranking?: Pick<CandidateRankingEntry, "rank" | "tied">) {
       const index = result.candidates.findIndex(c => c.upload_id === candidate.upload_id);
       const decision = candidate.result;
       const supported = decision?.status === "decision_complete" ? decision.matching_result.matches.filter(m => m.match_status === "supported").length : 0;
@@ -44,7 +45,8 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
         h("div", {className: "candidate-facts"},
           h("p", {className: "coverage-label"}, `Overall requirement coverage: ${coverageLabels[candidate.overall_coverage]}`),
           ranking ? h("p", {className: "rank-label"}, h("strong", null, `Rank ${ranking.rank}${ranking.tied ? " · Tied" : ""}`),
-            h("span", null, `${ranking.supported_count} of ${ranking.total_requirements} supported`)) : null),
+            h("span", null, `${supported} of ${result.snapshot.criteria.length} supported`)) : null),
+        result.scoring ? h(ScoreDetails, {score: result.scoring.candidates.find(c => c.upload_id === candidate.upload_id)!}) : null,
         decision?.status === "decision_complete" ? h("p", {className: "helper-text"},
           `${supported} of ${result.snapshot.criteria.length} requirements supported · ${ambiguous} ambiguous · ${notFound} not found. Overall coverage is separate from the screening decision.`) : null,
         decision?.exclusion_reasons.length ? h("ul", null, ...decision.exclusion_reasons.map(reason =>
@@ -63,7 +65,8 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
   function renderGroups() {
     const byId = new Map(result.candidates.map(c => [c.upload_id, c]));
     const groups = [
-      {title: "Eligible candidate ranking", cards: result.ranking.map(entry => card(byId.get(entry.upload_id)!, entry))},
+      {title: "Eligible candidate ranking", cards: (result.scoring?.ranking ?? result.ranking).map(entry => card(byId.get(entry.upload_id)!, entry))},
+      {title: "Eligible - Not scored", cards: result.scoring ? result.scoring.candidates.filter(c => c.screening_decision === "eligible" && c.status !== "scored").map(c => card(byId.get(c.upload_id)!)) : []},
       {title: "Excluded candidates", cards: result.candidates.filter(c => c.result?.screening_decision === "excluded").map(c => card(c))},
       {title: "Needs review — insufficient evidence", cards: result.candidates.filter(c => c.result?.screening_decision === "insufficient_evidence").map(c => card(c))},
       {title: "Source unavailable", cards: result.candidates.filter(c => c.result?.status === "source_unavailable").map(c => card(c))},

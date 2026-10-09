@@ -19,6 +19,21 @@ function job(): SavedJob {
     snapshot: null, draft: null, conversation_id: null};
 }
 
+test("saving scoring weights uses approval revision and cannot send invalid weights", async t => {
+  const weights = {skill: 100, experience: 0, education: 0};
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    calls++;
+    assert.deepEqual(JSON.parse(String(options?.body)), {revision: 1, criteria: [criterion], confirmed: true, weights});
+    return Response.json({...job(), scoring_weights: weights});
+  });
+  const saved = await saveCriteria(id, 1, [criterion], true, weights);
+  assert.deepEqual(workingJob(saved).weights, weights);
+  await assert.rejects(saveCriteria(id, 1, [criterion], true, {...weights, skill: 99}), /totaling 100/);
+  assert.equal(calls, 1);
+  assert.ok(!isSavedJob({...saved, scoring_weights: {...weights, skill: 101}}));
+});
+
 test("session transport includes cookies and mutation marker without exposing server errors", async () => {
   const old = globalThis.fetch;
   try {

@@ -18,6 +18,9 @@ import type { WorkingCriteriaDraft } from "../types/recruiterChat";
 import { criteriaSaveStatus } from "../state/recruiterWorkspace";
 import { createJob, saveCriteria } from "../api/jobs";
 import type { SavedJob } from "../api/jobs";
+import { isScoringWeights, loadScores } from "../api/scoring";
+import type { ScoringWeights } from "../types/screening";
+import { ScoringWeightsEditor } from "./ScoringWeightsEditor";
 
 export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed, onJobSaved}: {
   onJobSaved: (job: SavedJob) => void;
@@ -46,6 +49,8 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   const screeningRevision = useRef(0);
   const previousContextResetKey = useRef(contextResetKey);
   const criteriaDraft = draft ?? manualDraft;
+  const [weights, setWeights] = useState<ScoringWeights>({skill: 50, experience: 30, education: 20});
+  useLayoutEffect(() => {setWeights(criteriaDraft?.weights ?? {skill: 50, experience: 30, education: 20});}, [criteriaDraft?.draftId, criteriaDraft?.revision, contextResetKey]);
   const busy = loading || extracting || processingOcr || parsing || screeningBusy;
   const screeningPrerequisite = screeningPrerequisiteMessage({busy, hasSuggestions: Boolean(criteriaDraft), hasBatch: Boolean(result),
     hasSnapshot: Boolean(snapshot), referenceMatches: Boolean(result && snapshot && snapshot.job_reference === result.job_reference)});
@@ -84,10 +89,11 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
     finally {setLoading(false);}
   }
   async function persistCriteria(value: ReviewedJobSnapshot) {
+    if (!isScoringWeights(weights)) {setError("Scoring weights must be whole percentages totaling 100."); return;}
     if (!criteriaDraft?.revision) {setError("Reload the saved job before confirming requirements."); return;}
     const revision = screeningRevision.current;
     setLoading(true); setError("");
-    try {const job = await saveCriteria(criteriaDraft.draftId, criteriaDraft.revision, value.criteria, true);
+    try {const job = await saveCriteria(criteriaDraft.draftId, criteriaDraft.revision, value.criteria, true, weights);
       if (revision === screeningRevision.current) {onJobSaved(job); setSnapshot(job.snapshot); setScreening(null);}}
     catch (failure) {setError(failure instanceof Error ? failure.message : "Requirements could not be confirmed.");}
     finally {setLoading(false);}
@@ -149,12 +155,24 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
     pending.current = true; setScreeningBusy(true); setScreening(null); setError("");
     const revision = screeningRevision.current;
     try {
-      const response = await screenCvBatch(result, snapshot);
+      const response = await screenCvBatch(result, snapshot, criteriaDraft?.revision);
+      if (response.scoring && (response.scoring.job_id !== criteriaDraft?.draftId || response.scoring.criteria_revision !== criteriaDraft?.revision)) throw new Error("Job changed. Reload and review criteria and weights.");
       // Switching to another JD while this request runs invalidates its presentation.
       if (revision === screeningRevision.current) setScreening(response);
     }
     catch (failure) { if (revision === screeningRevision.current) setError(failure instanceof Error ? failure.message : "Batch screening could not be completed."); }
     finally { pending.current = false; setScreeningBusy(false); }
+  }
+
+  async function reloadScores() {
+    if (!screening || !criteriaDraft?.revision || busy) return;
+    const revision = screeningRevision.current;
+    setScreeningBusy(true); setError("");
+    try {
+      const scoring = await loadScores(criteriaDraft.draftId, criteriaDraft.revision, screening);
+      if (revision === screeningRevision.current) setScreening({...screening, scoring});
+    } catch (failure) {if (revision === screeningRevision.current) setError(failure instanceof Error ? failure.message : "Saved scores could not be loaded.");}
+    finally {setScreeningBusy(false);}
   }
 
   return <div className="app-shell chat-page">
@@ -169,6 +187,8 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           <p className="helper-text">This reference belongs to the active saved job. Requirements must be confirmed before screening.</p>
         </div>
         {criteriaDraft?.jobReference && <p role="status" className="helper-text">{criteriaSaveStatus(criteriaDraft)}</p>}
+        {criteriaDraft && <ScoringWeightsEditor weights={weights} disabled={busy} reviewed={criteriaDraft.reviewed}
+          onChange={value => {setWeights(value); invalidateCriteria(); changeReviewed(false);}} />}
         {criteriaDraft ? <ScreeningCriteriaReview suggestions={criteriaDraft.suggestions} criteria={criteriaDraft.criteria} sources={criteriaDraft.sources}
           reviewed={criteriaDraft.reviewed} jobReference={reference} disabled={busy} origin={criteriaDraft.origin}
           onChange={changeCriteria} onReviewedChange={changeReviewed}
@@ -214,7 +234,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
-        {screening && <ScreeningResults result={screening} />}
+        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} /></>}
         </section>
       </section>
     </main>

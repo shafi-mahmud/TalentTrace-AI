@@ -6,9 +6,12 @@ import type { ReviewedJobSnapshot, ScreeningCriterion, ScreeningSuggestions } fr
 import type { ScreeningSuggestionSource, WorkingCriteriaDraft } from "../types/recruiterChat";
 import { isRecruiterChatResponse } from "./recruiterChat.ts";
 import type { RecruiterChatResponse } from "../types/recruiterChat";
+import { isScoringWeights } from "./scoring.ts";
+import type { ScoringWeights } from "../types/screening";
 
 const BASE = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 export interface SavedJob {id: string; job_reference: string; job_title: string; revision: number;
+  scoring_weights?: ScoringWeights;
   suggestions: ScreeningSuggestions; sources: ScreeningSuggestionSource[]; snapshot: ReviewedJobSnapshot | null;
   draft: JobDescriptionGenerationResponse | null; conversation_id: string | null;}
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -18,6 +21,7 @@ export function isSavedJob(value: unknown): value is SavedJob {
   const job = value as SavedJob;
   return typeof job.id === "string" && UUID.test(job.id) && /^TT-JOB-[A-F0-9]{16}$/.test(job.job_reference)
     && typeof job.job_title === "string" && Number.isInteger(job.revision) && job.revision > 0
+    && (job.scoring_weights === undefined || isScoringWeights(job.scoring_weights))
     && (isScreeningSuggestions(job.suggestions) || (isEmptyManualSuggestions(job.suggestions)
       && job.draft === null && job.conversation_id === null && job.snapshot === null && Array.isArray(job.sources) && job.sources.length === 0))
     && job.suggestions.job_title === job.job_title
@@ -52,14 +56,16 @@ export async function createJob(job_title: string): Promise<SavedJob> {
   if (!isSavedJob(job)) throw new Error("Saved job could not be validated.");
   return job;
 }
-export async function saveCriteria(id: string, revision: number, criteria: ScreeningCriterion[], confirmed: boolean): Promise<SavedJob> {
-  const job = await request(`/jobs/${id}/criteria`, {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({revision, criteria, confirmed})});
+export async function saveCriteria(id: string, revision: number, criteria: ScreeningCriterion[], confirmed: boolean, weights?: ScoringWeights): Promise<SavedJob> {
+  if (weights && !isScoringWeights(weights)) throw new Error("Weights must be whole percentages totaling 100.");
+  const job = await request(`/jobs/${id}/criteria`, {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({revision, criteria, confirmed, ...(weights ? {weights} : {})})});
   if (!isSavedJob(job)) throw new Error("Saved requirements could not be validated.");
   return job;
 }
 export function workingJob(job: SavedJob): WorkingCriteriaDraft {
   return {draftId: job.id, jobReference: job.job_reference, revision: job.revision, savedSnapshot: job.snapshot,
     origin: job.draft ? "job_description" : "manual", suggestions: job.suggestions, sources: job.sources,
+    weights: job.scoring_weights ?? {skill: 50, experience: 30, education: 20},
     criteria: job.suggestions.criteria.map(c => ({...c})), reviewed: job.snapshot !== null};
 }
 

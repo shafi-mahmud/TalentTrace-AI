@@ -30,6 +30,7 @@ export interface WorkingCriteriaDraft {
   draftId: string;
   jobReference?: string;
   revision?: number;
+  weights?: import("./screening").ScoringWeights;
   savedSnapshot?: ReviewedJobSnapshot | null;
   origin?: "job_description" | "manual";
   suggestions: ScreeningSuggestions;
