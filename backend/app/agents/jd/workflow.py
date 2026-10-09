@@ -161,7 +161,9 @@ class JobDescriptionWorkflow:
             for citation_id in citation_ids
         ]
         try:
+            from app.rag.screening_policy import policy_screening_suggestions
             response = JobDescriptionGenerationResponse(
+                policy_screening_suggestions=policy_screening_suggestions(state["request"], state["retrieved_policy_chunks"]),
                 retrieval_mode=self._retriever.retrieval_mode,
                 provider=state["provider"],
                 model=state["model"],

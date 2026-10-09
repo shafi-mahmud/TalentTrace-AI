@@ -5,7 +5,8 @@ import unicodedata
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from app.rag.contracts import CitationId, PolicyTitle
 
 from app.schemas.job_description import ExperienceYears, JobDescriptionGenerationResponse, Location, EmploymentType, WorkArrangement
 from app.schemas.batch_screening import ScreeningSuggestions
@@ -109,8 +110,18 @@ class RecruiterInterpretation(BaseModel):
 class ScreeningSuggestionSource(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     criterion_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
-    source: Literal["recruiter_input"] = "recruiter_input"
+    source: Literal["recruiter_input", "company_policy"] = "recruiter_input"
     evidence: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+    citation_id: CitationId | None = None
+    source_title: PolicyTitle | None = None
+
+    @model_validator(mode="after")
+    def consistent_source(self):
+        if self.source == "company_policy" and (self.citation_id is None or self.source_title is None):
+            raise ValueError("Policy suggestions require citation provenance.")
+        if self.source == "recruiter_input" and (self.citation_id is not None or self.source_title is not None):
+            raise ValueError("Recruiter input must not claim policy provenance.")
+        return self
 
     @field_validator("evidence")
     @classmethod
@@ -159,6 +170,8 @@ class JobDescriptionChatResponse(BaseModel):
     intent: Literal["create_job_description"] = "create_job_description"
     conversation_id: UUID
     draft_id: UUID = Field(default_factory=uuid4)
+    job_reference: str | None = None
+    job_revision: int = Field(default=1, ge=1)
     assistant_message: str = "Your policy-grounded draft is ready. Review its recruiter-grounded screening suggestions before screening."
     job_description_result: JobDescriptionGenerationResponse
     publishing_context: PublishingContext = Field(default_factory=PublishingContext)

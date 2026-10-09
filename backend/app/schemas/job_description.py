@@ -216,6 +216,17 @@ class PolicyGroundingCitation(BaseModel):
     heading_paths: tuple[tuple[Heading, ...], ...] = ()
 
 
+class PolicyScreeningSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    criterion_id: str = Field(pattern=r"^policy-[a-z-]{1,50}$")
+    description: Skill
+    category: Literal["skill"] = "skill"
+    is_hard: Literal[False] = False
+    evidence: Skill
+    citation_id: CitationId
+    source_title: PolicyTitle
+
+
 class JobDescriptionGenerationResponse(BaseModel):
     """Public response for one generated, unapproved job-description draft."""
 
@@ -227,6 +238,7 @@ class JobDescriptionGenerationResponse(BaseModel):
     provider: Literal["groq"] = "groq"
     model: ModelName
     job_description: GeneratedJobDescriptionDraft
+    policy_screening_suggestions: list[PolicyScreeningSuggestion] = Field(default_factory=list, max_length=2)
     grounding_citations: list[PolicyGroundingCitation] = Field(
         min_length=1,
         max_length=4,

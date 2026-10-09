@@ -68,7 +68,7 @@ def test_real_screening_graph_semantic_outcomes_and_ocr_evidence(monkeypatch, st
     matcher = FakeMatcher([semantic_result(identifier="python", status=status, evidence=evidence)])
     profiles = Profiles([profile])
     service = BatchScreeningService(profiles, CandidateScreeningWorkflow(matcher))
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: service)
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: service)
     response = post()
     assert response.status_code == 200
     result = response.json()["candidates"][0]["result"]
@@ -96,7 +96,7 @@ def test_batch_isolates_source_provider_and_unexpected_candidate_failures(monkey
             assert set(supplied.model_dump()) == {"job_reference", "upload_id", "parsing_status", "qualifications", "criteria"}
             if supplied.upload_id == values[3].upload_id: raise RuntimeError("PRIVATE_EXCEPTION_PATH")
             return await super().screen(supplied)
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: BatchScreeningService(Profiles(values), Workflow(matcher)))
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: BatchScreeningService(Profiles(values), Workflow(matcher)))
     response = post()
     assert response.status_code == 200
     rows = response.json()["candidates"]
@@ -113,7 +113,7 @@ def test_batch_isolates_source_provider_and_unexpected_candidate_failures(monkey
 
 @pytest.mark.parametrize("confirmation", [False, None, "true", 1])
 def test_confirmation_must_be_explicit_boolean_true(monkeypatch, confirmation):
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: pytest.fail("Invalid input must not run"))
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: pytest.fail("Invalid input must not run"))
     assert post(snapshot(criteria_confirmed=confirmation)).status_code == 422
 
 
@@ -126,7 +126,7 @@ def test_confirmation_must_be_explicit_boolean_true(monkeypatch, confirmation):
     {"criteria": [{"criterion_id": "x", "description": "Python", "category": "skill", "is_hard": "true"}]},
 ])
 def test_malformed_requests_are_rejected_without_echo(monkeypatch, change):
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: pytest.fail("Invalid input must not run"))
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: pytest.fail("Invalid input must not run"))
     payload = snapshot(**change)
     if change.get("criteria_confirmed") == "missing": payload.pop("criteria_confirmed")
     response = post(payload)
@@ -141,7 +141,7 @@ def test_duplicate_and_oversized_criteria_rejected():
 
 def test_job_mismatch_rejected_before_parsing(monkeypatch):
     profiles = Profiles([candidate()])
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: BatchScreeningService(profiles))
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: BatchScreeningService(profiles))
     response = post(job_reference="TT-JOB-FFFFFFFFFFFFFFFF")
     assert response.status_code == 409 and not profiles.calls
 
@@ -151,7 +151,7 @@ def test_job_mismatch_rejected_before_parsing(monkeypatch):
 def test_request_level_errors_sanitized(monkeypatch, error, status):
     class FailedProfiles:
         async def parse_batch(self, *args): raise error
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: BatchScreeningService(FailedProfiles()))
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: BatchScreeningService(FailedProfiles()))
     response = post()
     assert response.status_code == status and "PRIVATE" not in response.text
 
@@ -177,7 +177,7 @@ def test_chat_response_retains_only_original_requirements_as_suggestions():
 def test_confirmed_preferred_requirement_cannot_exclude(monkeypatch):
     payload = snapshot()
     payload["criteria"][0]["is_hard"] = False
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: BatchScreeningService(Profiles([candidate(skills=())])))
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: BatchScreeningService(Profiles([candidate(skills=())])))
     response = post(payload)
     assert response.status_code == 200
     result = response.json()["candidates"][0]["result"]
@@ -191,7 +191,7 @@ def test_actual_upload_pdf_parse_and_screen_endpoint(monkeypatch, tmp_path):
     monkeypatch.setattr(cv_uploads, "settings", config)
     profiles = CandidateProfileService(config, extractor=extractor)
     matcher = FakeMatcher(error=AssertionError("Exact Python must bypass semantic provider"))
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: BatchScreeningService(profiles, CandidateScreeningWorkflow(matcher)))
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: BatchScreeningService(profiles, CandidateScreeningWorkflow(matcher)))
     content = pdf_bytes((SOURCE,))
     async def execute():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:

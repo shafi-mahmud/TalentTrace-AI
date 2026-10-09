@@ -307,6 +307,16 @@ class RecruiterChatService:
                 raise
             suggestions = screening_suggestions(jd_request)
             sources = self._suggestion_sources(session, suggestions)
+            from app.schemas.screening import ScreeningCriterion
+            for policy in result.policy_screening_suggestions:
+                if len(suggestions.criteria) >= 71:
+                    break
+                if any(c.description.casefold() == policy.description.casefold() for c in suggestions.criteria):
+                    continue
+                suggestions.criteria.append(ScreeningCriterion(criterion_id=policy.criterion_id,
+                    description=policy.description, category=policy.category, is_hard=False))
+                sources.append(ScreeningSuggestionSource(criterion_id=policy.criterion_id, source="company_policy",
+                    evidence=policy.evidence, citation_id=policy.citation_id, source_title=policy.source_title))
             session.last_asked_field = None
             session.last_generated_requirements = signature
             return JobDescriptionChatResponse(conversation_id=session.conversation_id, job_description_result=result,

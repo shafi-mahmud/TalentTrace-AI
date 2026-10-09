@@ -4,7 +4,9 @@ from uuid import uuid4
 from app.integrations.job_publishing.mcp_client import get_job_publisher, PublicationUnavailable
 from app.schemas.job_publication import PublicationResult, RecruiterPublishRequest
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Depends, HTTPException
+from app.core.auth import current_recruiter, database_session
+from app.services.recruiter_records import persist_chat, owned_job
 from fastapi.responses import JSONResponse
 
 from app.agents.jd.errors import (
@@ -24,12 +26,14 @@ router = APIRouter(prefix="/recruiter-chat", tags=["recruiter chat"])
     502: {"description": "Interpretation or JD generation failed."},
     503: {"description": "Recruiter chat or JD generation is not configured."},
     504: {"description": "Interpretation or JD generation timed out."},
-    409: {"description": "The bounded in-memory conversation expired or reached its limit."},
+    409: {"description": "The bounded stored conversation expired or reached its limit."},
 })
-async def recruiter_chat(request: RecruiterChatRequest) -> RecruiterChatResponse | JSONResponse:
+async def recruiter_chat(request: RecruiterChatRequest, user=Depends(current_recruiter), session=Depends(database_session)) -> RecruiterChatResponse | JSONResponse:
     correlation_id = uuid4().hex[:12]
     try:
-        return await RecruiterChatService(get_recruiter_interpreter()).respond(request, correlation_id=correlation_id)
+        return await persist_chat(session, user.id, request, RecruiterChatService(get_recruiter_interpreter()), correlation_id)
+    except HTTPException:
+        raise
     except ConversationUnavailableError as error:
         logger.warning("talenttrace_failure correlation_id=%s stage=api_response category=conversation_unavailable exception_class=%s", correlation_id, type(error).__name__)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={
@@ -65,10 +69,26 @@ async def recruiter_chat(request: RecruiterChatRequest) -> RecruiterChatResponse
     502: {"description": "Publication unconfirmed; check delivery before another attempt."},
     503: {"description": "Local MCP publishing server unavailable."},
 })
-async def publish_job(request: RecruiterPublishRequest) -> PublicationResult | JSONResponse:
+async def publish_job(request: RecruiterPublishRequest, user=Depends(current_recruiter), session=Depends(database_session)) -> PublicationResult | JSONResponse:
+    await authorize_publication(session, user.id, request)
     try:
         return await get_job_publisher().publish(request)
     except PublicationUnavailable:
         return JSONResponse(status_code=503, content={"code": "job_publication_unavailable", "message": "Job publishing is not configured."})
     except Exception:
         return JSONResponse(status_code=502, content={"code": "job_publication_unconfirmed", "message": "Publication was not confirmed. Check Discord before another attempt; delivery may have occurred."})
+
+
+async def authorize_publication(session, owner_id, request):
+    if request.job_id is None:
+        raise HTTPException(422, "Select a saved job draft before publishing.")
+    job = await owned_job(session, owner_id, request.job_id)
+    if job.draft is None:
+        raise HTTPException(409, "This job has no generated draft.")
+    # Compare the complete bounded content before any external side effect.
+    from app.schemas.job_description import JobDescriptionGenerationResponse
+    draft = JobDescriptionGenerationResponse.model_validate(job.draft).job_description
+    for field in ("title", "summary", "responsibilities", "required_skills", "preferred_skills", "qualifications"):
+        if getattr(request, field) != getattr(draft, field):
+            raise HTTPException(409, "Draft changed. Reload it before publishing.")
+    request._job_reference = job.job_reference

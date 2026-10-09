@@ -102,7 +102,7 @@ def test_ranking_rejects_mixed_snapshots_and_duplicate_uploads(change):
 def test_api_ranking_is_contact_independent_and_preserves_batch_scope(monkeypatch):
     profiles = [candidate(), candidate(), candidate("parsing_failed")]
     service = BatchScreeningService(Profiles(profiles), CandidateScreeningWorkflow(FakeMatcher(error=AssertionError("No call"))))
-    monkeypatch.setattr(route, "BatchScreeningService", lambda: service)
+    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: service)
     batch_id = uuid4()
     first = post(batch_id=batch_id)
     assert first.status_code == 200

@@ -29,6 +29,14 @@ PUBLIC_VALIDATION_MESSAGES: Final[dict[str, str]] = {
 app = FastAPI(title=f"{settings.app_name} API", version="0.1.0")
 
 
+@app.middleware("http")
+async def private_api_responses(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(settings.api_v1_prefix + "/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.exception_handler(RequestValidationError)
 async def sanitized_request_validation_error_handler(
     _request: Request,

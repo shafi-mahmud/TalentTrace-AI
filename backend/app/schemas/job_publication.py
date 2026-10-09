@@ -1,9 +1,10 @@
 """Bounded HTTP publication DTO mapped to the standalone MCP JobCircular."""
+from uuid import UUID
 import hashlib
 import json
 from typing import Annotated, Literal
 import unicodedata
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, PrivateAttr
 
 
 def plain_text(value: object) -> object:
@@ -29,6 +30,8 @@ Location = Annotated[str, BeforeValidator(single_line), StringConstraints(min_le
 
 class RecruiterPublishRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+    job_id: Annotated[UUID | None, BeforeValidator(lambda value: UUID(value) if isinstance(value, str) else value)] = None
+    _job_reference: str | None = PrivateAttr(default=None)
     title: Title
     summary: Summary
     responsibilities: list[Item] = Field(min_length=1, max_length=15)
@@ -40,12 +43,12 @@ class RecruiterPublishRequest(BaseModel):
     work_arrangement: Literal["on_site", "remote", "hybrid"] | None = None
 
     def mcp_job(self) -> dict:
-        job = self.model_dump(mode="json")
+        job = self.model_dump(mode="json", exclude={"job_id"})
         if job["work_arrangement"] == "on_site":
             job["work_arrangement"] = "onsite"
         # Temporary demo identity: stable for normalized content, not a database ID.
         canonical = json.dumps(job, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-        job["job_reference"] = "TT-JOB-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16].upper()
+        job["job_reference"] = self._job_reference or "TT-JOB-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16].upper()
         return job
 
 

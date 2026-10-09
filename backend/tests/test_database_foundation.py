@@ -143,9 +143,7 @@ def test_knowledge_models_use_shared_base() -> None:
     assert issubclass(base_module.Base, DeclarativeBase)
     assert KnowledgeDocument.metadata is base_module.Base.metadata
     assert KnowledgeChunk.metadata is base_module.Base.metadata
-    assert set(base_module.Base.metadata.tables) == {
-        "knowledge_documents", "knowledge_chunks",
-    }
+    assert {"knowledge_documents", "knowledge_chunks"}.issubset(base_module.Base.metadata.tables)
 
 
 def test_engine_factory_requires_url_only_when_called() -> None:
@@ -227,6 +225,4 @@ def test_database_modules_import_without_connecting(
     assert not any(
         isinstance(value, AsyncEngine) for value in vars(session_module).values()
     )
-    assert set(base_module.Base.metadata.tables) == {
-        "knowledge_documents", "knowledge_chunks",
-    }
+    assert {"knowledge_documents", "knowledge_chunks"}.issubset(base_module.Base.metadata.tables)

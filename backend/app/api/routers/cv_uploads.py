@@ -1,7 +1,9 @@
 """Trusted local-demo multipart intake, with bounded parser input and safe errors."""
 from uuid import UUID
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
+from app.core.auth import current_recruiter, database_session
+from app.services.recruiter_records import owned_reference, private_settings
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -27,7 +29,9 @@ router = APIRouter(tags=["CV intake"])
 @router.post("/cv-uploads/{job_reference}/{batch_id}/candidate-profiles", response_model=CandidateProfilesResponse,
     responses={400: {"description": "Unsafe batch layout."}, 404: {"description": "Batch not found."},
         503: {"description": "Candidate parser not configured."}, 500: {"description": "Candidate parsing unavailable."}})
-async def candidate_profiles(request: Request, job_reference: JobReference, batch_id: UUID) -> CandidateProfilesResponse | JSONResponse:
+async def candidate_profiles(request: Request, job_reference: JobReference, batch_id: UUID, user=Depends(current_recruiter), session=Depends(database_session)) -> CandidateProfilesResponse | JSONResponse:
+    await owned_reference(session, user.id, job_reference)
+    configuration = private_settings(request)
     try:
         # This contract accepts path identity only, never browser-provided source/config.
         if request.query_params:
@@ -35,7 +39,7 @@ async def candidate_profiles(request: Request, job_reference: JobReference, batc
         async for chunk in request.stream():
             if chunk:
                 return JSONResponse(status_code=400, content={"code": "invalid_candidate_request", "message": "Supply stored batch identity only."})
-        candidates = await CandidateProfileService(settings).parse_batch(job_reference, batch_id)
+        candidates = await CandidateProfileService(configuration).parse_batch(job_reference, batch_id)
         return CandidateProfilesResponse(job_reference=job_reference, batch_id=batch_id,
             processed_count=len(candidates), candidates=candidates)
     except CandidateParserNotConfigured:
@@ -51,9 +55,11 @@ async def candidate_profiles(request: Request, job_reference: JobReference, batc
 @router.post("/cv-uploads/{job_reference}/{batch_id}/ocr", response_model=CvOcrResponse,
     responses={400: {"description": "Unsafe batch layout."}, 404: {"description": "Batch not found."},
         503: {"description": "OCR is not configured."}, 500: {"description": "OCR unavailable."}})
-async def ocr_cvs(job_reference: JobReference, batch_id: UUID) -> CvOcrResponse | JSONResponse:
+async def ocr_cvs(request: Request, job_reference: JobReference, batch_id: UUID, user=Depends(current_recruiter), session=Depends(database_session)) -> CvOcrResponse | JSONResponse:
+    await owned_reference(session, user.id, job_reference)
+    configuration = private_settings(request)
     try:
-        service = CvOcrService(settings.cv_upload_root, settings.ocr_tessdata_path)
+        service = CvOcrService(configuration.cv_upload_root, settings.ocr_tessdata_path)
         documents = await run_in_threadpool(service.process_batch, job_reference, batch_id)
         return CvOcrResponse(job_reference=job_reference, batch_id=batch_id,
             attempted_count=len(documents), files=tuple(document.public_metadata() for document in documents))
@@ -71,9 +77,11 @@ async def ocr_cvs(job_reference: JobReference, batch_id: UUID) -> CvOcrResponse 
 @router.post("/cv-uploads/{job_reference}/{batch_id}/extract", response_model=CvExtractionResponse,
     responses={400: {"description": "Unsafe batch layout."},
         404: {"description": "Batch not found."}, 500: {"description": "Extraction unavailable."}})
-async def extract_cvs(job_reference: JobReference, batch_id: UUID) -> CvExtractionResponse | JSONResponse:
+async def extract_cvs(request: Request, job_reference: JobReference, batch_id: UUID, user=Depends(current_recruiter), session=Depends(database_session)) -> CvExtractionResponse | JSONResponse:
+    await owned_reference(session, user.id, job_reference)
+    configuration = private_settings(request)
     try:
-        service = CvExtractionService(settings.cv_upload_root)
+        service = CvExtractionService(configuration.cv_upload_root)
         documents = await run_in_threadpool(service.extract_batch, job_reference, batch_id)
         return CvExtractionResponse(job_reference=job_reference, batch_id=batch_id,
             processed_count=len(documents), files=tuple(document.public_metadata() for document in documents))
@@ -98,7 +106,8 @@ async def extract_cvs(job_reference: JobReference, batch_id: UUID) -> CvExtracti
                 "files": {"type": "array", "minItems": 1, "maxItems": 20,
                     "items": {"type": "string", "format": "binary"}},
             }}}}}})
-async def upload_cvs(request: Request) -> CvUploadResponse | JSONResponse:
+async def upload_cvs(request: Request, user=Depends(current_recruiter), session=Depends(database_session)) -> CvUploadResponse | JSONResponse:
+    configuration = private_settings(request)
     received = 0
     exceeded = False
 
@@ -127,12 +136,15 @@ async def upload_cvs(request: Request) -> CvUploadResponse | JSONResponse:
                 raise CvUploadError("invalid_multipart")
             if any(not isinstance(file, UploadFile) for file in files):
                 raise CvUploadError("invalid_multipart")
-            service = CvUploadService(settings.cv_upload_root)
+            await owned_reference(session, user.id, references[0])
+            service = CvUploadService(configuration.cv_upload_root)
             return await run_in_threadpool(service.store_batch, references[0], files)
     except CvUploadError as error:
         return JSONResponse(status_code=error.status,
             content={"code": error.code, "message": PUBLIC_ERRORS[error.code]})
     except HTTPException as error:
+        if error.status_code == 404:
+            raise
         # Inspect only the parser's fixed count marker; never echo raw details.
         too_many_files = isinstance(error.detail, str) and error.detail.startswith("Too many files.")
         code = "batch_too_large" if exceeded else "invalid_batch" if too_many_files else "invalid_multipart"

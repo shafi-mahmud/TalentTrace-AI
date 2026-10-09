@@ -315,7 +315,9 @@ def test_migration_snapshot_matches_orm_schema(monkeypatch):
     monkeypatch.setattr(revision.op, "execute", lambda sql: None)
     monkeypatch.setattr(revision.op, "create_table", lambda name, *items: Table(name, metadata, *items))
     revision.upgrade()
-    assert set(metadata.tables) == set(Base.metadata.tables)
+    # Later business revisions register additional tables in shared metadata.
+    assert set(metadata.tables) == {"knowledge_documents", "knowledge_chunks"}
+    assert set(metadata.tables).issubset(Base.metadata.tables)
     for name, migrated in metadata.tables.items():
         model = Base.metadata.tables[name]
         assert list(migrated.c.keys()) == list(model.c.keys())
