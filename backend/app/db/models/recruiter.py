@@ -96,3 +96,14 @@ class InterviewSchedule(Base):
     unscored_confirmed: Mapped[bool] = mapped_column()
     # Immutable selection evidence survives replacement of F2 score rows on rerun.
     screening_snapshot: Mapped[dict] = mapped_column(JSONB)
+
+
+class InterviewInvitation(Base):
+    """One current single-use invitation; only bearer hashes are stored."""
+    __tablename__ = "interview_invitations"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    interview_id: Mapped[UUID] = mapped_column(ForeignKey("interview_schedules.id", ondelete="CASCADE"), unique=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked: Mapped[bool] = mapped_column(default=False)
+    candidate_session_hash: Mapped[str | None] = mapped_column(String(64), unique=True)

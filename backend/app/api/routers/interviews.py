@@ -13,14 +13,13 @@ from app.db.models.recruiter import InterviewSchedule
 from app.schemas.interview import InterviewRequest, InterviewResponse
 from app.services.recruiter_records import owned_job
 from app.services.score_records import load_scores
-from app.services.livekit_interview import issue_interview_token, LiveKitUnavailable
+from app.services.livekit_interview import issue_interview_token, join_window, LiveKitUnavailable
 
 router = APIRouter(tags=["Interview scheduling"])
 
 
 class LiveKitTokenRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-    slot: Literal["a", "b"]
     synthetic_test_confirmed: Literal[True]
 
     @field_validator("synthetic_test_confirmed", mode="before")
@@ -35,7 +34,7 @@ class LiveKitTokenResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     server_url: str
     token: str = Field(repr=False, min_length=32, max_length=8192)
-    expires_in: Literal[300]
+    expires_in: int = Field(ge=1, le=300)
 
 
 @router.post("/jobs/{job_id}/interviews/{interview_id}/livekit-token", response_model=LiveKitTokenResponse)
@@ -49,7 +48,11 @@ async def livekit_token(job_id: UUID, interview_id: UUID, body: LiveKitTokenRequ
     if job.confirmed_snapshot is None or row.criteria_revision != job.revision:
         raise HTTPException(409, "Review the scheduled interview against the current approved job criteria first.")
     try:
-        return LiveKitTokenResponse(**issue_interview_token(row.id, user.id, body.slot))
+        ttl = join_window(row)
+    except ValueError:
+        raise HTTPException(409, "Interview join window is closed.") from None
+    try:
+        return LiveKitTokenResponse(**issue_interview_token(row.id, user.id, "recruiter", ttl))
     except LiveKitUnavailable:
         raise HTTPException(503, "LiveKit synthetic interview testing is not configured.") from None
     except Exception:

@@ -21,8 +21,8 @@ def configuration(**changes):
 def test_real_sdk_grants_ttl_and_opaque_two_slots(monkeypatch):
     monkeypatch.setattr(service,"settings",configuration())
     interview,owner=uuid4(),uuid4()
-    a=service.issue_interview_token(interview,owner,"a")
-    b=service.issue_interview_token(interview,owner,"b")
+    a=service.issue_interview_token(interview,owner,"recruiter")
+    b=service.issue_interview_token(interview,owner,"candidate")
     ca=jwt.decode(a["token"],"s"*64,algorithms=["HS256"],issuer="synthetic-api-key")
     cb=jwt.decode(b["token"],"s"*64,algorithms=["HS256"],issuer="synthetic-api-key")
     assert ca["exp"]-ca["nbf"]==300
@@ -41,12 +41,37 @@ def test_real_sdk_grants_ttl_and_opaque_two_slots(monkeypatch):
     {"livekit_url":"wss://secret@synthetic.livekit.cloud"},{"livekit_url":"wss://synthetic.livekit.cloud/?token=private"}])
 def test_configuration_fails_closed(monkeypatch,changes):
     monkeypatch.setattr(service,"settings",configuration(**changes))
-    with pytest.raises(service.LiveKitUnavailable):service.issue_interview_token(uuid4(),uuid4(),"a")
+    with pytest.raises(service.LiveKitUnavailable):service.issue_interview_token(uuid4(),uuid4(),"recruiter")
 
 
 def test_signer_cannot_issue_third_slot(monkeypatch):
     monkeypatch.setattr(service,"settings",configuration())
-    with pytest.raises(service.LiveKitUnavailable):service.issue_interview_token(uuid4(),uuid4(),"c")
+    with pytest.raises(service.LiveKitUnavailable):service.issue_interview_token(uuid4(),uuid4(),"untrusted")
+
+
+def test_short_remaining_window_limits_token_expiry(monkeypatch):
+    monkeypatch.setattr(service,"settings",configuration())
+    signed=service.issue_interview_token(uuid4(),uuid4(),"candidate",30)
+    claims=jwt.decode(signed["token"],"s"*64,algorithms=["HS256"])
+    assert claims["exp"]-claims["nbf"]==30 and signed["expires_in"]==30
+
+
+def test_cloud_revoke_uses_scoped_identity_and_explicit_cutoff(monkeypatch):
+    from livekit import api
+    from types import SimpleNamespace
+    import time
+    monkeypatch.setattr(service,"settings",configuration())
+    interview,invitation=uuid4(),uuid4();calls=[]
+    async def remove(body):calls.append(body)
+    class Client:
+        def __init__(self,**kwargs):self.room=SimpleNamespace(remove_participant=remove)
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+    monkeypatch.setattr(api,"LiveKitAPI",Client)
+    asyncio.run(service.revoke_candidate_access(interview,invitation))
+    room,identity=service.room_identity(interview,invitation,"candidate")
+    assert calls[0].room==room and calls[0].identity==identity
+    assert int(time.time())<=calls[0].revoke_token_ts<=int(time.time())+2
 
 
 def test_owner_synthetic_confirmations_stale_and_sanitized_failures(monkeypatch,workspace):
@@ -54,14 +79,14 @@ def test_owner_synthetic_confirmations_stale_and_sanitized_failures(monkeypatch,
     job=JobProfile(id=uuid4(),recruiter_id=users[0].id,job_reference="TT-JOB-0123456789ABCDEF",job_title="Synthetic job",
         revision=2,confirmed_snapshot={},sources=[],suggestions={})
     schedule=InterviewSchedule(id=uuid4(),recruiter_id=users[0].id,job_id=job.id,batch_id=uuid4(),upload_id=uuid4(),
-        criteria_revision=2,scoring_version="f2-coverage-v1",scheduled_at=datetime.now(timezone.utc)+timedelta(days=1),
+        criteria_revision=2,scoring_version="f2-coverage-v1",scheduled_at=datetime.now(timezone.utc)+timedelta(minutes=1),
         timezone="UTC",duration_minutes=30,unscored_confirmed=False,screening_snapshot={})
     db[JobProfile]=[job];db[InterviewSchedule]=[schedule]
     calls=[]
     def issue(*args):calls.append(args);return {"server_url":"wss://synthetic.livekit.cloud","token":"synthetic-token-"+"x"*40,"expires_in":300}
     monkeypatch.setattr(route,"issue_interview_token",issue)
     path=f"/api/v1/jobs/{job.id}/interviews/{schedule.id}/livekit-token"
-    body={"slot":"a","synthetic_test_confirmed":True}
+    body={"synthetic_test_confirmed":True}
     async def scenario():
         async with client() as owner,client() as foreign,client() as anonymous:
             assert (await anonymous.post(path,json=body)).status_code==401
@@ -73,7 +98,7 @@ def test_owner_synthetic_confirmations_stale_and_sanitized_failures(monkeypatch,
                 assert (await owner.post(path,json={**body,**patch})).status_code==422
             result=await owner.post(path,json=body)
             assert result.status_code==200 and result.headers["cache-control"]=="no-store"
-            assert calls==[(schedule.id,users[0].id,"a")]
+            assert calls==[(schedule.id,users[0].id,"recruiter",300)]
             assert len(db[InterviewSchedule])==1 and "token" not in db[InterviewSchedule][0].screening_snapshot
             db[JobProfile][0].revision=3
             assert (await owner.post(path,json=body)).status_code==409
