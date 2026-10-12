@@ -42,6 +42,30 @@ expiry is not a server-enforced maximum duration for an existing Cloud connectio
 Deployment-wide session teardown at window end remains **Planned**.
 See [LiveKit revocation](https://docs.livekit.io/frontends/reference/tokens-grants/).
 
+### Security review boundary — 12 October 2026
+
+- Expiry, stale criteria, changed ownership and an inactive recruiter deny new
+  backend token issuance. They do **not** call Cloud removal automatically.
+  Already connected participants, and SDK-refreshed reconnect tokens, are not
+  forcibly revoked by these database checks. Client polling is best-effort,
+  not a security boundary against a modified client.
+- Explicit recruiter revocation commits the local deny first, then removes the
+  candidate through Cloud with a cutoff. Success confirms removal; 502 means
+  future backend access is blocked but active disconnection is unconfirmed.
+  Rotation will not issue a replacement if old-session removal fails.
+- Reconnect uses the same authorized candidate session/identity; it does not
+  permit a second invitation claim. A stolen session cookie remains a bearer
+  capability, and another tab sharing that cookie can replace the same participant.
+- The 20/minute limiter applies to candidate exchange/token POSTs only, per
+  process and observed client IP. Status GETs and recruiter invitation/token
+  routes are not covered. Proxy/NAT sharing, distributed attackers and worker
+  restarts limit this protection; production ingress limits remain required.
+  Cookies are isolated by host/path, **not port**: use distinct trusted hosts or
+  browser profiles when running unrelated local applications.
+
+No critical source defect was identified in this focused review. This remains
+a development-only synthetic feature; it is not approved for real candidate use.
+
 Mutation verification/origin checks protect exchange/token APIs. Bounded per-IP
 hash buckets limit exchange/token attempts to 20 per minute per process; distributed
 limiting, HTTPS deployment, security headers and abuse monitoring remain required
