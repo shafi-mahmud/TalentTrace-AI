@@ -431,7 +431,7 @@ implemented and live-verified with synthetic data on 12 October 2026. Policy ass
 test boundaries and manual verification are in [F2 scoring](f2_scoring.md).
 
 [LiveKit feasibility](livekit_feasibility.md) documents a possible isolated
-audio/video proof. No credentials, live A/V proof or meeting-provider implementation exists.
+audio/video proof. Its later implemented synthetic Cloud proof is described below.
 
 ## Implemented - F3 recruiter selection and scheduling
 
@@ -441,5 +441,15 @@ records; eligible-but-unscored selection requires extra confirmation. Migration
 0004 stores UTC/IANA timezone, duration and revision-bound selection references.
 Fresh disposable PostgreSQL migration/API and real browser/Groq-backed screening-to-
 scheduling checks passed on 12 October 2026. Saved history loads after page reload
-without recovering in-memory screening results. No meeting URLs, calendar, email, recording or candidate login
+without recovering in-memory screening results. No candidate meeting URLs, calendar, email, recording or candidate login
 are implemented. See [interview scheduling](interview_scheduling.md).
+
+## Implemented - F3 Increment 2A synthetic LiveKit Cloud proof
+
+Owner-protected short-lived token issuance and a lazy React interview page connect
+two recruiter-controlled synthetic test sessions for camera/microphone media only.
+The SDK credentials stay server-side; opaque IDs, strict grants and no-store tokens
+protect access. No new workflow or database migration is added. Two Edge clients
+passed real Cloud synthetic A/V, mute/camera and cleanup checks. In-app connection,
+physical devices and production candidate access remain unverified/planned as
+specified in [LiveKit interview proof](livekit_interview_proof.md).

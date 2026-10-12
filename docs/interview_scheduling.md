@@ -81,7 +81,8 @@ workspace restoration remains separate from schedule-history retrieval.
 ## Planned
 
 Rescheduling/cancellation, multiple rounds, wider duplicate/calendar-conflict
-detection, candidate authentication, meeting-link provisioning, Google Calendar,
-LiveKit, email, recording and transcription. No meeting URL is invented: the UI
-says the link is not configured. Scheduling is not a hiring decision and sends
-no external message.
+detection, candidate authentication/public meeting links, Google Calendar,
+email, recording and transcription. No candidate meeting URL is invented.
+The recruiter-only [LiveKit synthetic proof](livekit_interview_proof.md) is now
+implemented separately on current owned schedules. Scheduling is not a hiring
+decision and sends no external message.

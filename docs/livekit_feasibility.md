@@ -1,12 +1,18 @@
 # LiveKit feasibility — 09 October 2026
 
-## Recommended; not implemented or live-verified
+## Historical feasibility assessment — 09 October 2026
 
 LiveKit Cloud Build is a reasonable small one-to-one React/FastAPI audio/video
 proof, separate from F2. Local configuration inspection found no complete
 `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` configuration. No project,
 dependency, token endpoint, room, recording or interview schema was created.
 Credential absence blocks the live proof, not F2 development.
+
+**Update — 12 October 2026:** credentials became available and the bounded
+recruiter-only Cloud proof is now implemented and live-verified with synthetic
+media in two Edge sessions. See [Increment 2A](livekit_interview_proof.md) for current
+security boundaries and unverified physical-device/production features. The
+following capacity/setup analysis describes the earlier recommendation.
 
 ## Documented capacity and integration
 
