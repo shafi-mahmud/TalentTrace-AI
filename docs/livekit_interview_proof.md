@@ -1,5 +1,9 @@
 # F3 Increment 2A — recruiter-controlled LiveKit proof
 
+This records the original 2A increment. Increment 2B replaces A/B recruiter slots
+with recruiter/candidate roles, invitation authorization and a bounded join window.
+See [Interview invitations](interview_invitations.md) for current behavior and checks.
+
 ## Implemented
 
 The owner opens a current scheduled interview's **Open synthetic interview proof**

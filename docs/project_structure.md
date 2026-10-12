@@ -441,8 +441,9 @@ records; eligible-but-unscored selection requires extra confirmation. Migration
 0004 stores UTC/IANA timezone, duration and revision-bound selection references.
 Fresh disposable PostgreSQL migration/API and real browser/Groq-backed screening-to-
 scheduling checks passed on 12 October 2026. Saved history loads after page reload
-without recovering in-memory screening results. No candidate meeting URLs, calendar, email, recording or candidate login
-are implemented. See [interview scheduling](interview_scheduling.md).
+without recovering in-memory screening results. Calendar, email, recording and candidate
+accounts are not implemented. Candidate bearer invitation access is described below.
+See [interview scheduling](interview_scheduling.md).
 
 ## Implemented - F3 Increment 2A synthetic LiveKit Cloud proof
 
@@ -453,3 +454,16 @@ protect access. No new workflow or database migration is added. Two Edge clients
 passed real Cloud synthetic A/V, mute/camera and cleanup checks. In-app connection,
 physical devices and production candidate access remain unverified/planned as
 specified in [LiveKit interview proof](livekit_interview_proof.md).
+
+## Implemented - F3 Increment 2B candidate invitations
+
+`interview_access.py` adds owned invitation generation/revocation and public
+single-use exchange into a hashed HttpOnly candidate session. Migration 0005
+stores hashes only. Recruiter/candidate room identities are distinct; both token
+paths enforce a bounded schedule window and current criteria. Cloud removal
+revokes candidate room access. The shared React media page includes invite/copy/
+revoke controls; `/interview-join` bypasses recruiter login using invitation
+authorization, not an authentication bypass. New disposable PostgreSQL, real
+API concurrency/revocation and two-role synthetic Edge media checks passed.
+Physical devices and production candidate deployment remain unverified/planned.
+See [Interview invitations](interview_invitations.md).
