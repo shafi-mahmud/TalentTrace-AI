@@ -115,6 +115,8 @@ Groq receives only unresolved criterion IDs/categories/descriptions and relevant
 fact IDs/record groups/kinds/values in explicitly marked untrusted JSON. The existing server-side
 key/model configuration is reused. Strict structured output, temperature 0,
 30-second timeout, 6000 completion-token limit and zero SDK retries are configured.
+Short-reset HTTP 429s now receive at most two application-level retries with a
+60-second total wait budget; validation failures and timeouts are not retried.
 The serialized input is limited to 32,000 characters; over-limit requests fail
 without truncation or an external call. One call per candidate may cover up to
 50 criteria. There is no call if all criteria were deterministically resolved.
@@ -224,8 +226,9 @@ checkpoint database; content does not enter candidate RAG. Prompts treat all inp
 as untrusted data; structured shape and allowlisted evidence reduce fabrication
 risk but do not eliminate injection, prove real-world truth or guarantee semantic
 relevance. Copying a valid fact ID alone cannot prove a semantic conclusion.
-Bounded payloads can fail rather than support large profiles; no retry or lexical
-fallback occurs. Candidate parsing/OCR behavior is unchanged.
+Bounded payloads can fail rather than support large profiles; input-limit failures
+are not retried and no lexical fallback occurs. Candidate parsing/OCR validation
+behavior is unchanged. See [batch reliability](cv_batch_reliability.md).
 
 ## Implemented — internal checkpoint recovery (#647498)
 

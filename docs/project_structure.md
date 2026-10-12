@@ -301,8 +301,9 @@ checkpointed, and JD approval/revision is not implemented.
   quotations and invented/inferred values fail the whole file. Skills are deduplicated
   in source order. Failed source extraction is `source_unavailable`, not missing skills.
 - `integrations/llm/candidate_profile.py` provides the replaceable extractor interface
-  and Groq strict JSON implementation: existing key/model, 30-second timeout, zero
-  retries, temperature 0 and one sequential call per usable CV. Input limits are
+  and Groq strict JSON implementation: existing key/model, 30-second attempt timeout,
+  zero SDK retries, temperature 0 and sequential processing per usable CV. Only
+  short-reset 429s have bounded application retries; see [batch reliability](cv_batch_reliability.md). Input limits are
   40,000 characters and 400 units; no silent truncation. This is not a new workflow.
 - `POST /api/v1/cv-uploads/{job_reference}/{batch_id}/candidate-profiles` accepts
   stored identity only. Missing provider setup is sanitized 503; individual provider/
