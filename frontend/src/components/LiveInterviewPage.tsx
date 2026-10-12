@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track, setLogLevel } from "livekit-client";
 import type { RemoteTrack, RemoteTrackPublication } from "livekit-client";
-import { interviewAccess } from "../api/livekitInterview";
+import { interviewAccess, candidateAccess, candidateStatus, invitation, revokeInvitation, InterviewAccessError } from "../api/livekitInterview";
 import { syntheticInterviewMedia } from "./syntheticInterviewMedia";
 import type { Interview } from "../api/interviews";
 
 // SDK diagnostics can contain connection details; public UI uses fixed errors.
 setLogLevel("silent");
 
-export default function LiveInterviewPage({jobId,interview,onBack}:{jobId:string;interview:Interview;onBack:()=>void}) {
-  const [slot,setSlot]=useState<"a"|"b">("a");const [confirmed,setConfirmed]=useState(false);
+export default function LiveInterviewPage({jobId,interview,onBack,candidate=false}:{jobId?:string;interview?:Interview;onBack:()=>void;candidate?:boolean}) {
+  const [confirmed,setConfirmed]=useState(false);
+  const [invite,setInvite]=useState<{url:string;expires:string}|null>(null);const [inviteBusy,setInviteBusy]=useState(false);
   const [synthetic,setSynthetic]=useState(true);const [state,setState]=useState("Not connected");
   const [joined,setJoined]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
   const [muted,setMuted]=useState(false);const [cameraOff,setCameraOff]=useState(false);
@@ -21,7 +22,16 @@ export default function LiveInterviewPage({jobId,interview,onBack}:{jobId:string
   function stopMedia() {media.current?.dispose();media.current=null;local.current?.replaceChildren();remote.current?.replaceChildren();}
   async function leave() {generation.current++;const active=room.current;room.current=null;
     stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Left interview");try {await active?.disconnect(true);} catch {}}
-  useEffect(()=>()=>{generation.current++;const active=room.current;room.current=null;stopMedia();void active?.disconnect(true).catch(()=>{});},[jobId,interview.id]);
+  useEffect(()=>()=>{generation.current++;const active=room.current;room.current=null;stopMedia();void active?.disconnect(true).catch(()=>{});},[jobId,interview?.id]);
+  useEffect(()=>{if(!joined)return;let cancelled=false;const current=generation.current;const check=()=>{
+    if(candidate)void candidateStatus().catch(()=>{if(!cancelled && current===generation.current){void leave();setError("Interview access ended or was revoked.");}});
+    else if(interview && Date.now()>=Date.parse(interview.scheduled_at)+(interview.duration_minutes+15)*60000)void leave();
+  };const timer=window.setInterval(check,15000);return()=>{cancelled=true;window.clearInterval(timer);};},[joined,candidate,interview]);
+  async function createInvite() {if(!jobId || !interview || inviteBusy)return;setInviteBusy(true);setError("");setInvite(null);
+    try {const value=await invitation(jobId,interview.id);setInvite({url:`${window.location.origin}/interview-join#invite=${value.token}`,expires:value.expires_at});}
+    catch {setError("Invitation was not confirmed. Review interview status before trying again.");}finally{setInviteBusy(false);}}
+  async function revoke() {if(!jobId || !interview || inviteBusy)return;setInviteBusy(true);setInvite(null);setError("");
+    try{await revokeInvitation(jobId,interview.id);}catch{setError("Revocation or live disconnection was not confirmed. Retry revocation before sharing a replacement.");}finally{setInviteBusy(false);}}
   async function join() {
     if(!confirmed || busy || room.current)return;
     const current=++generation.current;setBusy(true);setError("");setState("Connecting…");
@@ -45,8 +55,8 @@ export default function LiveInterviewPage({jobId,interview,onBack}:{jobId:string
       .on(RoomEvent.AudioPlaybackStatusChanged,()=>{if(current===generation.current)setAudioBlocked(!active.canPlaybackAudio);})
       .on(RoomEvent.Disconnected,()=>{if(room.current===active){room.current=null;generation.current++;stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Disconnected");setError("Interview connection ended. Check the network before joining again.");}});
     try {
-      const generated=synthetic?syntheticInterviewMedia(slot):null;media.current=generated;
-      let access=await interviewAccess(jobId,interview.id,slot);
+      const generated=synthetic?syntheticInterviewMedia(candidate?"b":"a"):null;media.current=generated;
+      let access=candidate?await candidateAccess():await interviewAccess(jobId!,interview!.id);
       if(current!==generation.current)return;
       await active.connect(access.server_url,access.token);access={server_url:"",token:"",expires_in:300};
       if(current!==generation.current){await active.disconnect(true);return;}
@@ -55,7 +65,7 @@ export default function LiveInterviewPage({jobId,interview,onBack}:{jobId:string
       else await active.localParticipant.enableCameraAndMicrophone();
       if(current!==generation.current){await active.disconnect(true);return;}
       setJoined(true);setMuted(false);setCameraOff(false);setPeers(active.remoteParticipants.size);setState("Connected");
-    } catch {if(current===generation.current){await leave();setError("Interview connection failed. Check configuration, network or media permissions before joining again.");}
+    } catch(failure) {if(current===generation.current){await leave();setError(failure instanceof InterviewAccessError?failure.message:"Interview connection failed. Check configuration, network or media permissions before joining again.");}
       else {try {await active.disconnect(true);} catch {}}}
     finally {if(current===generation.current)setBusy(false);}
   }
@@ -67,14 +77,18 @@ export default function LiveInterviewPage({jobId,interview,onBack}:{jobId:string
     finally {if(current===generation.current)setBusy(false);}
   }
   return <main className="app-shell"><section className="card" aria-label="Synthetic interview proof">
-    <h1>Interview audio/video proof</h1><p>Recruiter-controlled synthetic testing only. No recording, transcription or candidate access.</p>
+    <h1>{candidate?"Candidate interview":"Recruiter interview"}</h1><p>Synthetic development testing only. No recording or transcription.</p>
+    {!candidate && <section aria-label="Candidate invitation"><h2>Candidate invitation</h2><p>One-use link. Treat it as a secret. Join window: 10 minutes before until 15 minutes after the interview.</p>
+      <button disabled={inviteBusy} onClick={()=>void createInvite()}>Generate replacement invitation</button>
+      <button disabled={inviteBusy} onClick={()=>void revoke()}>Revoke candidate access</button>
+      {invite && <><p>Expires: {new Date(invite.expires).toLocaleString()}</p><button onClick={()=>void navigator.clipboard.writeText(invite.url).catch(()=>setError("Clipboard unavailable. Generate and copy in a supported browser."))}>Copy invitation link</button><p>Only the newly generated link can be copied. Previous links are invalidated.</p></>}
+    </section>}
     <p role="status">{state} · Remote participants: {peers}</p>
     {peers>0 && <p>Remote microphone: {remoteMuted?"muted":"active"} · Remote camera: {remoteCameraOff?"off":"on"}</p>}
     <fieldset disabled={busy || joined}><legend>Test session</legend>
-      <label htmlFor="interview-slot">Browser slot</label><select id="interview-slot" value={slot} onChange={e=>setSlot(e.target.value as "a"|"b")}><option value="a">A</option><option value="b">B</option></select>
       <label><input type="checkbox" checked={synthetic} onChange={e=>setSynthetic(e.target.checked)} /> Use generated synthetic audio/video (no physical devices)</label>
       <label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} /> I confirm this is a synthetic test in an isolated environment.</label>
-    </fieldset><p className="helper-text">Use A and B in two browsers signed in as the owning recruiter. Device mode requires camera/microphone permission.</p>
+    </fieldset><p className="helper-text">Recruiter signs in; candidate uses the invitation in a separate browser session. Device mode requires camera/microphone permission and headphones.</p>
     <button className="button button-primary" onClick={()=>void join()} disabled={!confirmed || busy || joined}>Join interview</button>
     <button className="button button-secondary" onClick={()=>void toggle("microphone")} disabled={!joined || busy}>{muted?"Unmute microphone":"Mute microphone"}</button>
     <button className="button button-secondary" onClick={()=>void toggle("camera")} disabled={!joined || busy}>{cameraOff?"Turn camera on":"Turn camera off"}</button>

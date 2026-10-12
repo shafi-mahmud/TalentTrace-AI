@@ -28,8 +28,8 @@ export function ScheduleForm({candidate, start, zone, duration, confirmed, busy,
 export function SavedInterviews({rows,criteriaRevision,onOpenInterview}: {rows:Interview[];criteriaRevision:number;onOpenInterview?:(value:Interview)=>void}) {
   return h("div",null,h("h3",null,"Saved interviews"),h("ul",null,...rows.map(row=>h("li",{key:row.id},
     `Scheduled · ${new Intl.DateTimeFormat("en",{dateStyle:"medium",timeStyle:"short",timeZone:row.timezone}).format(new Date(row.scheduled_at))} (${row.timezone}) · ${row.duration_minutes} minutes`,
-    h("p",{className:"helper-text"},`Candidate ${row.upload_id} · criteria revision ${row.criteria_revision}${row.criteria_revision!==criteriaRevision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""} · Candidate meeting link not configured`),
-    onOpenInterview && row.criteria_revision===criteriaRevision && h("button",{type:"button",className:"button button-secondary",onClick:()=>onOpenInterview(row)},"Open synthetic interview proof")))),
+    h("p",{className:"helper-text"},`Candidate ${row.upload_id} · criteria revision ${row.criteria_revision}${row.criteria_revision!==criteriaRevision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""} · Candidate invitation managed on interview page`),
+    onOpenInterview && row.criteria_revision===criteriaRevision && h("button",{type:"button",className:"button button-secondary",onClick:()=>onOpenInterview(row)},"Open interview")))),
     !rows.length && h("p",null,"No saved interviews loaded."));
 }
 

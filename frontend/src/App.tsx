@@ -5,6 +5,8 @@ import type { SavedJob } from "./api/jobs";
 import RecruiterChat from "./components/RecruiterChat";
 import { RecruiterChatPage } from "./components/chatPresentation";
 import CvIntake from "./components/CvIntake";
+import CandidateInterview from "./components/CandidateInterview";
+import { takeInvitation } from "./api/livekitInterview";
 const LiveInterviewPage=lazy(()=>import("./components/LiveInterviewPage"));
 import type { Interview } from "./api/interviews";
 import { WorkspaceNavigation } from "./components/cvIntakePresentation";
@@ -63,6 +65,12 @@ function Workspace({recruiterId}: {recruiterId: string}) {
   </>;
 }
 
-export default function App() {
+export default function App({initialInvitation=null}:{initialInvitation?:string|null}) {
+  const [invitationContext,setInvitationContext]=useState({token:initialInvitation,revision:0});
+  useEffect(()=>{const changed=()=>{if(window.location.pathname==="/interview-join"){
+    const token=takeInvitation(window.location,window.history);
+    setInvitationContext(previous=>({token,revision:previous.revision+1}));
+  }};window.addEventListener("hashchange",changed);return()=>window.removeEventListener("hashchange",changed);},[]);
+  if(window.location.pathname==="/interview-join")return <CandidateInterview key={invitationContext.revision} initialToken={invitationContext.token} />;
   return <RecruiterSignIn>{user => <Workspace recruiterId={user.id} />}</RecruiterSignIn>;
 }
