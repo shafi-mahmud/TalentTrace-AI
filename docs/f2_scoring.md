@@ -70,8 +70,13 @@ Restoring the whole upload/screening workspace after a browser restart is **Plan
 uncertainty, source errors, ties, owner isolation, approval/stale revision checks,
 JSON payload round-trip, corrupted-record rejection, response consistency and UI
 runtime validation/rendering. API persistence tests use a transaction-capable SQL
-double; Alembic SQL is checked offline. This is not a live PostgreSQL F2 test or
-a real-provider/browser scoring demonstration. No migration was automatically applied.
+double. On 12 October 2026, a migration-default defect was corrected: PostgreSQL
+`jsonb_build_object` avoids SQLAlchemy interpreting numeric JSON colons as binds.
+The actual base-to-head upgrade passed on a fresh disposable pgvector PostgreSQL
+database, including server default 50/30/20, invalid-weight rollback, downgrade to
+0002 and re-upgrade. The temporary container was removed; the office demo database
+was not migrated. Full live F2 API persistence and real-provider/browser scoring
+verification remain pending.
 
 **Recommended manual verification:** back up/choose an isolated development DB,
 inspect Alembic current revision, explicitly approve and apply `alembic upgrade head`

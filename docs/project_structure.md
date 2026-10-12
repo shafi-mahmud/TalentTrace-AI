@@ -424,7 +424,8 @@ reviews weights with criteria and displays eligible-only weighted-score ranking,
 breakdowns and separate not-scored cases. Hard-requirement decisions and the
 original requirement-count ranking contract are preserved.
 Migration `0003_candidate_scores` adds reviewed job weights and owner-linked
-revision/version-bound score records. It has not been applied to a live database.
+revision/version-bound score records. Fresh disposable PostgreSQL migration/default
+checks passed on 12 October 2026; the office demo database was not migrated.
 Earlier sections describe their individual increments; weighted scoring is now
 implemented in code, not yet live-verified. Policy assumptions, offline/automated
 test boundaries and manual verification are in [F2 scoring](f2_scoring.md).

@@ -108,6 +108,9 @@ def test_scoring_migration_offline_only(capsys):
     sql = capsys.readouterr().out
     assert "CREATE TABLE candidate_scores" in sql and "uq_candidate_score_version" in sql
     assert "REFERENCES job_profiles" in sql and "ck_job_scoring_weights" in sql
+    # Numeric JSON colons in TextClause used to become bind parameters, emitting
+    # invalid defaults such as {"skill"NULL}. Require the actual safe DDL default.
+    assert "DEFAULT jsonb_build_object('skill', 50, 'experience', 30, 'education', 20) NOT NULL" in sql
     assert "DROP TABLE" not in sql
     output = StringIO(); configuration.attributes["output_buffer"] = output
     command.downgrade(configuration, "head:0002_recruiter_jobs", sql=True)

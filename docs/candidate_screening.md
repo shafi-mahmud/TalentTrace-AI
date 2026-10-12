@@ -415,7 +415,8 @@ no-score cases and source-backed deterministic coverage scores. Batch API/UI now
 add reviewed weights, server-calculated scores, owner-protected persistence/read
 and eligible-only score ranking. Existing hard-requirement decisions, evidence,
 overall coverage and the separate requirement-count ranking remain unchanged.
-The new migration is offline-tested, not applied or live-verified. Earlier sections
+The new migration passed offline and fresh disposable PostgreSQL checks on
+12 October 2026; live F2 API/browser scoring remains pending. Earlier sections
 describe their original increments, not the current F2 integration state.
 The formula/defaults are provisional because local BID/WBS scoring rules were
 unavailable. No per-atomic-requirement partial-credit semantics are introduced.

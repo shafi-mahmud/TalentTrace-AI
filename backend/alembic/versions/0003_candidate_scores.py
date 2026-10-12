@@ -11,7 +11,7 @@ depends_on = None
 
 def upgrade():
     op.add_column("job_profiles", sa.Column("scoring_weights", JSONB, nullable=False,
-        server_default=sa.text("'{\"skill\":50,\"experience\":30,\"education\":20}'::jsonb")))
+        server_default=sa.text("jsonb_build_object('skill', 50, 'experience', 30, 'education', 20)")))
     op.create_check_constraint("ck_job_scoring_weights", "job_profiles",
         "jsonb_typeof(scoring_weights) = 'object' AND scoring_weights ?& ARRAY['skill','experience','education'] "
         "AND (scoring_weights - 'skill' - 'experience' - 'education') = '{}'::jsonb "
