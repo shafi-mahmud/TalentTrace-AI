@@ -2,7 +2,7 @@ import { createElement as h } from "react";
 import { ScoreDetails } from "./scorePresentation.ts";
 import type { BatchScreeningResponse, CandidateRankingEntry } from "../types/screening";
 
-export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
+export function ScreeningResults({result, onSelectCandidate}: {result: BatchScreeningResponse; onSelectCandidate?: (uploadId:string)=>void}) {
   const criteria = new Map(result.snapshot.criteria.map(c => [c.criterion_id, c]));
   const labels = {eligible: "Eligible", excluded: "Excluded", insufficient_evidence: "Needs review"};
   const coverageLabels = {met: "Met", partially_met: "Partially met", unmet: "Unmet — not demonstrated in the CV",
@@ -47,6 +47,8 @@ export function ScreeningResults({result}: {result: BatchScreeningResponse}) {
           ranking ? h("p", {className: "rank-label"}, h("strong", null, `Rank ${ranking.rank}${ranking.tied ? " · Tied" : ""}`),
             h("span", null, `${supported} of ${result.snapshot.criteria.length} supported`)) : null),
         result.scoring ? h(ScoreDetails, {score: result.scoring.candidates.find(c => c.upload_id === candidate.upload_id)!}) : null,
+        result.scoring && decision?.status === "decision_complete" && decision.screening_decision === "eligible" && onSelectCandidate
+          ? h("button", {type:"button",className:"button button-secondary",onClick:()=>onSelectCandidate(candidate.upload_id)},"Select for interview") : null,
         decision?.status === "decision_complete" ? h("p", {className: "helper-text"},
           `${supported} of ${result.snapshot.criteria.length} requirements supported · ${ambiguous} ambiguous · ${notFound} not found. Overall coverage is separate from the screening decision.`) : null,
         decision?.exclusion_reasons.length ? h("ul", null, ...decision.exclusion_reasons.map(reason =>

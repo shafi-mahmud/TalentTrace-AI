@@ -45,6 +45,16 @@ function scoredResult(): BatchScreeningResponse {
   return response;
 }
 
+test("interview selection is manual and only exposed for eligible persisted results",()=>{
+  let selected="";
+  const response=scoredResult();
+  const html=renderToStaticMarkup(createElement(ScreeningResults,{result:response,onSelectCandidate:id=>{selected=id;}}));
+  assert.match(html,/Select for interview/);assert.equal(selected,"");
+  const legacy=result();assert.ok(!renderToStaticMarkup(createElement(ScreeningResults,{result:legacy,onSelectCandidate:()=>{}})).includes("Select for interview"));
+  response.candidates[0].result!.screening_decision="excluded";
+  assert.ok(!renderToStaticMarkup(createElement(ScreeningResults,{result:response,onSelectCandidate:()=>{}})).includes("Select for interview"));
+});
+
 test("F2 response validates scores against original evidence and eligible-only rank", () => {
   assert.ok(isBatchScreeningResponse(scoredResult()));
   for (const mutate of [

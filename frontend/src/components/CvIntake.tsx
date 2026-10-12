@@ -21,6 +21,7 @@ import type { SavedJob } from "../api/jobs";
 import { isScoringWeights, loadScores } from "../api/scoring";
 import type { ScoringWeights } from "../types/screening";
 import { ScoringWeightsEditor } from "./ScoringWeightsEditor";
+import { InterviewScheduling } from "./InterviewScheduling";
 
 export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed, onJobSaved}: {
   onJobSaved: (job: SavedJob) => void;
@@ -42,6 +43,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   const [parsing, setParsing] = useState(false);
   const [snapshot, setSnapshot] = useState<ReviewedJobSnapshot | null>(null);
   const [screening, setScreening] = useState<BatchScreeningResponse | null>(null);
+  const [selectedUpload, setSelectedUpload] = useState<string | null>(null);
   const [screeningBusy, setScreeningBusy] = useState(false);
   const [manualDraft, setManualDraft] = useState<WorkingCriteriaDraft | null>(null);
   const [manualJobTitle, setManualJobTitle] = useState("");
@@ -54,7 +56,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   const busy = loading || extracting || processingOcr || parsing || screeningBusy;
   const screeningPrerequisite = screeningPrerequisiteMessage({busy, hasSuggestions: Boolean(criteriaDraft), hasBatch: Boolean(result),
     hasSnapshot: Boolean(snapshot), referenceMatches: Boolean(result && snapshot && snapshot.job_reference === result.job_reference)});
-  function invalidateCriteria() { screeningRevision.current++; setSnapshot(null); setScreening(null); }
+  function invalidateCriteria() { screeningRevision.current++; setSnapshot(null); setScreening(null); setSelectedUpload(null); }
   useLayoutEffect(() => { invalidateCriteria(); }, [criteriaDraft?.draftId, criteriaDraft?.criteria, criteriaDraft?.reviewed]);
   useLayoutEffect(() => {
     if (criteriaDraft?.jobReference) setReference(criteriaDraft.jobReference);
@@ -234,7 +236,8 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
-        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} /></>}
+        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={setSelectedUpload} />
+          {screening.scoring && <InterviewScheduling scoring={screening.scoring} candidate={screening.scoring.candidates.find(c=>c.upload_id===selectedUpload) ?? null} />}</>}
         </section>
       </section>
     </main>
