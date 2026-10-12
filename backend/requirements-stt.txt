@@ -1,0 +1,4 @@
+# Optional offline CPU captions. Not part of normal backend/runtime installation.
+# Provision a local model separately; runtime downloads and Cloud fallback disabled.
+faster-whisper==1.2.1
+websockets==16.1.1

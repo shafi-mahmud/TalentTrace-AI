@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from app.core.auth import current_recruiter
 from app.api.routers import auth, jobs, interviews, interview_access
+from app.api.routers import interview_captions
 
 from app.api.routers import cv_uploads, health, job_descriptions, recruiter_chat, screening
 
@@ -11,6 +12,7 @@ api_router.include_router(auth.router)
 api_router.include_router(jobs.router)
 api_router.include_router(interviews.router)
 api_router.include_router(interview_access.router)
+api_router.include_router(interview_captions.router)
 api_router.include_router(job_descriptions.router, dependencies=[Depends(current_recruiter)])
 api_router.include_router(recruiter_chat.router, dependencies=[Depends(current_recruiter)])
 api_router.include_router(cv_uploads.router, dependencies=[Depends(current_recruiter)])
