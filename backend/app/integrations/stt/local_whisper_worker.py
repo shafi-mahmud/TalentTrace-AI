@@ -23,7 +23,9 @@ def main():
         if len(pcm) != size:
             return
         samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768
-        segments, _ = model.transcribe(samples, language="en", beam_size=1,
+        # Default temperature fallback can decode a cut speech boundary six times.
+        # This bounded live proof uses one greedy pass, not hidden decoding retries.
+        segments, _ = model.transcribe(samples, language="en", beam_size=1, temperature=0.0,
                                       vad_filter=True, condition_on_previous_text=False)
         text = " ".join(segment.text.strip() for segment in segments)[:1000]
         print(json.dumps({"text": text}), flush=True)

@@ -28,3 +28,13 @@ test("production caption panel starts without consent and never captures media d
     assert.ok(html.includes('aria-label="Live captions"'));
   }
 });
+
+
+test("development API proxy forwards authenticated caption WebSockets", async()=>{
+  let compiled=ts.transpileModule(readFileSync(new URL("../vite.config.ts",import.meta.url),"utf8"),
+    {compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText;
+  for(const name of ["vite","@vitejs/plugin-react"]) compiled=compiled.replaceAll(`"${name}"`,JSON.stringify(import.meta.resolve(name)));
+  const {default:config}=await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+  assert.equal(config.server.proxy["/api"].ws,true);
+  assert.equal(config.server.proxy["/api"].target,"http://localhost:8000");
+});

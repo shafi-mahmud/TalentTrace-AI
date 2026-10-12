@@ -2,7 +2,7 @@
 
 ## Provider and cost decision
 
-**Implemented in code, live recognition unverified.** Cloud inference is not
+**Implemented; isolated synthetic local recognition verified on 12 Oct 2026.** Cloud inference is not
 enabled. We have not verified the account's remaining Build credits or a hard
 no-charge limit. Published allowances are not account-level evidence; no LiveKit,
 Google or Groq STT request was made. No billing, payment or plan change occurred.
@@ -34,7 +34,8 @@ this proof adds no LiveKit subscriber/inference connection.
   latency. Late recognition results are suppressed. Participant disconnect,
   authorization loss/revocation, timeout or failure stop the caption session.
 - Each role has its own local model subprocess and two-second bounded chunks.
-  Native inference is terminated on stop instead of leaving a CPU thread running.
+  One additional two-second chunk per role may wait in RAM during inference; larger
+  backlogs stop captions. Native inference is terminated on stop instead of leaving a CPU thread running.
   Missing model/package fails closed. Slow inference exceeding buffer capacity
   stops rather than accumulating a whole interview or pretending nothing was lost.
 - Maximum 120 seconds, 120 caption events, one interview per FastAPI worker,
@@ -43,7 +44,7 @@ this proof adds no LiveKit subscriber/inference connection.
   production consent system. Fresh connections/consent are required after stopping.
 - Captions are short final chunk results, not native streaming/interim Whisper
   output. Relative timestamps represent chunk receipt timing, not precise word
-  alignment. Two-second boundaries can cut words; accuracy/latency are unverified.
+  alignment. Two-second boundaries can cut words; limited synthetic measurements are below.
   Roles establish authenticated stream provenance, not verified speaker identity;
   malicious senders or acoustic cross-talk can contaminate audio. Headphones help.
 - React keeps only 30 visible caption events in memory, renders escaped text and
@@ -62,21 +63,85 @@ interview, invitation, token and database-foundation tests remain regression che
 Frontend tests cover strict caption events and the initially unconsented production
 panel; they do not establish real microphone/AudioWorklet or recognition behavior.
 
-No real Whisper model, browser-media caption transport, account-level free credit
-verification or cross-network proof has been performed. No real provider or
-physical microphone was accessed for F4. Both running demonstrations remain on F3.
+### Isolated live verification — 12 Oct 2026
 
-Before a live check, obtain owner approval for a separately provisioned local
-environment, optional package/model download and the two-browser synthetic test.
-Use a small approved English model directory outside Git. Set
-`LOCAL_CAPTION_MODEL_PATH` only in the new isolated development runtime, with the
-existing synthetic-demo gate enabled and matching trusted frontend Origin. Do not
-modify the two preserved demos or provision models in their shared virtualenv.
-Start/join with the existing F3 roles; each explicitly consents to captions. Verify
-no audio before both agree, correct labels, stop/withdrawal from either role,
-caption clearing, and usable A/V on caption failure. Do not enable any paid STT.
+**Verified:** existing browser-to-backend microphone bridge (not a server-side
+LiveKit RTC subscriber), real LiveKit synthetic A/V, authenticated WebSockets
+through the Vite proxy, and local `tiny.en` CPU/int8 recognition. Model/packages
+were installed only in an isolated environment outside Git; existing demos were
+not changed. No paid/cloud STT calls or physical microphone capture occurred.
+
+One participant's consent produced zero audio frames and no captions. With both
+consents, real synthetic speech produced temporary recruiter/candidate captions.
+Withdrawal by each role cleared both caption lists and stopped processing while
+both LiveKit connections remained connected. This used two Edge tabs with distinct
+role-cookie paths, not independent browser profiles or cross-network devices.
+
+Initial direct inference measured approximately 0.5–1.1 seconds per two-second
+chunk and 170 MiB per worker. Earlier short repeated browser speech samples had
+mean word error rate 6.1%; this is not general interview accuracy. An observation
+found eight captions within 10.66 seconds after activation, but did not measure
+exact first-caption or end-to-end latency.
+
+**Confirmed limitation:** live browser runs stopped on bounded input backlog,
+including a 53-second run after allowing one pending chunk. The safety stop clears
+captions and preserves the video interview; continuous two-minute browser
+reliability is not established. CPU delay and browser delivery bursts need further
+measurement before claiming real-time operation. No automatic retries were added.
+The 120-second cap and delayed-result suppression remain covered by offline tests.
+Physical capture, cross-network behavior and live provider-failure injection remain
+unverified. Do not enable this proof in the preserved office demonstrations.
+
+**Current checks:** 19 focused backend caption tests, 59 caption/interview/access
+regression tests and 129 frontend tests pass;
+TypeScript checking and production build pass (existing large-chunk warning).
+The development proxy now explicitly forwards WebSockets. A five-second connection
+acknowledgement deadline prevents indefinite connection-pending UI.
 
 LiveKit Inference remains an alternative only after actual account credit and
 no-charge limits are independently verified and the owner separately approves a
 bounded live test. Google billing and Groq paid STT are not permitted fallbacks.
 No permanent transcript tables, migrations, new agents or deployment are added.
+
+## Reliability investigation — 12 Oct 2026
+
+**Measured:** each browser supplied 3,200-byte PCM frames (100 ms at 16 kHz),
+roughly 10 frames/second. A failed baseline ended at 75.24 seconds with the
+recruiter pending buffer exceeding 64,000 bytes; completed inference averaged
+785/793 ms per role. This identifies overload at the processing boundary, but
+does not prove every earlier 53-second failure had the same underlying trigger.
+
+Rotating the same synthetic speech across two-second cut boundaries reproduced
+six default temperature decode attempts: 2.17–2.34 seconds versus ordinary
+0.52–0.73 seconds with one CPU worker. The worker now requests `temperature=0.0`
+for one greedy decoding attempt. This avoids hidden sampling fallbacks; it does
+not guarantee recognition accuracy or real-time processing on every computer.
+
+A subsequent two-role run ended at 28.67 seconds on the route task-count guard,
+with only 625 ms of pending inference and PCM buffers below capacity. Candidate
+frames included a zero-ms delivery gap (peak 12 frames/second). The route now
+yields once after scheduling ingestion, so fast dispatch tasks can consume their
+frames before the next task-count check. Task limits and bounded PCM storage
+remain in place; no silence-discard policy or uncontrolled queue was introduced.
+
+That run averaged 975/987 ms inference per role (maximum 1.28/1.33 seconds).
+Two worker process trees peaked at 434 MiB and about 189% of one CPU core during
+active resource sampling (approximately 24% of eight logical cores). These are
+approximate local measurements, not a production hardware guarantee.
+
+An intermediate unchanged-buffer run reached the cap at 120.03 seconds, with
+115.0/107.4 seconds of delivered audio. This is not proof that 120 seconds of
+speech were captured: browser audio clocks/production can differ from wall time,
+and pending incomplete tail audio is cancelled at the cap. No audio was recorded
+or transcript stored. No sustained-success claim is made for the final fix.
+
+**Pending:** final two-minute real-browser verification after loading the route
+fix. Automated execution approval rejected both isolated backend restart and
+alternate-port service startup as blocked by policy. The existing 5183/8010
+runtime therefore does not contain the final route change. Physical microphones
+remain unapproved/unverified. Local changes must not be treated as live-verified
+until a permitted isolated runtime passes continuity, cancellation and cap checks.
+
+Metrics collected outside Git contain only bounded numeric timing, byte counts,
+role labels, buffer sizes, decoder threshold categories and resource counters.
+No raw PCM, captions, prompts, credentials or participant tokens are logged.

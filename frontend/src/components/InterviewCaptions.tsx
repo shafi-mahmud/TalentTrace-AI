@@ -8,8 +8,10 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
   const [agreed,setAgreed]=useState(false);const [state,setState]=useState("Off");const [rows,setRows]=useState<Caption[]>([]);
   const socket=useRef<WebSocket|null>(null);const context=useRef<AudioContext|null>(null);
   const generation=useRef(0);const heartbeat=useRef<ReturnType<typeof setInterval>|null>(null);
+  const connectionTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   function stop() {
     generation.current++;if(heartbeat.current)clearInterval(heartbeat.current);heartbeat.current=null;
+    if(connectionTimer.current)clearTimeout(connectionTimer.current);connectionTimer.current=null;
     const audio=context.current;context.current=null;void audio?.close().catch(()=>{});
     const old=socket.current;socket.current=null;
     if(old?.readyState===WebSocket.OPEN)old.send("stop");old?.close();
@@ -34,11 +36,13 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
   }
   function consent() {
     if(!connected || !agreed || socket.current)return;
-    const current=++generation.current;setRows([]);setState("Waiting for both participants");
+    const current=++generation.current;setRows([]);setState("Connecting captions…");
     const ws=new WebSocket(captionUrl(candidate,jobId,interviewId));socket.current=ws;
+    connectionTimer.current=setTimeout(()=>{if(current===generation.current){stop();setState("Caption connection was not confirmed. Video continues.");}},5000);
     ws.onopen=()=>{if(current!==generation.current)return;ws.send("consent");heartbeat.current=setInterval(()=>{if(ws.readyState===WebSocket.OPEN)ws.send("ping");},1000);};
     ws.onmessage=e=>{
       if(current!==generation.current)return;
+      if(connectionTimer.current)clearTimeout(connectionTimer.current);connectionTimer.current=null;
       let value;try{value=JSON.parse(e.data);}catch{stop();return;}
       if(value?.kind==="active"){setState("Live — local CPU captions, maximum two minutes");void startAudio(current,ws).catch(()=>{stop();setState("Captions unavailable. Video continues.");});}
       else if(value?.kind==="stopped"){stop();}

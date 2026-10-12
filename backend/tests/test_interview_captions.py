@@ -128,7 +128,7 @@ def test_slow_cpu_overflow_stops_instead_of_accumulating_audio():
         await s.approve("recruiter");await s.approve("candidate")
         for _ in range(19):await s.audio("candidate",bytes(3200))
         task=asyncio.create_task(s.audio("candidate",bytes(3200)));await entered.wait()
-        for _ in range(20):await s.audio("candidate",bytes(3200))
+        for _ in range(21):await s.audio("candidate",bytes(3200))
         assert s.stopped and not s.buffers["candidate"]
         finish.set();await task
     asyncio.run(scenario())
@@ -182,3 +182,112 @@ def test_worker_is_killed_on_cancellation_without_logging_audio(monkeypatch,tmp_
         worker=LocalWhisper(tmp_path);await worker.start();await worker.close()
         assert events==["kill","wait"] and worker.process is None
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("withdraw", [False, True])
+def test_pending_chunk_recovers_from_inference_delay_and_is_cleared_on_withdrawal(withdraw):
+    async def scenario():
+        entered, finish = asyncio.Event(), asyncio.Event()
+        events = []
+        class Delayed(Provider):
+            async def transcribe(self, pcm):
+                self.frames.append(pcm)
+                if len(self.frames) == 1:
+                    entered.set()
+                    await finish.wait()
+                return "Synthetic caption"
+        async def send(value): events.append(value)
+        s = CaptionSession(Delayed)
+        await s.connect("recruiter", send)
+        await s.connect("candidate", send)
+        await s.approve("recruiter")
+        await s.approve("candidate")
+        provider = s.providers["candidate"]
+        for _ in range(19): await s.audio("candidate", bytes(3200))
+        task = asyncio.create_task(s.audio("candidate", bytes(3200)))
+        await entered.wait()
+        for _ in range(20): await s.audio("candidate", bytes(3200))
+        assert not s.stopped and len(s.buffers["candidate"]) == 64000
+        if withdraw: await s.stop()
+        finish.set()
+        await task
+        assert len(provider.frames) == (1 if withdraw else 2)
+        captions = [e for e in events if e["kind"] == "caption"]
+        assert len(captions) == (0 if withdraw else 4)  # Two peer broadcasts.
+        assert not s.buffers["candidate"]
+        await s.stop()
+    asyncio.run(scenario())
+
+
+def test_worker_uses_one_offline_cpu_decoding_pass(monkeypatch):
+    import io
+    import json
+    import struct
+    import sys
+    from types import SimpleNamespace
+    from app.integrations.stt import local_whisper_worker
+    calls = []
+    class Samples:
+        def astype(self, dtype): return self
+        def __truediv__(self, value): return self
+    class Model:
+        def __init__(self, path, **options):
+            assert options == dict(device="cpu", compute_type="int8", local_files_only=True, cpu_threads=2, num_workers=1)
+        def transcribe(self, samples, **options):
+            calls.append(options)
+            return iter([SimpleNamespace(text="Synthetic caption")]), None
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=Model))
+    monkeypatch.setitem(sys.modules, "numpy", SimpleNamespace(frombuffer=lambda *a, **k: Samples(), float32="float32"))
+    monkeypatch.setattr(sys, "argv", ["worker", "synthetic-model"])
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(buffer=io.BytesIO(struct.pack("!I", 64000)+bytes(64000))))
+    output=io.StringIO();monkeypatch.setattr(sys, "stdout", output)
+    local_whisper_worker.main()
+    assert len(calls)==1 and calls[0]["temperature"]==0.0
+    assert calls[0]["beam_size"]==1 and calls[0]["vad_filter"] is True
+    assert calls[0]["condition_on_previous_text"] is False
+    assert [json.loads(line) for line in output.getvalue().splitlines()]==[{"ready":True},{"text":"Synthetic caption"}]
+
+
+def test_sustained_two_role_audio_has_bounded_memory_and_exact_caption_accounting():
+    async def scenario():
+        now=[0.0];events=[]
+        async def send(value): events.append(value)
+        s=CaptionSession(Provider, clock=lambda:now[0])
+        await s.connect("recruiter",send);await s.connect("candidate",send)
+        await s.approve("recruiter");await s.approve("candidate")
+        for frame in range(1200):
+            now[0]=frame/10
+            # Independent roles, occasional grouped delivery; preserve every frame.
+            await asyncio.gather(s.audio("recruiter",bytes(3200)),s.audio("candidate",bytes(3200)))
+            assert all(len(buffer)<=64000 for buffer in s.buffers.values())
+        assert not s.stopped and s.sequence==120
+        assert s.frames==dict(recruiter=1200,candidate=1200)
+        assert all(len(p.frames)==60 for p in s.providers.values())
+        assert {e["role"] for e in events if e["kind"]=="caption"}=={"recruiter","candidate"}
+        now[0]=120;await s.audio("recruiter",bytes(3200))
+        assert s.stopped and not any(s.buffers.values())
+    asyncio.run(scenario())
+
+
+def test_websocket_burst_dispatch_does_not_mistake_fast_frames_for_backlog(monkeypatch):
+    key=uuid4()
+    monkeypatch.setattr(route,"settings",route.settings.model_copy(update={"local_caption_model_path":"synthetic", "livekit_synthetic_demo_enabled":True}))
+    # Keep repeated authorization identity stable.
+    identity=uuid4()
+    async def authorized(*args):return key,"candidate",identity
+    monkeypatch.setattr(route,"authorize",authorized)
+    async def send(value):pass
+    session=CaptionSession(Provider)
+    asyncio.run(session.connect("recruiter",send))
+    session.consent.add("recruiter")
+    route.sessions[key]=session
+    try:
+        with TestClient(app) as client:
+            with client.websocket_connect("/api/v1/interview-access/captions",headers={"origin":"http://localhost:5173"}) as socket:
+                assert socket.receive_json()["kind"]=="waiting"
+                socket.send_text("consent");assert socket.receive_json()["kind"]=="active"
+                for _ in range(20):socket.send_bytes(bytes(3200))
+                assert socket.receive_json()["kind"]=="caption"
+                assert not session.stopped and session.frames["candidate"]==20
+                socket.send_text("stop");assert socket.receive_json()["kind"]=="stopped"
+    finally: route.sessions.clear()

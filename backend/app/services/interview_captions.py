@@ -71,26 +71,31 @@ class CaptionSession:
             return
         buffer = self.buffers[role]
         buffer.extend(pcm)
-        if len(buffer) < 64000:
-            return
-        if role in self.processing:
+        # Keep at most one pending two-second chunk while inference finishes.
+        if len(buffer) > 64000:
             await self.stop()
             return
-        audio = bytes(buffer)
-        buffer.clear()
-        end = self.clock() - self.started
+        if len(buffer) < 64000 or role in self.processing:
+            return
         try:
             self.processing.add(role)
-            text = await self.providers[role].transcribe(audio)
-            if not self.stopped and text:
-                if len(text) > 1000 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text):
-                    raise ValueError("Unsafe caption")
-                if self.sequence >= 120:
+            while not self.stopped and len(buffer) >= 64000:
+                end = self.clock() - self.started
+                if end >= 120:
                     await self.stop()
                     return
-                self.sequence += 1
-                await self.broadcast({"kind": "caption", "role": role, "sequence": self.sequence,
-                                      "start": max(0, end - 2), "end": end, "text": text})
+                audio = bytes(buffer)
+                buffer.clear()
+                text = await self.providers[role].transcribe(audio)
+                if not self.stopped and text:
+                    if len(text) > 1000 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text):
+                        raise ValueError("Unsafe caption")
+                    if self.sequence >= 120:
+                        await self.stop()
+                        return
+                    self.sequence += 1
+                    await self.broadcast({"kind": "caption", "role": role, "sequence": self.sequence,
+                                          "start": max(0, end - 2), "end": end, "text": text})
         except Exception:
             await self.stop()
         finally:

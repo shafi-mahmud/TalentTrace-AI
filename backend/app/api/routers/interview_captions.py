@@ -94,6 +94,9 @@ async def serve(socket, job_id=None, interview_id=None):
                 if len(tasks) >= 2:
                     raise ValueError("Audio overflow")
                 tasks.add(asyncio.create_task(audio(message["bytes"])))
+                # Let the bounded frame ingest run before reading a queued burst.
+                # Otherwise a completed/fast dispatch can look like audio backlog.
+                await asyncio.sleep(0)
             elif message.get("text") == "stop":
                 break
             elif message.get("text") == "consent":
