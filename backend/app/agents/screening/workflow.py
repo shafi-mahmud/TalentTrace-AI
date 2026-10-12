@@ -13,6 +13,7 @@ from app.schemas.screening import (
     SemanticMatchingResponse,
 )
 from app.integrations.llm.screening import GroqSemanticRequirementMatcher, SemanticRequirementMatcher
+from app.integrations.llm.diagnostics import logger as diagnostic_logger
 from app.services.screening_matching import (
     ScreeningMatchingError, deterministic_matches, qualification_facts, validate_semantic_matches,
 )
@@ -193,6 +194,7 @@ class CandidateScreeningWorkflow:
             by_id = {r.criterion_id: r for r in state["deterministic_results"] + semantic}
             return {"validated_matches": tuple(by_id[c.criterion_id] for c in state["request"].criteria)}
         except ScreeningMatchingError as exc:
+            diagnostic_logger.warning("talenttrace_failure stage=semantic_evidence_validation category=%s",exc.code)
             return {"matching_error": exc.code, "validated_matches": ()}
 
     def _build_matching_result(self, state: ScreeningWorkflowState) -> dict:

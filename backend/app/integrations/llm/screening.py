@@ -1,5 +1,6 @@
 """One bounded interpretation call; candidate facts are untrusted reference data."""
 import json
+import time
 from collections.abc import Callable
 from typing import Protocol
 
@@ -9,6 +10,7 @@ from pydantic import ValidationError
 from app.core.config import Settings, settings
 from app.schemas.screening import QualificationFact, ScreeningCriterion, SemanticMatchingResponse
 from app.services.screening_matching import ScreeningMatchingError, relevant_facts
+from app.integrations.llm.diagnostics import provider_failure, provider_usage
 
 MAX_SEMANTIC_PAYLOAD_CHARS = 32_000
 
@@ -59,6 +61,7 @@ class GroqSemanticRequirementMatcher:
         }, ensure_ascii=True)
         if len(payload) > MAX_SEMANTIC_PAYLOAD_CHARS:
             raise ScreeningMatchingError("semantic_input_limit")
+        started = time.perf_counter()
         try:
             async with self.client_factory(api_key=self.configuration.groq_api_key.get_secret_value(),
                     timeout=30.0, max_retries=0) as client:
@@ -72,13 +75,16 @@ class GroqSemanticRequirementMatcher:
                     temperature=0, max_completion_tokens=6000, stream=False,
                 )
             content = response.choices[0].message.content
+            provider_usage("semantic_matching_provider", response, time.perf_counter()-started)
             if not content:
                 raise ScreeningMatchingError("invalid_semantic_response")
             try:
                 return SemanticMatchingResponse.model_validate_json(content)
-            except ValidationError:
+            except ValidationError as error:
+                provider_failure("semantic_matching_provider", error)
                 raise ScreeningMatchingError("invalid_semantic_response") from None
         except ScreeningMatchingError:
             raise
-        except Exception:
+        except Exception as error:
+            provider_failure("semantic_matching_provider", error)
             raise ScreeningMatchingError("semantic_provider_failed") from None

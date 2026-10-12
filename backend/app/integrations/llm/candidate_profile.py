@@ -1,5 +1,6 @@
 """Replaceable candidate-fact extractor; strict shape is not proof of truth."""
 import json
+import time
 from collections.abc import Callable
 from typing import Protocol
 
@@ -7,6 +8,7 @@ from groq import AsyncGroq
 
 from app.core.config import Settings, settings
 from app.schemas.candidate_profile import CandidateProfileInterpretation, CandidateSourceDocument
+from app.integrations.llm.diagnostics import provider_failure, provider_usage
 
 
 class CandidateParserNotConfigured(Exception):
@@ -51,6 +53,7 @@ class GroqCandidateProfileExtractor:
         # Revalidate bounds even when called outside the API orchestration.
         document = CandidateSourceDocument.model_validate(document.model_dump())
         source = json.dumps({"units": [{"source_id": unit.source_id, "text": unit.text} for unit in document.units]}, ensure_ascii=True)
+        started = time.perf_counter()
         try:
             async with self.client_factory(api_key=self.configuration.groq_api_key.get_secret_value(), timeout=30.0, max_retries=0) as client:
                 response = await client.chat.completions.create(
@@ -62,9 +65,11 @@ class GroqCandidateProfileExtractor:
                     temperature=0, max_completion_tokens=6000, stream=False,
                 )
             content = response.choices[0].message.content
+            provider_usage("candidate_profile_provider", response, time.perf_counter()-started)
             if not content:
                 raise CandidateProviderError()
             return CandidateProfileInterpretation.model_validate_json(content)
-        except Exception:
+        except Exception as error:
+            provider_failure("candidate_profile_provider", error)
             # Never propagate provider responses, prompts or candidate data.
             raise CandidateProviderError() from None

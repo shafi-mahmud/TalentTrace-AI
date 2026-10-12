@@ -1,6 +1,8 @@
 """Request-scoped source resolution and conservative textual grounding; no scoring."""
 import re
 import unicodedata
+import logging
+import time
 from uuid import UUID
 from urllib.parse import urlsplit
 
@@ -10,6 +12,8 @@ from app.core.config import Settings, settings
 from app.integrations.llm.candidate_profile import (
     CandidateParserNotConfigured, CandidateProfileExtractor, GroqCandidateProfileExtractor,
 )
+
+logger = logging.getLogger("talenttrace.screening_diagnostics")
 from app.schemas.candidate_profile import (
     CandidateContact, CandidateEducation, CandidateProfile, CandidateProfileInterpretation,
     CandidateQualifications, CandidateSourceDocument, CandidateSourceUnit, CandidateWorkHistory,
@@ -118,6 +122,7 @@ class CandidateProfileService:
                 document = CandidateSourceDocument(upload_id=primary.upload_id, units=tuple(converted))
                 sources.append((primary.upload_id, None, document))
             except ValueError:
+                logger.warning("talenttrace_failure stage=candidate_source category=source_contract_invalid")
                 sources.append((primary.upload_id, "parsing_failed", None))
         return sources
 
@@ -128,7 +133,8 @@ class CandidateProfileService:
             raise CandidateParserNotConfigured()
         sources = await run_in_threadpool(self._sources, job_reference, batch_id)
         candidates = []
-        for upload_id, failure, document in sources:
+        for index, (upload_id, failure, document) in enumerate(sources,1):
+            started = time.perf_counter()
             if failure:
                 candidates.append(CandidateProfile(upload_id=upload_id, parsing_status=failure, contact=None, qualifications=None)); continue
             try:
@@ -136,6 +142,10 @@ class CandidateProfileService:
                 candidates.append(validate_profile(upload_id, interpretation, document))
             except CandidateParserNotConfigured:
                 raise
-            except Exception:
+            except Exception as error:
+                from app.integrations.llm.candidate_profile import CandidateProviderError
+                category = "profile_provider_failed" if isinstance(error,CandidateProviderError) else "profile_evidence_or_contract_invalid"
+                logger.warning("talenttrace_failure stage=candidate_profile_validation candidate_index=%s category=%s exception_class=%s",index,category,type(error).__name__)
                 candidates.append(CandidateProfile(upload_id=upload_id, parsing_status="parsing_failed", contact=None, qualifications=None))
+            logger.info("talenttrace_stage stage=candidate_profile candidate_index=%s status=%s duration_ms=%s",index,candidates[-1].parsing_status,int((time.perf_counter()-started)*1000))
         return tuple(candidates)

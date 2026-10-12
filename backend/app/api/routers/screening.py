@@ -1,5 +1,7 @@
 """Bounded synthetic/local batch integration; no arbitrary candidate input."""
 from uuid import UUID
+import time
+from app.integrations.llm.diagnostics import logger as diagnostic_logger
 
 from fastapi import APIRouter, Request, Depends, HTTPException
 from app.core.auth import current_recruiter, database_session
@@ -24,10 +26,14 @@ async def screen_batch(request: Request, job_reference: JobReference, batch_id: 
     expected_revision = request.headers.get("x-talenttrace-job-revision")
     if job is not None and expected_revision is not None and expected_revision != str(job.revision):
         raise HTTPException(409, "Job changed. Review criteria and weights again.")
+    started=time.perf_counter()
+    stage="batch_screening"
     try:
         batch = await BatchScreeningService(profiles=CandidateProfileService(private_settings(request))).screen_batch(job_reference, batch_id, snapshot)
         if job is not None:
+            stage="score_persistence"
             scoring = await persist_scores(session, job, batch)
+            diagnostic_logger.info("talenttrace_stage stage=score_persistence candidate_count=%s scored_count=%s",len(scoring.candidates),sum(c.status=="scored" for c in scoring.candidates))
             return BatchScreeningResponse.model_validate({**batch.model_dump(), "scoring": scoring.model_dump()})
         return batch
     except JobSnapshotMismatch:
@@ -38,9 +44,12 @@ async def screen_batch(request: Request, job_reference: JobReference, batch_id: 
             "message": "Candidate profile extraction is not configured."})
     except CvExtractionError as error:
         return JSONResponse(status_code=error.status, content={"code": error.code, "message": PUBLIC_ERRORS[error.code]})
-    except Exception:
+    except Exception as error:
+        diagnostic_logger.warning("talenttrace_failure stage=%s category=batch_screening_unavailable exception_class=%s",stage,type(error).__name__)
         return JSONResponse(status_code=500, content={"code": "batch_screening_unavailable",
             "message": "Batch screening could not be completed."})
+    finally:
+        diagnostic_logger.info("talenttrace_stage stage=screening_request duration_ms=%s",int((time.perf_counter()-started)*1000))
 
 
 async def authorize_snapshot(session, owner_id, snapshot):
