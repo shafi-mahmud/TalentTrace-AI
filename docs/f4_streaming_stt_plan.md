@@ -3,6 +3,12 @@
 **Recommended / Planned — not implemented.** No provider activation, dependency,
 recording or transcript storage is added by this documentation.
 
+**Free-only override:** the later owner instruction prohibits paid STT/overage.
+The Google recommendation below is historical and is not authorization to enable
+billing. Actual LiveKit account credits and a hard no-charge limit are unverified;
+Cloud STT stays unused. The separately implemented, disabled-by-default local CPU
+caption foundation is described in [Free-only captions](f4_free_captions.md).
+
 ## Current architecture
 
 - `backend/app/api/routers/interviews.py` authorizes the recruiter; `interview_access.py`
