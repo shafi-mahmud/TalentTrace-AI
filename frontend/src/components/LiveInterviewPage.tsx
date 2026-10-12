@@ -4,6 +4,7 @@ import type { RemoteTrack, RemoteTrackPublication } from "livekit-client";
 import { interviewAccess, candidateAccess, candidateStatus, invitation, revokeInvitation, InterviewAccessError } from "../api/livekitInterview";
 import { syntheticInterviewMedia } from "./syntheticInterviewMedia";
 import type { Interview } from "../api/interviews";
+import InterviewCaptions from "./InterviewCaptions";
 
 // SDK diagnostics can contain connection details; public UI uses fixed errors.
 setLogLevel("silent");
@@ -77,7 +78,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     finally {if(current===generation.current)setBusy(false);}
   }
   return <main className="app-shell"><section className="card" aria-label="Synthetic interview proof">
-    <h1>{candidate?"Candidate interview":"Recruiter interview"}</h1><p>Synthetic development testing only. No recording or transcription.</p>
+    <h1>{candidate?"Candidate interview":"Recruiter interview"}</h1><p>Synthetic development testing only. No recording or saved transcript.</p>
     {!candidate && <section aria-label="Candidate invitation"><h2>Candidate invitation</h2><p>One-use link. Treat it as a secret. Join window: 10 minutes before until 15 minutes after the interview.</p>
       <button disabled={inviteBusy} onClick={()=>void createInvite()}>Generate replacement invitation</button>
       <button disabled={inviteBusy} onClick={()=>void revoke()}>Revoke candidate access</button>
@@ -95,6 +96,8 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     <button className="button button-secondary" onClick={()=>void leave()} disabled={!joined && !busy}>Leave interview</button>
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
+    <InterviewCaptions connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id}
+      microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
     <button className="button button-secondary" onClick={onBack}>Back to screening</button>
   </section></main>;
