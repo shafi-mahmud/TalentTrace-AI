@@ -74,9 +74,13 @@ and the other client observed participant departure. No physical device data was
 captured. An in-app-browser attempt disconnected during connection; its cause is
 unconfirmed, and cross-browser compatibility is not claimed.
 
-Physical camera/microphone, perceived audio quality, measured latency, long-duration
-reliability, network-loss/reconnect and live expiry/revocation remain **Unverified**.
-This is a synthetic A/V transport proof, not a production candidate interview system.
+These earlier automated-agent checks did not verify physical devices. On
+12 October 2026 the owner subsequently reported working Edge physical webcam,
+microphone, remote audio/video, mute/camera controls, candidate rejoin and access
+blocking after recruiter revocation. See the **user-observed verification** in
+[Increment 2B](interview_invitations.md#user-observed-physical-media-verification--12-october-2026).
+Measured latency, long-duration reliability and cross-network operation remain
+unverified. This is a local demonstration, not production interview approval.
 
 ## Manual setup/verification
 

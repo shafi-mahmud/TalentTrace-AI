@@ -91,10 +91,10 @@ Browser tabs share an Edge profile; anonymous candidate authorization was also
 verified with independent cookie jars in the real API check. This is not a claim
 of isolated browser profiles or physical-device capture.
 
-**Unverified:** physical camera/microphone, permission dialogs, headphone audio
-quality, measured latency and network-loss reconnect. Windows reports camera/mic
-devices, but headphone/privacy readiness was not confirmed, so no physical capture
-was performed. No real candidate data or Groq/Discord calls were used.
+**Historical automated-agent boundary:** the earlier checks did not capture
+physical devices. The user-observed physical check below supersedes that gap;
+measured latency, network-loss reconnect and cross-network operation remain
+unverified. No real candidate data or Groq/Discord calls were used in those checks.
 
 Final automated checks: backend **1,051 passed, 6 skipped**; frontend **120 passed**;
 production build and `git diff --check` passed. The SDK chunk-size warning remains
@@ -114,3 +114,18 @@ non-blocking. These counts are automated results, separate from the live checks.
 5. Revoke as recruiter: candidate disconnects and cannot rejoin. Replacement uses a
    new identity. Test expired link/window, stale criteria and foreign recruiter denial.
    Leave both clients and remove only the disposable resources.
+
+## User-observed physical-media verification — 12 October 2026
+
+The project owner reported a manual Edge test in the separate disposable
+physical-device environment: recruiter and candidate joined, physical webcam
+and microphone capture and remote audio/video worked, mute/camera controls
+worked, the candidate rejoined, and recruiter revocation blocked candidate access.
+
+This is **user-observed verification**, not an automated result or an independently
+observed agent test. It closes the local F3 physical-media demonstration milestone.
+It does not establish cross-network operation, measured latency, long-duration
+reliability, forced disconnection timing, expired-token behavior, or production
+readiness. The reported blocked access must not be expanded into claims about
+all cached Cloud tokens or active-participant removal. No recording or STT was
+implemented by this test. Existing authorization boundaries above still apply.
