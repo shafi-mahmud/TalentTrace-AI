@@ -26,18 +26,13 @@ export function isInterview(value: unknown): value is Interview {
     && typeof v.scheduled_at === "string" && /(?:Z|\+00:00)$/.test(v.scheduled_at) && Number.isFinite(Date.parse(v.scheduled_at))
     && Number.isInteger(v.duration_minutes) && v.duration_minutes >= 15 && v.duration_minutes <= 180 && typeof v.unscored_confirmed === "boolean";
 }
-export function utcSchedule(value: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
-  const time = new Date(value + ":00Z");
-  return Number.isFinite(time.valueOf()) && time.toISOString().slice(0,16) === value && time.valueOf() > Date.now() ? time.toISOString() : null;
-}
 export async function createInterview(jobId: string, request: InterviewRequest): Promise<Interview> {
   let response: Response;
   try {response = await authenticatedFetch(`${base}/api/v1/jobs/${jobId}/interviews`, {
     method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(request)});
   } catch {throw new Error("Scheduling was not confirmed. Reload saved interviews before another attempt.");}
   if (!response.ok) throw new Error(response.status === 409 ? "Scheduling needs review: check current eligibility, revision, confirmation and existing interviews."
-    : response.status === 422 ? "Check the future UTC start time, timezone and duration." : "Interview could not be scheduled.");
+    : response.status === 422 ? "Check the future interview time, timezone and duration." : "Interview could not be scheduled.");
   const value: unknown = await response.json().catch(() => null);
   if (!isInterview(value) || value.job_id !== jobId || value.batch_id !== request.batch_id || value.upload_id !== request.upload_id
     || value.criteria_revision !== request.criteria_revision || value.timezone !== request.timezone || value.duration_minutes !== request.duration_minutes

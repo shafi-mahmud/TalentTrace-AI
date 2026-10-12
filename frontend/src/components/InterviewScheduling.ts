@@ -1,6 +1,7 @@
 import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { createInterview, listInterviews, utcSchedule, validTimezone } from "../api/interviews.ts";
+import { createInterview, listInterviews } from "../api/interviews.ts";
+import { localSchedule, timezoneOptions } from "./interviewTime.ts";
 import type { Interview } from "../api/interviews.ts";
 import type { CandidateScore, ScoringBatch } from "../types/screening";
 
@@ -9,16 +10,19 @@ export function ScheduleForm({candidate, start, zone, duration, confirmed, busy,
   onStart: (v: string) => void; onZone: (v: string) => void; onDuration: (v: number) => void; onConfirmed: (v: boolean) => void; onSubmit: (e: FormEvent) => void;
 }) {
   const unscored = candidate.status !== "scored";
+  const preview = start ? localSchedule(start, zone) : null;
   return h("form", {onSubmit}, h("p", null, `Candidate reference: ${candidate.upload_id}`),
     h("p", {className:"helper-text"}, "You select this candidate. Scheduling does not change screening or hiring decisions. No meeting link or notification is created."),
     unscored && h("p", {role:"status", className:"error-banner"}, "Eligible but not scored. Review the missing or uncertain weighted evidence before selection."),
     h("fieldset", {disabled:busy || alreadyScheduled},
       h("legend", null, "Initial interview"),
-      h("label", {htmlFor:"interview-start"}, "Start time (UTC)"),
+      h("label", {htmlFor:"interview-start"}, "Local interview date and time"),
       h("input", {id:"interview-start",type:"datetime-local",value:start,required:true,onChange:(e:{target:{value:string}})=>onStart(e.target.value)}),
-      h("label", {htmlFor:"interview-zone"}, "Display timezone (IANA)"),
-      h("input", {id:"interview-zone",value:zone,maxLength:64,required:true,onChange:(e:{target:{value:string}})=>onZone(e.target.value)}),
-      h("p", {className:"helper-text"}, "Enter UTC above; the timezone controls display, not interpretation of that input."),
+      h("label", {htmlFor:"interview-zone"}, "Interview timezone (IANA)"),
+      h("select", {id:"interview-zone",value:zone,required:true,onChange:(e:{target:{value:string}})=>onZone(e.target.value)},
+        ...timezoneOptions(zone).map(value=>h("option",{key:value,value},value))),
+      h("p", {className:"helper-text"}, "Enter the time in the selected timezone. Check UTC below before saving."),
+      preview && h("p", {role:"status",className:"helper-text"}, preview.error ?? `Local: ${start.replace("T", " ")} (${zone}) · UTC: ${preview.utc}`),
       h("label", {htmlFor:"interview-duration"}, "Duration (minutes)"),
       h("input", {id:"interview-duration",type:"number",value:Number.isFinite(duration)?duration:"",min:15,max:180,step:1,required:true,onChange:(e:{target:{value:string}})=>onDuration(e.target.value === ""?NaN:Number(e.target.value))}),
       unscored && h("label", null, h("input", {type:"checkbox",checked:confirmed,onChange:(e:{target:{checked:boolean}})=>onConfirmed(e.target.checked)}), " I reviewed the uncertainty and explicitly select this eligible, unscored candidate."),
@@ -28,6 +32,7 @@ export function ScheduleForm({candidate, start, zone, duration, confirmed, busy,
 export function SavedInterviews({rows,criteriaRevision,onOpenInterview}: {rows:Interview[];criteriaRevision:number;onOpenInterview?:(value:Interview)=>void}) {
   return h("div",null,h("h3",null,"Saved interviews"),h("ul",null,...rows.map(row=>h("li",{key:row.id},
     `Scheduled · ${new Intl.DateTimeFormat("en",{dateStyle:"medium",timeStyle:"short",timeZone:row.timezone}).format(new Date(row.scheduled_at))} (${row.timezone}) · ${row.duration_minutes} minutes`,
+    h("p",{className:"helper-text"},`UTC: ${new Date(row.scheduled_at).toISOString()}`),
     h("p",{className:"helper-text"},`Candidate ${row.upload_id} · criteria revision ${row.criteria_revision}${row.criteria_revision!==criteriaRevision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""} · Candidate invitation managed on interview page`),
     onOpenInterview && row.criteria_revision===criteriaRevision && h("button",{type:"button",className:"button button-secondary",onClick:()=>onOpenInterview(row)},"Open interview")))),
     !rows.length && h("p",null,"No saved interviews loaded."));
@@ -53,8 +58,10 @@ export function InterviewScheduling({jobId,criteriaRevision,scoring,candidate,on
     catch {if(current===generation.current)setError("Saved interviews could not be loaded.");}}
   async function submit(event:FormEvent) {
     event.preventDefault(); if(!candidate || !scoring || pending.current || alreadyScheduled)return;
-    const time=utcSchedule(start);
-    if(!time || !validTimezone(zone) || !Number.isInteger(duration) || duration<15 || duration>180) {setError("Use a future UTC time, valid IANA timezone and 15–180 whole minutes.");return;}
+    const schedule=localSchedule(start,zone);
+    if(!schedule.utc) {setError(schedule.error ?? "Enter a valid local date and time.");return;}
+    const time=schedule.utc;
+    if(!Number.isInteger(duration) || duration<15 || duration>180) {setError("Use a duration of 15 to 180 whole minutes.");return;}
     if(scoring.job_id!==jobId || scoring.criteria_revision!==criteriaRevision || candidate.screening_decision!=="eligible" || (candidate.status!=="scored" && !confirmed)) {setError("Current eligible screening results and explicit selection are required.");return;}
     // A pre-save list response must not erase the newly saved schedule.
     const current=++generation.current;pending.current=true;setBusy(true);setError("");

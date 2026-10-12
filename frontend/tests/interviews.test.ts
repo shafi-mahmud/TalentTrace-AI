@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createInterview, isInterview, listInterviews, utcSchedule, validTimezone } from "../src/api/interviews.ts";
+import { createInterview, isInterview, listInterviews, validTimezone } from "../src/api/interviews.ts";
 import type { Interview, InterviewRequest } from "../src/api/interviews.ts";
 import { InterviewScheduling, SavedInterviews, ScheduleForm } from "../src/components/InterviewScheduling.ts";
 import type { CandidateScore } from "../src/types/screening.ts";
@@ -24,7 +24,7 @@ test("saved-interview controls remain available without in-memory screening afte
 
 test("persisted schedule displays the correct timezone and historical revision independently of screening",()=>{
   const html=renderToStaticMarkup(createElement(SavedInterviews,{rows:[{...response,scheduled_at:"2026-11-20T09:00:00Z",unscored_confirmed:true}],criteriaRevision:3}));
-  for(const text of ["3:00 PM","Asia/Dhaka","(historical)","Unscored selection confirmed","Candidate invitation managed on interview page"]) assert.ok(html.includes(text),text);
+  for(const text of ["3:00 PM","Asia/Dhaka","UTC: 2026-11-20T09:00:00.000Z","(historical)","Unscored selection confirmed","Candidate invitation managed on interview page"]) assert.ok(html.includes(text),text);
 });
 
 test("scheduling validates UTC, duration, timezone and bounded server result",()=>{
@@ -33,10 +33,6 @@ test("scheduling validates UTC, duration, timezone and bounded server result",()
     {criteria_revision:0},{scheduled_at:"2026-10-20T10:00"},{status:"published"},{meeting_url:"https://fake.test"}])
     assert.ok(!isInterview({...response,...patch}));
   assert.ok(validTimezone("Asia/Dhaka"));assert.ok(!validTimezone("private\0path"));
-  const future=time.slice(0,16);
-  assert.equal(utcSchedule(future),future+":00.000Z");
-  assert.equal(utcSchedule("2026-02-30T10:00"),null);
-  assert.equal(utcSchedule("2020-01-01T10:00"),null);
 });
 
 test("create sends references and explicit confirmation; validates response association",async t=>{
@@ -70,8 +66,8 @@ test("eligible-but-unscored form warns and requires explicit acknowledgement",()
   let confirmed=false;const props={candidate,start:"",zone:"Asia/Dhaka",duration:30,confirmed,busy:false,alreadyScheduled:false,
     onStart:()=>{},onZone:()=>{},onDuration:()=>{},onConfirmed:(v:boolean)=>{confirmed=v;},onSubmit:()=>{}};
   const html=renderToStaticMarkup(createElement(ScheduleForm,props));
-  assert.match(html,/Eligible but not scored/);assert.match(html,/Start time \(UTC\)/);
-  assert.match(html,/Display timezone \(IANA\)/);assert.match(html,/disabled=""[^>]*>Schedule interview/);
+  assert.match(html,/Eligible but not scored/);assert.match(html,/Local interview date and time/);
+  assert.match(html,/Interview timezone \(IANA\)/);assert.match(html,/disabled=""[^>]*>Schedule interview/);
   const form=ScheduleForm(props);const fields=(form.props.children as React.ReactElement[])[3];
   const children=fields.props.children as React.ReactElement[];
   const acknowledgement=children.at(-2)!;

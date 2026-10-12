@@ -3,7 +3,8 @@
 ## Implemented
 
 Eligible cards in screening results offer **Select for interview**. The recruiter
-enters a future UTC start, IANA display timezone and duration, then schedules.
+enters a future local date/time, selects an IANA interview timezone and duration,
+then schedules. The timezone defaults to the browser zone but can be changed.
 No AI selection/new workflow is added; screening and scores remain unchanged.
 Eligible-but-unscored candidates show a warning and require an extra explicit
 acknowledgement. Excluded, incomplete and failed candidates cannot be selected.
@@ -28,8 +29,17 @@ against edits/reruns. Duplicate requests return 409; there are no automatic POST
 retries. After uncertain delivery, reload saved interviews before another attempt.
 Reuploads with new identities are not automatically deduplicated.
 
-UTC input is deliberate: IANA timezone controls display only, avoiding silent
-interpretation of daylight-saving overlaps/nonexistent local times. Python's
+**Implemented — local-time entry:** the frontend resolves the entered wall-clock
+minute in the selected IANA timezone and submits the existing UTC `scheduled_at`
+plus `timezone` fields. Both the preview and saved history show local time and UTC.
+The machine's timezone is only a default; it never overrides the chosen zone.
+Invalid dates, past times, daylight-saving gaps and repeated local times are
+rejected with a controlled explanation. For repeated times, choose another
+unambiguous time; selecting the first/second occurrence is not implemented.
+Conversion uses the browser's IANA timezone data and minute resolution, with a
+bounded search across UTC offsets and exact local-time round-trip validation.
+Keep browser timezone data current. No timezone library or API/schema change
+is required. Python's
 standard `zoneinfo` validates zones; installed `tzdata` is explicitly pinned for
 Windows portability. Duration 15–180 minutes/default 30 are implementation
 bounds/convenience, not confirmed BID/trainer policy. Existing schedules remain
@@ -72,8 +82,10 @@ workspace restoration remains separate from schedule-history retrieval.
 1. Approve migration to 0004 in a separate development DB. Start this branch's
    backend/frontend on unused ports with matching proxy/trusted origin.
 2. Sign in, confirm job criteria/weights and screen synthetic CVs. Select an eligible
-   card, enter future UTC time and valid IANA display zone, then schedule. Check
-   saved local display, UTC API value and reload persistence.
+   card, enter a future local time and select the interview IANA zone, then schedule.
+   Check the local/UTC preview, saved display, UTC API value and reload persistence.
+   Change the selected zone away from the browser default and verify conversion.
+   Try a DST gap/overlap: the UI must reject it without a POST.
 3. Verify unscored acknowledgement, no selection on excluded/failed cards, duplicate
    rejection and foreign-recruiter 404. Edit criteria: reject old screening records
    for new selection while keeping historical schedules visible.
@@ -86,3 +98,17 @@ email, recording and transcription. Expiring candidate bearer invitations and
 two-role LiveKit joining are implemented for synthetic development testing in
 [Interview invitations](interview_invitations.md). Scheduling is not a hiring
 decision and sends no external message.
+
+## Local-time increment verification
+
+Automated conversion tests cover Asia/Dhaka, Nepal fractional offsets, UTC,
+New York winter/summer offsets, date rollover, invalid/past dates, DST gaps and
+overlaps (including Lord Howe half-hour transitions and an Apia skipped date).
+Frontend tests verify timezone selection, local/UTC preview, controlled DST
+messages, preserved unscored acknowledgement and the unchanged API payload.
+Existing backend scheduling/authorization and invitation/LiveKit tests are
+regression checks; no new live browser or database verification is claimed for
+this frontend increment. Existing demo services and PostgreSQL data remain intact.
+
+Validation: 126 frontend tests and 40 backend interview/access/LiveKit tests passed;
+frontend production build passed. No provider call or migration was required.
