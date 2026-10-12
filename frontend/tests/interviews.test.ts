@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createInterview, isInterview, listInterviews, utcSchedule, validTimezone } from "../src/api/interviews.ts";
 import type { Interview, InterviewRequest } from "../src/api/interviews.ts";
-import { ScheduleForm } from "../src/components/InterviewScheduling.ts";
+import { InterviewScheduling, SavedInterviews, ScheduleForm } from "../src/components/InterviewScheduling.ts";
 import type { CandidateScore } from "../src/types/screening.ts";
 
 const id="12345678-1234-4234-8234-123456789abc";
@@ -15,6 +15,17 @@ const response:Interview={id,job_id:id,job_reference:"TT-JOB-1234567812344234",b
   scoring_version:"f2-coverage-v1",scheduled_at:time,timezone:"Asia/Dhaka",duration_minutes:30,unscored_confirmed:false,status:"scheduled"};
 const candidate:CandidateScore={job_reference:response.job_reference,upload_id:id,screening_decision:"eligible",status:"not_evaluated",
   reason:"uncertain_evidence",weights:{skill:50,experience:30,education:20},score:null,dimensions:[]};
+
+test("saved-interview controls remain available without in-memory screening after reload",()=>{
+  const html=renderToStaticMarkup(createElement(InterviewScheduling,{jobId:id,criteriaRevision:2,scoring:null,candidate:null}));
+  for(const text of ["Interview scheduling","Reload saved interviews","Saved interviews"]) assert.ok(html.includes(text));
+  assert.ok(!html.includes('type="submit"'));
+});
+
+test("persisted schedule displays the correct timezone and historical revision independently of screening",()=>{
+  const html=renderToStaticMarkup(createElement(SavedInterviews,{rows:[{...response,scheduled_at:"2026-11-20T09:00:00Z",unscored_confirmed:true}],criteriaRevision:3}));
+  for(const text of ["3:00 PM","Asia/Dhaka","(historical)","Unscored selection confirmed","Meeting link not configured"]) assert.ok(html.includes(text),text);
+});
 
 test("scheduling validates UTC, duration, timezone and bounded server result",()=>{
   assert.ok(isInterview(response));

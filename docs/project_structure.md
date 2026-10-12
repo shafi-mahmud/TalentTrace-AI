@@ -439,6 +439,7 @@ Eligible screening cards support explicit human selection and provider-independe
 interview scheduling. Owner-protected create/list APIs reread current approved F2
 records; eligible-but-unscored selection requires extra confirmation. Migration
 0004 stores UTC/IANA timezone, duration and revision-bound selection references.
-Fresh disposable PostgreSQL migration/API checks passed; F3 browser verification
-remains pending. No meeting URLs, calendar, email, recording or candidate login
+Fresh disposable PostgreSQL migration/API and real browser/Groq-backed screening-to-
+scheduling checks passed on 12 October 2026. Saved history loads after page reload
+without recovering in-memory screening results. No meeting URLs, calendar, email, recording or candidate login
 are implemented. See [interview scheduling](interview_scheduling.md).

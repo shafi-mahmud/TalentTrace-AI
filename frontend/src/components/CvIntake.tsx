@@ -236,8 +236,9 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
-        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={setSelectedUpload} />
-          {screening.scoring && <InterviewScheduling scoring={screening.scoring} candidate={screening.scoring.candidates.find(c=>c.upload_id===selectedUpload) ?? null} />}</>}
+        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={setSelectedUpload} /></>}
+        {criteriaDraft?.revision && <InterviewScheduling jobId={criteriaDraft.draftId} criteriaRevision={criteriaDraft.revision}
+          scoring={screening?.scoring ?? null} candidate={screening?.scoring?.candidates.find(c=>c.upload_id===selectedUpload) ?? null} />}
         </section>
       </section>
     </main>

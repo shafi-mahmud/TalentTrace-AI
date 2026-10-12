@@ -25,29 +25,38 @@ export function ScheduleForm({candidate, start, zone, duration, confirmed, busy,
       h("button", {className:"button button-primary",type:"submit",disabled:busy || alreadyScheduled || (unscored && !confirmed)}, busy?"Saving interview…":alreadyScheduled?"Initial interview already scheduled":"Schedule interview")));
 }
 
-export function InterviewScheduling({scoring, candidate}: {scoring:ScoringBatch; candidate:CandidateScore|null}) {
+export function SavedInterviews({rows,criteriaRevision}: {rows:Interview[];criteriaRevision:number}) {
+  return h("div",null,h("h3",null,"Saved interviews"),h("ul",null,...rows.map(row=>h("li",{key:row.id},
+    `Scheduled · ${new Intl.DateTimeFormat("en",{dateStyle:"medium",timeStyle:"short",timeZone:row.timezone}).format(new Date(row.scheduled_at))} (${row.timezone}) · ${row.duration_minutes} minutes`,
+    h("p",{className:"helper-text"},`Candidate ${row.upload_id} · criteria revision ${row.criteria_revision}${row.criteria_revision!==criteriaRevision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""} · Meeting link not configured`)))),
+    !rows.length && h("p",null,"No saved interviews loaded."));
+}
+
+export function InterviewScheduling({jobId,criteriaRevision,scoring,candidate}: {
+  jobId:string;criteriaRevision:number;scoring:ScoringBatch|null;candidate:CandidateScore|null;
+}) {
   const [start,setStart]=useState(""); const [zone,setZone]=useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [duration,setDuration]=useState(30);const [confirmed,setConfirmed]=useState(false);
   const [rows,setRows]=useState<Interview[]>([]);const [error,setError]=useState("");const [busy,setBusy]=useState(false);
   const pending=useRef(false);const generation=useRef(0);
-  useLayoutEffect(()=>{generation.current++;setStart("");setConfirmed(false);setError("");setBusy(false);},[scoring.job_id,scoring.batch_id,scoring.criteria_revision,candidate?.upload_id]);
+  useLayoutEffect(()=>{generation.current++;setStart("");setConfirmed(false);setError("");setBusy(false);},[jobId,criteriaRevision,scoring?.batch_id,candidate?.upload_id]);
   useEffect(()=>{const current=generation.current;setRows([]);
-    listInterviews(scoring.job_id).then(value=>{if(current===generation.current)setRows(value);})
+    listInterviews(jobId).then(value=>{if(current===generation.current)setRows(value);})
       .catch(()=>{if(current===generation.current)setError("Saved interviews could not be loaded. Reload before scheduling.");});
     return ()=>{generation.current++;};
-  },[scoring.job_id,scoring.batch_id,scoring.criteria_revision,candidate?.upload_id]);
-  const alreadyScheduled=!!candidate && rows.some(row=>row.batch_id===scoring.batch_id && row.upload_id===candidate.upload_id);
+  },[jobId,criteriaRevision,scoring?.batch_id,candidate?.upload_id]);
+  const alreadyScheduled=!!candidate && !!scoring && rows.some(row=>row.batch_id===scoring.batch_id && row.upload_id===candidate.upload_id);
   async function reload() {const current=generation.current;setError("");
-    try {const value=await listInterviews(scoring.job_id);if(current===generation.current)setRows(value);}
+    try {const value=await listInterviews(jobId);if(current===generation.current)setRows(value);}
     catch {if(current===generation.current)setError("Saved interviews could not be loaded.");}}
   async function submit(event:FormEvent) {
-    event.preventDefault(); if(!candidate || pending.current || alreadyScheduled)return;
+    event.preventDefault(); if(!candidate || !scoring || pending.current || alreadyScheduled)return;
     const time=utcSchedule(start);
     if(!time || !validTimezone(zone) || !Number.isInteger(duration) || duration<15 || duration>180) {setError("Use a future UTC time, valid IANA timezone and 15–180 whole minutes.");return;}
-    if(candidate.screening_decision!=="eligible" || (candidate.status!=="scored" && !confirmed)) {setError("Explicit eligible candidate selection is required.");return;}
+    if(scoring.job_id!==jobId || scoring.criteria_revision!==criteriaRevision || candidate.screening_decision!=="eligible" || (candidate.status!=="scored" && !confirmed)) {setError("Current eligible screening results and explicit selection are required.");return;}
     // A pre-save list response must not erase the newly saved schedule.
     const current=++generation.current;pending.current=true;setBusy(true);setError("");
-    try {const saved=await createInterview(scoring.job_id,{batch_id:scoring.batch_id,upload_id:candidate.upload_id,
+    try {const saved=await createInterview(jobId,{batch_id:scoring.batch_id,upload_id:candidate.upload_id,
       criteria_revision:scoring.criteria_revision,scoring_version:scoring.scoring_version,selection_confirmed:true,
       confirm_eligible_unscored:candidate.status!=="scored" && confirmed,scheduled_at:time,timezone:zone,duration_minutes:duration});
       if(current===generation.current)setRows(old=>[...old.filter(row=>row.id!==saved.id),saved]);
@@ -55,12 +64,9 @@ export function InterviewScheduling({scoring, candidate}: {scoring:ScoringBatch;
     finally {pending.current=false;if(current===generation.current)setBusy(false);}
   }
   return h("section", {className:"card", "aria-label":"Interview scheduling"},h("h2",null,"Interview scheduling"),
-    candidate ? h(ScheduleForm,{candidate,start,zone,duration,confirmed,busy,alreadyScheduled,onStart:setStart,onZone:setZone,onDuration:setDuration,onConfirmed:setConfirmed,onSubmit:submit})
+    candidate && scoring ? h(ScheduleForm,{candidate,start,zone,duration,confirmed,busy,alreadyScheduled,onStart:setStart,onZone:setZone,onDuration:setDuration,onConfirmed:setConfirmed,onSubmit:submit})
       : h("p",null,"Select an eligible candidate above to schedule an interview."),
     error && h("p",{role:"alert",className:"error-banner"},error),
     h("button",{type:"button",className:"button button-secondary",onClick:()=>void reload(),disabled:busy},"Reload saved interviews"),
-    h("h3",null,"Saved interviews"),h("ul",null,...rows.map(row=>h("li",{key:row.id},
-      `Scheduled · ${new Intl.DateTimeFormat("en",{dateStyle:"medium",timeStyle:"short",timeZone:row.timezone}).format(new Date(row.scheduled_at))} (${row.timezone}) · ${row.duration_minutes} minutes`,
-      h("p",{className:"helper-text"},`Candidate ${row.upload_id} · criteria revision ${row.criteria_revision}${row.criteria_revision!==scoring.criteria_revision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""} · Meeting link not configured`)))),
-    !rows.length && h("p",null,"No saved interviews loaded."));
+    h(SavedInterviews,{rows,criteriaRevision}));
 }

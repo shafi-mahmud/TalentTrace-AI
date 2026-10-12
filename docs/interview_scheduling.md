@@ -50,8 +50,22 @@ The office demo database was not migrated.
 
 Saved screening fixtures for this F3 check used existing validated screening/scoring
 helpers; this was not another real-provider CV run. Automated backend/schema and
-frontend validation/rendering tests supplement it. F3 browser scheduling
-verification remains **Pending**.
+frontend validation/rendering tests supplement it.
+
+**Verified — 12 October 2026:** a separate fresh isolated PostgreSQL instance and
+temporary ports 8004/5177 supported real browser login, manual criteria confirmation,
+synthetic DOCX/PDF intake and actual Groq-backed screening. Eligible-but-unscored
+selection required the warning checkbox; excluded and unavailable sources could
+not be selected. Scheduling persisted 09:00 UTC / 15:00 Asia/Dhaka and 45 minutes.
+Real API checks confirmed foreign 404, stale/excluded/incomplete/unconfirmed and
+duplicate 409, plus concurrent create responses 201/409. No provider was mocked.
+
+The browser identified and fixed one integration defect: saved schedules were
+previously hidden after full reload because the panel required in-memory screening
+results. History now loads for the active owned job independently of those results.
+Full reload and later criteria edits retained visible historical schedules, and a
+second recruiter could not see the first recruiter's job/history. Whole CV-batch
+workspace restoration remains separate from schedule-history retrieval.
 
 ## Manual verification — isolated environment only
 
