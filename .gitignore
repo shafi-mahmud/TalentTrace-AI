@@ -1,5 +1,7 @@
 # Environment & Secrets (BID N7 Page 18, Section 11.4 Page 31)
 .env
+.env.*
+!.env.example
 *.env
 *.pem
 *.key

@@ -1,0 +1,88 @@
+"""Local SDK signing and mocked failures only; zero LiveKit network calls."""
+import asyncio
+from datetime import datetime,timedelta,timezone
+from uuid import uuid4
+
+import jwt
+import pytest
+
+from app.core.config import Settings
+from app.db.models.recruiter import JobProfile,InterviewSchedule
+from app.services import livekit_interview as service
+from app.api.routers import interviews as route
+from test_recruiter_records import workspace,client,login
+
+
+def configuration(**changes):
+    return Settings(_env_file=None,**{"livekit_url":"wss://synthetic.livekit.cloud", "livekit_api_key":"synthetic-api-key",
+        "livekit_api_secret":"s"*64,"livekit_synthetic_demo_enabled":True,**changes})
+
+
+def test_real_sdk_grants_ttl_and_opaque_two_slots(monkeypatch):
+    monkeypatch.setattr(service,"settings",configuration())
+    interview,owner=uuid4(),uuid4()
+    a=service.issue_interview_token(interview,owner,"a")
+    b=service.issue_interview_token(interview,owner,"b")
+    ca=jwt.decode(a["token"],"s"*64,algorithms=["HS256"],issuer="synthetic-api-key")
+    cb=jwt.decode(b["token"],"s"*64,algorithms=["HS256"],issuer="synthetic-api-key")
+    assert ca["exp"]-ca["nbf"]==300
+    assert ca["video"]["room"]==cb["video"]["room"] and ca["sub"]!=cb["sub"]
+    assert str(interview) not in ca["video"]["room"] and str(owner) not in ca["sub"]
+    assert ca["video"]["roomJoin"] is True and ca["video"]["canSubscribe"] is True
+    assert ca["video"]["canPublishSources"]==["camera","microphone"]
+    for grant in ("roomAdmin","roomCreate","roomList","roomRecord","canPublishData","canUpdateOwnMetadata"):
+        assert ca["video"][grant] is False
+    assert "metadata" not in ca and "name" not in ca
+    assert set(a)=={"server_url","token","expires_in"}
+
+
+@pytest.mark.parametrize("changes",[{"livekit_synthetic_demo_enabled":False},{"environment":"production"},
+    {"livekit_api_key":None},{"livekit_api_secret":None},{"livekit_url":"ws://localhost:7880"},
+    {"livekit_url":"wss://secret@synthetic.livekit.cloud"},{"livekit_url":"wss://synthetic.livekit.cloud/?token=private"}])
+def test_configuration_fails_closed(monkeypatch,changes):
+    monkeypatch.setattr(service,"settings",configuration(**changes))
+    with pytest.raises(service.LiveKitUnavailable):service.issue_interview_token(uuid4(),uuid4(),"a")
+
+
+def test_signer_cannot_issue_third_slot(monkeypatch):
+    monkeypatch.setattr(service,"settings",configuration())
+    with pytest.raises(service.LiveKitUnavailable):service.issue_interview_token(uuid4(),uuid4(),"c")
+
+
+def test_owner_synthetic_confirmations_stale_and_sanitized_failures(monkeypatch,workspace):
+    db,users,password=workspace
+    job=JobProfile(id=uuid4(),recruiter_id=users[0].id,job_reference="TT-JOB-0123456789ABCDEF",job_title="Synthetic job",
+        revision=2,confirmed_snapshot={},sources=[],suggestions={})
+    schedule=InterviewSchedule(id=uuid4(),recruiter_id=users[0].id,job_id=job.id,batch_id=uuid4(),upload_id=uuid4(),
+        criteria_revision=2,scoring_version="f2-coverage-v1",scheduled_at=datetime.now(timezone.utc)+timedelta(days=1),
+        timezone="UTC",duration_minutes=30,unscored_confirmed=False,screening_snapshot={})
+    db[JobProfile]=[job];db[InterviewSchedule]=[schedule]
+    calls=[]
+    def issue(*args):calls.append(args);return {"server_url":"wss://synthetic.livekit.cloud","token":"synthetic-token-"+"x"*40,"expires_in":300}
+    monkeypatch.setattr(route,"issue_interview_token",issue)
+    path=f"/api/v1/jobs/{job.id}/interviews/{schedule.id}/livekit-token"
+    body={"slot":"a","synthetic_test_confirmed":True}
+    async def scenario():
+        async with client() as owner,client() as foreign,client() as anonymous:
+            assert (await anonymous.post(path,json=body)).status_code==401
+            await login(owner,users[0],password);await login(foreign,users[1],password)
+            assert (await foreign.post(path,json=body)).status_code==404
+            assert (await owner.post(path.replace(str(schedule.id),str(uuid4())),json=body)).status_code==404
+            assert not calls
+            for patch in ({"slot":"c"},{"synthetic_test_confirmed":False},{"synthetic_test_confirmed":1},{"room":"arbitrary"},{"api_key":"private"}):
+                assert (await owner.post(path,json={**body,**patch})).status_code==422
+            result=await owner.post(path,json=body)
+            assert result.status_code==200 and result.headers["cache-control"]=="no-store"
+            assert calls==[(schedule.id,users[0].id,"a")]
+            assert len(db[InterviewSchedule])==1 and "token" not in db[InterviewSchedule][0].screening_snapshot
+            db[JobProfile][0].revision=3
+            assert (await owner.post(path,json=body)).status_code==409
+            db[JobProfile][0].revision=2
+            def unavailable(*args):raise service.LiveKitUnavailable()
+            monkeypatch.setattr(route,"issue_interview_token",unavailable)
+            assert (await owner.post(path,json=body)).status_code==503
+            def failure(*args):raise RuntimeError("private credential/configuration details")
+            monkeypatch.setattr(route,"issue_interview_token",failure)
+            failed=await owner.post(path,json=body)
+            assert failed.status_code==502 and failed.json()=={"detail":"Interview access could not be issued."}
+    asyncio.run(scenario())

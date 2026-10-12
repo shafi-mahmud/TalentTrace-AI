@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     langgraph_checkpoint_database_url: SecretStr | None = None
     company_policy_document_id: UUID | None = None
     groq_api_key: SecretStr | None = None
+    livekit_url: SecretStr | None = None
+    livekit_api_key: SecretStr | None = None
+    livekit_api_secret: SecretStr | None = None
+    livekit_synthetic_demo_enabled: bool = False
     llm_model: LLMModelName = "openai/gpt-oss-120b"
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"]

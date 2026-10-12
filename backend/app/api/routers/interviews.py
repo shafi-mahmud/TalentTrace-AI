@@ -1,18 +1,59 @@
 """Explicit human selection from saved eligibility; no external side effects."""
 from datetime import datetime, timezone
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.auth import current_recruiter, database_session
 from app.db.models.recruiter import InterviewSchedule
 from app.schemas.interview import InterviewRequest, InterviewResponse
 from app.services.recruiter_records import owned_job
 from app.services.score_records import load_scores
+from app.services.livekit_interview import issue_interview_token, LiveKitUnavailable
 
 router = APIRouter(tags=["Interview scheduling"])
+
+
+class LiveKitTokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    slot: Literal["a", "b"]
+    synthetic_test_confirmed: Literal[True]
+
+    @field_validator("synthetic_test_confirmed", mode="before")
+    @classmethod
+    def explicit_synthetic(cls, value):
+        if value is not True:
+            raise ValueError("Explicit synthetic testing confirmation is required.")
+        return value
+
+
+class LiveKitTokenResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    server_url: str
+    token: str = Field(repr=False, min_length=32, max_length=8192)
+    expires_in: Literal[300]
+
+
+@router.post("/jobs/{job_id}/interviews/{interview_id}/livekit-token", response_model=LiveKitTokenResponse)
+async def livekit_token(job_id: UUID, interview_id: UUID, body: LiveKitTokenRequest,
+    user=Depends(current_recruiter), session=Depends(database_session)):
+    job = await owned_job(session, user.id, job_id, lock=True)
+    row = await session.scalar(select(InterviewSchedule).where(InterviewSchedule.id == interview_id,
+        InterviewSchedule.job_id == job.id, InterviewSchedule.recruiter_id == user.id))
+    if row is None:
+        raise HTTPException(404, "Owned scheduled interview not found.")
+    if job.confirmed_snapshot is None or row.criteria_revision != job.revision:
+        raise HTTPException(409, "Review the scheduled interview against the current approved job criteria first.")
+    try:
+        return LiveKitTokenResponse(**issue_interview_token(row.id, user.id, body.slot))
+    except LiveKitUnavailable:
+        raise HTTPException(503, "LiveKit synthetic interview testing is not configured.") from None
+    except Exception:
+        raise HTTPException(502, "Interview access could not be issued.") from None
 
 
 def public_interview(row, job):
