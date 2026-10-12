@@ -22,8 +22,10 @@ import { isScoringWeights, loadScores } from "../api/scoring";
 import type { ScoringWeights } from "../types/screening";
 import { ScoringWeightsEditor } from "./ScoringWeightsEditor";
 import { InterviewScheduling } from "./InterviewScheduling";
+import type { Interview } from "../api/interviews";
 
-export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed, onJobSaved}: {
+export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed, onJobSaved,onOpenInterview}: {
+  onOpenInterview:(value:Interview)=>void;
   onJobSaved: (job: SavedJob) => void;
   contextResetKey: number;
   draft: WorkingCriteriaDraft | null; onCriteriaChange: (criteria: WorkingCriteriaDraft["criteria"]) => void;
@@ -238,7 +240,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
         {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={setSelectedUpload} /></>}
         {criteriaDraft?.revision && <InterviewScheduling jobId={criteriaDraft.draftId} criteriaRevision={criteriaDraft.revision}
-          scoring={screening?.scoring ?? null} candidate={screening?.scoring?.candidates.find(c=>c.upload_id===selectedUpload) ?? null} />}
+          scoring={screening?.scoring ?? null} candidate={screening?.scoring?.candidates.find(c=>c.upload_id===selectedUpload) ?? null} onOpenInterview={onOpenInterview} />}
         </section>
       </section>
     </main>

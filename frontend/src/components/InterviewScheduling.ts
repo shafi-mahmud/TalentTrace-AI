@@ -25,15 +25,17 @@ export function ScheduleForm({candidate, start, zone, duration, confirmed, busy,
       h("button", {className:"button button-primary",type:"submit",disabled:busy || alreadyScheduled || (unscored && !confirmed)}, busy?"Saving interview…":alreadyScheduled?"Initial interview already scheduled":"Schedule interview")));
 }
 
-export function SavedInterviews({rows,criteriaRevision}: {rows:Interview[];criteriaRevision:number}) {
+export function SavedInterviews({rows,criteriaRevision,onOpenInterview}: {rows:Interview[];criteriaRevision:number;onOpenInterview?:(value:Interview)=>void}) {
   return h("div",null,h("h3",null,"Saved interviews"),h("ul",null,...rows.map(row=>h("li",{key:row.id},
     `Scheduled · ${new Intl.DateTimeFormat("en",{dateStyle:"medium",timeStyle:"short",timeZone:row.timezone}).format(new Date(row.scheduled_at))} (${row.timezone}) · ${row.duration_minutes} minutes`,
-    h("p",{className:"helper-text"},`Candidate ${row.upload_id} · criteria revision ${row.criteria_revision}${row.criteria_revision!==criteriaRevision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""} · Meeting link not configured`)))),
+    h("p",{className:"helper-text"},`Candidate ${row.upload_id} · criteria revision ${row.criteria_revision}${row.criteria_revision!==criteriaRevision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""} · Candidate meeting link not configured`),
+    onOpenInterview && row.criteria_revision===criteriaRevision && h("button",{type:"button",className:"button button-secondary",onClick:()=>onOpenInterview(row)},"Open synthetic interview proof")))),
     !rows.length && h("p",null,"No saved interviews loaded."));
 }
 
-export function InterviewScheduling({jobId,criteriaRevision,scoring,candidate}: {
+export function InterviewScheduling({jobId,criteriaRevision,scoring,candidate,onOpenInterview}: {
   jobId:string;criteriaRevision:number;scoring:ScoringBatch|null;candidate:CandidateScore|null;
+  onOpenInterview?:(value:Interview)=>void;
 }) {
   const [start,setStart]=useState(""); const [zone,setZone]=useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [duration,setDuration]=useState(30);const [confirmed,setConfirmed]=useState(false);
@@ -68,5 +70,5 @@ export function InterviewScheduling({jobId,criteriaRevision,scoring,candidate}: 
       : h("p",null,"Select an eligible candidate above to schedule an interview."),
     error && h("p",{role:"alert",className:"error-banner"},error),
     h("button",{type:"button",className:"button button-secondary",onClick:()=>void reload(),disabled:busy},"Reload saved interviews"),
-    h(SavedInterviews,{rows,criteriaRevision}));
+    h(SavedInterviews,{rows,criteriaRevision,onOpenInterview}));
 }

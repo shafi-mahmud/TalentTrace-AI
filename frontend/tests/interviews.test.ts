@@ -24,7 +24,7 @@ test("saved-interview controls remain available without in-memory screening afte
 
 test("persisted schedule displays the correct timezone and historical revision independently of screening",()=>{
   const html=renderToStaticMarkup(createElement(SavedInterviews,{rows:[{...response,scheduled_at:"2026-11-20T09:00:00Z",unscored_confirmed:true}],criteriaRevision:3}));
-  for(const text of ["3:00 PM","Asia/Dhaka","(historical)","Unscored selection confirmed","Meeting link not configured"]) assert.ok(html.includes(text),text);
+  for(const text of ["3:00 PM","Asia/Dhaka","(historical)","Unscored selection confirmed","Candidate meeting link not configured"]) assert.ok(html.includes(text),text);
 });
 
 test("scheduling validates UTC, duration, timezone and bounded server result",()=>{
