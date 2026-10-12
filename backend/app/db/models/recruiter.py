@@ -74,3 +74,25 @@ class CandidateScoreRecord(Base):
     scoring_version: Mapped[str] = mapped_column(String(40))
     score: Mapped[float | None] = mapped_column(Float)
     payload: Mapped[dict] = mapped_column(JSONB)
+
+
+class InterviewSchedule(Base):
+    __tablename__ = "interview_schedules"
+    __table_args__ = (
+        UniqueConstraint("job_id", "batch_id", "upload_id", name="uq_initial_candidate_interview"),
+        CheckConstraint("criteria_revision >= 1", name="ck_interview_revision"),
+        CheckConstraint("duration_minutes BETWEEN 15 AND 180", name="ck_interview_duration"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    recruiter_id: Mapped[UUID] = mapped_column(ForeignKey("recruiters.id"), index=True)
+    job_id: Mapped[UUID] = mapped_column(ForeignKey("job_profiles.id"), index=True)
+    batch_id: Mapped[UUID] = mapped_column()
+    upload_id: Mapped[UUID] = mapped_column()
+    criteria_revision: Mapped[int] = mapped_column()
+    scoring_version: Mapped[str] = mapped_column(String(40))
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    timezone: Mapped[str] = mapped_column(String(64))
+    duration_minutes: Mapped[int] = mapped_column()
+    unscored_confirmed: Mapped[bool] = mapped_column()
+    # Immutable selection evidence survives replacement of F2 score rows on rerun.
+    screening_snapshot: Mapped[dict] = mapped_column(JSONB)
