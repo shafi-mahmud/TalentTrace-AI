@@ -10,6 +10,8 @@ from app.integrations.llm.diagnostics import provider_failure, provider_usage
 from app.integrations.llm.candidate_profile import GroqCandidateProfileExtractor, CandidateProviderError
 from app.core.config import Settings
 from test_candidate_profile import source_document
+from app.services.candidate_profile import grounded, CandidateEvidenceError
+from app.schemas.candidate_profile import EvidenceValue
 
 PRIVATE="PRIVATE_PROVIDER_BODY_API_KEY_CV_TEXT"
 
@@ -50,3 +52,11 @@ def test_profile_failure_stays_sanitized_and_single_attempt(caplog):
         asyncio.run(GroqCandidateProfileExtractor(Settings(_env_file=None,groq_api_key="synthetic-key"),client_factory=Client).extract(source_document()))
     assert calls==[1] and "rate_limit" in caplog.text
     assert PRIVATE not in caplog.text and PRIVATE not in str(failure.value)
+
+
+@pytest.mark.parametrize("evidence,value,code",[("invented quote","Python","quote_not_in_source"),("Python","invented value","value_not_in_quote")])
+def test_evidence_reason_is_safe_without_relaxing_grounding(evidence,value,code):
+    document=source_document("Python")
+    with pytest.raises(CandidateEvidenceError) as failure:
+        grounded(EvidenceValue(value=value,evidence=evidence,source_id="page:1"),{u.source_id:u for u in document.units})
+    assert failure.value.code==code and "invented" not in str(failure.value)

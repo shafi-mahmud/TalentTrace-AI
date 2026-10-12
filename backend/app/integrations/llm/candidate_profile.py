@@ -9,6 +9,7 @@ from groq import AsyncGroq
 from app.core.config import Settings, settings
 from app.schemas.candidate_profile import CandidateProfileInterpretation, CandidateSourceDocument
 from app.integrations.llm.diagnostics import provider_failure, provider_usage
+from app.integrations.llm.screening_provider import screening_completion
 
 
 class CandidateParserNotConfigured(Exception):
@@ -56,7 +57,7 @@ class GroqCandidateProfileExtractor:
         started = time.perf_counter()
         try:
             async with self.client_factory(api_key=self.configuration.groq_api_key.get_secret_value(), timeout=30.0, max_retries=0) as client:
-                response = await client.chat.completions.create(
+                response = await screening_completion(client,"candidate_profile_provider",
                     model=self.configuration.llm_model,
                     messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content":
                         "UNTRUSTED_CANDIDATE_SOURCE_JSON\n" + source + "\nEND_UNTRUSTED_CANDIDATE_SOURCE_JSON"}],

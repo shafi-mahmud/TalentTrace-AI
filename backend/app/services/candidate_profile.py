@@ -14,6 +14,13 @@ from app.integrations.llm.candidate_profile import (
 )
 
 logger = logging.getLogger("talenttrace.screening_diagnostics")
+
+
+class CandidateEvidenceError(ValueError):
+    """Internal diagnostic reason; never stores the submitted value or quote."""
+    def __init__(self, code):
+        self.code=code
+        super().__init__("Candidate evidence failed validation.")
 from app.schemas.candidate_profile import (
     CandidateContact, CandidateEducation, CandidateProfile, CandidateProfileInterpretation,
     CandidateQualifications, CandidateSourceDocument, CandidateSourceUnit, CandidateWorkHistory,
@@ -32,12 +39,13 @@ def grounded(item: EvidenceValue | None, units: dict[str, CandidateSourceUnit], 
         return None
     unit = units.get(item.source_id)
     if unit is None:
-        raise ValueError("Unknown source.")
+        raise CandidateEvidenceError("unknown_source")
     evidence, source = normalized(item.evidence), normalized(unit.text)
     value = normalized(item.value).rstrip(" .;:")
-    if (not evidence or not re.search(r"(?<!\w)" + re.escape(evidence) + r"(?!\w)", source)
-        or not value or not re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", evidence)):
-        raise ValueError("Unsupported candidate fact.")
+    if not evidence or not re.search(r"(?<!\w)" + re.escape(evidence) + r"(?!\w)", source):
+        raise CandidateEvidenceError("quote_not_in_source")
+    if not value or not re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", evidence):
+        raise CandidateEvidenceError("value_not_in_quote")
     if field == "candidate_name":
         plain = " ".join(token for token in source.split() if "@" not in token and "://" not in token)
         if not re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", plain):
@@ -144,7 +152,7 @@ class CandidateProfileService:
                 raise
             except Exception as error:
                 from app.integrations.llm.candidate_profile import CandidateProviderError
-                category = "profile_provider_failed" if isinstance(error,CandidateProviderError) else "profile_evidence_or_contract_invalid"
+                category = "profile_provider_failed" if isinstance(error,CandidateProviderError) else error.code if isinstance(error,CandidateEvidenceError) else "profile_evidence_or_contract_invalid"
                 logger.warning("talenttrace_failure stage=candidate_profile_validation candidate_index=%s category=%s exception_class=%s",index,category,type(error).__name__)
                 candidates.append(CandidateProfile(upload_id=upload_id, parsing_status="parsing_failed", contact=None, qualifications=None))
             logger.info("talenttrace_stage stage=candidate_profile candidate_index=%s status=%s duration_ms=%s",index,candidates[-1].parsing_status,int((time.perf_counter()-started)*1000))

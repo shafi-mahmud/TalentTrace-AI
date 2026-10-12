@@ -11,6 +11,7 @@ from app.core.config import Settings, settings
 from app.schemas.screening import QualificationFact, ScreeningCriterion, SemanticMatchingResponse
 from app.services.screening_matching import ScreeningMatchingError, relevant_facts
 from app.integrations.llm.diagnostics import provider_failure, provider_usage
+from app.integrations.llm.screening_provider import screening_completion
 
 MAX_SEMANTIC_PAYLOAD_CHARS = 32_000
 
@@ -65,7 +66,7 @@ class GroqSemanticRequirementMatcher:
         try:
             async with self.client_factory(api_key=self.configuration.groq_api_key.get_secret_value(),
                     timeout=30.0, max_retries=0) as client:
-                response = await client.chat.completions.create(
+                response = await screening_completion(client,"semantic_matching_provider",
                     model=self.configuration.llm_model,
                     messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user",
                         "content": "UNTRUSTED_QUALIFICATION_JSON\n" + payload + "\nEND_UNTRUSTED_QUALIFICATION_JSON"}],
