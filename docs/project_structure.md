@@ -415,7 +415,7 @@ checkpointed, and JD approval/revision is not implemented.
 Production access governance, candidate/application persistence, formal human approval/revision, the remaining hiring workflows, publication audit/deduplication and additional external publishing destinations remain planned work. Recruiter authentication, owned job records and conversation history are implemented in this branch, subject to the deployment/validation limits documented above.
 
 
-## Implemented - F2 scoring integration; live validation pending
+## Implemented - F2 scoring integration; live synthetic validation completed
 
 `schemas/candidate_score.py` defines validated weights and score breakdowns;
 `services/candidate_scoring.py` derives scores from existing validated Screening
@@ -427,8 +427,18 @@ Migration `0003_candidate_scores` adds reviewed job weights and owner-linked
 revision/version-bound score records. Fresh disposable PostgreSQL migration/default
 checks passed on 12 October 2026; the office demo database was not migrated.
 Earlier sections describe their individual increments; weighted scoring is now
-implemented in code, not yet live-verified. Policy assumptions, offline/automated
+implemented and live-verified with synthetic data on 12 October 2026. Policy assumptions, offline/automated
 test boundaries and manual verification are in [F2 scoring](f2_scoring.md).
 
 [LiveKit feasibility](livekit_feasibility.md) documents a possible isolated
-audio/video proof. No credentials, live proof or interview implementation exists.
+audio/video proof. No credentials, live A/V proof or meeting-provider implementation exists.
+
+## Implemented - F3 recruiter selection and scheduling
+
+Eligible screening cards support explicit human selection and provider-independent
+interview scheduling. Owner-protected create/list APIs reread current approved F2
+records; eligible-but-unscored selection requires extra confirmation. Migration
+0004 stores UTC/IANA timezone, duration and revision-bound selection references.
+Fresh disposable PostgreSQL migration/API checks passed; F3 browser verification
+remains pending. No meeting URLs, calendar, email, recording or candidate login
+are implemented. See [interview scheduling](interview_scheduling.md).

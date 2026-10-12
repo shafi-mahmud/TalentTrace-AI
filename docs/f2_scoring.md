@@ -41,7 +41,7 @@ categories and hard flags. Callers must supply the current server-confirmed snap
 the existing result contract does not encode criterion-description revisions.
 No public client-supplied score/result endpoint is introduced.
 
-## Implemented integration; live persistence verification pending
+## Implemented integration; live synthetic verification completed
 
 Recruiters edit integer weights in Candidate Screening and confirm them with the
 criteria. Editing either invalidates local approval/results while retaining uploaded
@@ -75,8 +75,18 @@ double. On 12 October 2026, a migration-default defect was corrected: PostgreSQL
 The actual base-to-head upgrade passed on a fresh disposable pgvector PostgreSQL
 database, including server default 50/30/20, invalid-weight rollback, downgrade to
 0002 and re-upgrade. The temporary container was removed; the office demo database
-was not migrated. Full live F2 API persistence and real-provider/browser scoring
-verification remain pending.
+was not migrated.
+
+On 12 October 2026, F2 was verified against another new isolated PostgreSQL database
+using actual HTTP routes and configured Groq providers: recruiter login, approved
+criteria/weights, synthetic DOCX/PDF intake, screening, score write/read, stale
+revision and cross-recruiter denial passed. A strong candidate scored 100; weaker
+ambiguous evidence correctly remained unscored, exclusion stayed separate, and a
+blank CV had no decision/score. Browser checks covered confirmation, upload,
+breakdown/source evidence, saved-score reload and approval invalidation preserving
+the batch. A separate actual LangGraph/BGE/pgvector/Groq JD request returned 200
+with three validated policy citations. Fractional/lower scores and ties were
+tested automatically, not observed live. Temporary services/container were removed.
 
 **Recommended manual verification:** back up/choose an isolated development DB,
 inspect Alembic current revision, explicitly approve and apply `alembic upgrade head`
@@ -101,12 +111,11 @@ An atomic criterion does not gain partial credit from vague similarity.
 F2 scoring foundation and API/UI integration implemented: reviewed job-bound weights,
 server-calculated 0–100 coverage, source-backed breakdown, conservative no-score
 handling, owner-protected persistence/read APIs and eligible-only score ranking.
-Automated and offline-migration checks are complete; live migration/persistence and
-synthetic browser demonstration remain **Pending verification**. Do not mark F2
-complete before policy/formula review and live verification. No Redmine percentage,
+Automated, isolated migration/persistence and synthetic browser checks passed.
+Do not mark evaluated F2 complete before policy/formula review. No Redmine percentage,
 task identifier or trainer-owned WBS was modified.
 
 ## Next recommended increment
 
-Verify this increment against an explicitly approved isolated migrated PostgreSQL
-database and synthetic browser batch; confirm BID/WBS scoring policy with the trainer.
+Confirm BID/WBS scoring policy with the trainer. F3's first provider-independent
+selection/scheduling increment is described in [interview scheduling](interview_scheduling.md).

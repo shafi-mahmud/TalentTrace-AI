@@ -398,7 +398,7 @@ synthetic inputs and mocked Groq calls, including both source paths, preparation
 compatibility, direct-match bypass, semantic evidence validation, failure states,
 hard/preferred criteria, missing-over-ambiguous precedence and all decision routes.
 Native candidate/application persistence remains planned. F2 score-record
-persistence and weighted ranking are implemented below, pending live validation.
+persistence and weighted ranking are implemented and live-verified below.
 
 **Verified — 08 Oct 2026:** one authorized synthetic #647496 smoke call through
 the actual `match()` graph returned HTTP 200 from Groq `openai/gpt-oss-120b` with
@@ -408,7 +408,7 @@ no verdict or score was produced. This verifies one integration case, not genera
 semantic accuracy. #647497 adds deterministic routing; it made no live Groq call.
 
 
-## Implemented - F2 scoring integration; live validation pending
+## Implemented - F2 scoring integration; live synthetic validation completed
 
 See [F2 scoring](f2_scoring.md) for configurable dimension weights, conservative
 no-score cases and source-backed deterministic coverage scores. Batch API/UI now
@@ -416,7 +416,8 @@ add reviewed weights, server-calculated scores, owner-protected persistence/read
 and eligible-only score ranking. Existing hard-requirement decisions, evidence,
 overall coverage and the separate requirement-count ranking remain unchanged.
 The new migration passed offline and fresh disposable PostgreSQL checks on
-12 October 2026; live F2 API/browser scoring remains pending. Earlier sections
+12 October 2026; isolated real API/provider and browser F2 checks also passed,
+as documented in the F2 verification outcome. Earlier sections
 describe their original increments, not the current F2 integration state.
 The formula/defaults are provisional because local BID/WBS scoring rules were
 unavailable. No per-atomic-requirement partial-credit semantics are introduced.
