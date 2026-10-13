@@ -291,3 +291,41 @@ and the two-device live test all require explicit approval.
 References: [MDN secure microphone/camera contexts](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia),
 [Caddy local automatic HTTPS](https://caddyserver.com/docs/automatic-https),
 [Caddy WebSocket reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
+
+
+### Offline bounded pause segmentation evaluation - 13 October 2026
+
+Documented experiment, NOT deployed: an outside-Git prototype uses 100 ms frames,
+a 200 ms low-RMS pause after two seconds, and a strict four-second maximum.
+All samples and timestamp spans are preserved, including silence. No overlap,
+speech dropping, larger pending buffer, model download or cloud call was added.
+Offline EOF flushes a partial tail once; withdrawal cancels it and rejects later
+input. This is not an implemented live flush policy.
+
+Twelve fixed English sentences were synthesized offline at Windows TTS rates
+-2, 0 and +2. Identical audio was decoded by tiny.en/int8/greedy with two concurrent
+workers. Audio and recognized text stayed in RAM; only aggregate metrics persisted.
+
+| Rate | Fixed WER | Pause WER | Technical terms fixed/pause | Calls per role fixed/pause |
+| --- | --- | --- | --- | --- |
+| Slow | 30.70% | 18.42% | 6/11 / 9/11 | 19 / 24 |
+| Default | 14.91% | 15.79% | 9/11 / 9/11 | 16 / 18 |
+| Fast | 14.91% | 12.28% | 8/11 / 9/11 | 12 / 13 |
+
+Pause-aware mean decode: 0.74-0.83 seconds; maximum: 0.953 seconds. Two-worker
+wall-time/audio-duration ratios: 0.215-0.248. Peak benchmark RAM: 413.4 MiB;
+CPU: 443.8% of one core (about 55.5% of eight). Offline first-sample latency
+estimate: 3.80-4.39 seconds, versus fixed 4.57-4.90 seconds, excluding browser,
+network and live queue scheduling. These do not prove physical-microphone accuracy.
+
+Eight prototype tests passed: continuous/fast input, silence, mixed waveforms,
+sample/timestamp conservation, pause boundaries, short tails, mute timestamp gaps,
+withdrawal rejection and a two-role delayed-worker queue simulation. Three-second
+simulated decoding stayed bounded; five-second decoding explicitly overflowed the
+unchanged four-second pending capacity. No production/browser test was performed.
+
+Recommended: retain deployed fixed four-second decoding. The prototype has mixed
+accuracy and more calls. Next evaluate bounded look-back boundary selection offline
+using the same model, without overlap, speech dropping or added pending capacity.
+Continuous speech must still use the maximum. Real noise and overlapping speakers
+remain unverified; the mixed-waveform test only proves sample conservation.
