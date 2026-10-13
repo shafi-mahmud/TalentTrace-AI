@@ -1,6 +1,7 @@
 """Administrator-provisioned login; no public registration or password disclosure."""
 import secrets
 import time
+import math
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -46,9 +47,13 @@ async def login(body: LoginRequest, request: Request, response: Response, sessio
     recent = [stamp for stamp in _attempts.pop(key, []) if now - stamp < 300]
     if len(_attempts) >= 1000:
         _attempts.popitem(last=False)
-    _attempts[key] = recent + [now]
     if len(recent) >= 5:
-        raise HTTPException(429, "Too many sign-in attempts. Wait five minutes.")
+        # Rejected requests must not renew the lockout window.
+        _attempts[key] = recent
+        retry_after = max(1, math.ceil(300 - (now - recent[0])))
+        raise HTTPException(429, "Too many sign-in attempts. Wait before trying again.",
+                            headers={"Retry-After": str(retry_after)})
+    _attempts[key] = recent + [now]
     user = await session.scalar(select(Recruiter).where(Recruiter.email == body.email.casefold()))
     # Equal-cost password work even for unknown accounts; no account enumeration response.
     encoded = user.password_hash if user else await run_in_threadpool(dummy_password_hash)

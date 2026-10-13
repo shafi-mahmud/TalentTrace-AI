@@ -1,5 +1,12 @@
 const API_BASE = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 export interface RecruiterAccount {id: string; email: string;}
+export class SignInRateLimitError extends Error {
+  readonly retryAfterSeconds: number;
+  constructor(retryAfterSeconds: number) {
+    super("Too many attempts. Please wait for the sign-in cooldown.");
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
 
 export async function authenticatedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -25,7 +32,11 @@ function validateAccount(value: unknown): RecruiterAccount {
 export async function signIn(email: string, password: string) {
   const response = await authenticatedFetch(`${API_BASE}/api/v1/auth/login`, {method: "POST",
     headers: {"Content-Type": "application/json"}, body: JSON.stringify({email, password})});
-  if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Wait five minutes." : "Sign-in failed. Check your details and service readiness.");
+  if (response.status === 429) {
+    const seconds = Number(response.headers.get("Retry-After"));
+    throw new SignInRateLimitError(Number.isInteger(seconds) && seconds >= 1 && seconds <= 300 ? seconds : 300);
+  }
+  if (!response.ok) throw new Error("Sign-in failed. Check your details and service readiness.");
   return validateAccount(await response.json());
 }
 

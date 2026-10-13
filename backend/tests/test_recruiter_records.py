@@ -374,3 +374,31 @@ def test_migration_offline_upgrade_downgrade_and_relational_ownership():
     down = buffer.getvalue()
     assert "DROP TABLE job_profiles" in down and "DROP TABLE recruiter_sessions" in down
     assert "DROP TABLE knowledge" not in down and "DROP EXTENSION" not in down
+
+
+def test_blocked_logins_do_not_extend_rate_limit_and_expose_bounded_retry_after(monkeypatch):
+    from starlette.requests import Request
+    from starlette.responses import Response
+    clock=[100.0]
+    monkeypatch.setattr(auth, "time", SimpleNamespace(monotonic=lambda:clock[0]))
+    request=Request({"type":"http","method":"POST","path":"/login","headers":[],"client":("synthetic-local",1)})
+    key=token_hash("synthetic-local")
+    body=auth.LoginRequest(email="synthetic@example.test",password="synthetic-test-only")
+    class DatabaseBoundary:
+        async def scalar(self,query):raise LookupError("Database boundary reached")
+    async def scenario():
+        auth._attempts.clear();auth._attempts[key]=[0.,1.,2.,3.,4.]
+        try:
+            for now,remaining in [(100.,200),(299.,1)]:
+                clock[0]=now
+                with pytest.raises(HTTPException) as error:
+                    await auth.login(body,request,Response(),DatabaseBoundary())
+                assert error.value.status_code==429
+                assert error.value.headers["Retry-After"]==str(remaining)
+                assert auth._attempts[key]==[0.,1.,2.,3.,4.]
+            clock[0]=301.
+            with pytest.raises(LookupError):
+                await auth.login(body,request,Response(),DatabaseBoundary())
+            assert auth._attempts[key]==[2.,3.,4.,301.]
+        finally:auth._attempts.clear()
+    asyncio.run(scenario())

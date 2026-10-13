@@ -176,3 +176,18 @@ test("new manual job accepts empty criteria only before confirmation without a J
     assert.equal((await listJobs())[0].id, id);
   } finally {globalThis.fetch = previous;}
 });
+
+
+test("sign-in uses bounded server cooldown without retrying or exposing error bodies", async()=>{
+  const {signIn,SignInRateLimitError}=await import("../src/api/session.ts");
+  const original=globalThis.fetch;let calls=0;
+  try {
+    for(const [header,expected] of [["42",42],["0",300],["9999",300],["bad",300],[null,300]] as const){
+      globalThis.fetch=async()=>{calls++;return new Response("PRIVATE_ERROR",{status:429,headers:header===null?{}:{"Retry-After":header}});};
+      await assert.rejects(()=>signIn("synthetic@example.test","synthetic-test-only"),error=>{
+        assert.ok(error instanceof SignInRateLimitError);assert.equal(error.retryAfterSeconds,expected);assert.ok(!error.message.includes("PRIVATE_ERROR"));return true;
+      });
+    }
+    assert.equal(calls,5);
+  } finally {globalThis.fetch=original;}
+});

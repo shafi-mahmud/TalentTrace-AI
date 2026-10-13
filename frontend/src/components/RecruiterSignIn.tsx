@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode, FormEvent } from "react";
-import { account, signIn, signOut } from "../api/session";
+import { account, signIn, signOut, SignInRateLimitError } from "../api/session";
 import type { RecruiterAccount } from "../api/session";
 
 export default function RecruiterSignIn({children}: {children: ReactNode | ((user: RecruiterAccount) => ReactNode)}) {
@@ -9,6 +9,18 @@ export default function RecruiterSignIn({children}: {children: ReactNode | ((use
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [retryUntil, setRetryUntil] = useState(0);
+  const [retrySeconds, setRetrySeconds] = useState(0);
+  useEffect(() => {
+    if (!retryUntil) return;
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000));
+      setRetrySeconds(remaining);
+      if (!remaining) setRetryUntil(0);
+    };
+    update(); const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [retryUntil]);
   useEffect(() => {
     let alive = true;
     void account().then(value => {if (alive) setUser(value);}).catch(() => {if (alive) setError("Sign-in service is unavailable. Check database readiness.");})
@@ -18,10 +30,16 @@ export default function RecruiterSignIn({children}: {children: ReactNode | ((use
     return () => {alive = false; window.removeEventListener("talenttrace-session-expired", expired);};
   }, []);
   async function submit(event: FormEvent) {
-    event.preventDefault(); if (loading) return;
+    event.preventDefault(); if (loading || Date.now() < retryUntil) return;
     setLoading(true); setError("");
     try {setUser(await signIn(email, password)); setPassword("");}
-    catch (failure) {setError(failure instanceof Error ? failure.message : "Sign-in failed.");}
+    catch (failure) {
+      if (failure instanceof SignInRateLimitError) {
+        setRetrySeconds(failure.retryAfterSeconds);
+        setRetryUntil(Date.now() + failure.retryAfterSeconds * 1000);
+      }
+      setError(failure instanceof Error ? failure.message : "Sign-in failed.");
+    }
     finally {setLoading(false);}
   }
   if (user) return <div key={user.id}>
@@ -34,7 +52,7 @@ export default function RecruiterSignIn({children}: {children: ReactNode | ((use
     <p>Your jobs and conversations belong to your recruiter account.</p>
     <form onSubmit={submit}><div className="field"><label htmlFor="recruiter-email">Email</label><input id="recruiter-email" type="email" autoComplete="username" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} required /></div>
       <div className="field"><label htmlFor="recruiter-password">Password</label><input id="recruiter-password" type="password" autoComplete="current-password" maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required /></div>
-      {error && <p role="alert">{error}</p>}<button className="button button-primary" disabled={loading}>{loading ? "Checking session…" : "Sign in"}</button>
+      {error && <p role="alert">{error}</p>}<button className="button button-primary" disabled={loading || retrySeconds > 0}>{loading ? "Checking session…" : retrySeconds > 0 ? `Try again in ${retrySeconds}s` : "Sign in"}</button>
     </form><p className="helper-text">Ask your administrator for an account. There is no public registration.</p>
   </section></main>;
 }
