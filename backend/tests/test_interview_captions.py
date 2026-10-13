@@ -43,11 +43,11 @@ def test_both_consents_separate_roles_bounded_pcm_and_withdrawal():
         await session.approve("recruiter");assert not providers
         await session.approve("candidate");assert len(providers)==2
         for role in ("recruiter", "candidate"):
-            for _ in range(20): await session.audio(role, bytes(3200))
+            for _ in range(40): await session.audio(role, bytes(3200))
         captions=[e for e in events if e["kind"]=="caption"]
         assert {e["role"] for e in captions}=={"recruiter","candidate"}
         assert all(e["start"]<=e["end"] and e["sequence"]>0 for e in captions)
-        assert all(len(p.frames)==1 and len(p.frames[0])==64000 for p in providers)
+        assert all(len(p.frames)==1 and len(p.frames[0])==128000 for p in providers)
         await session.stop();assert all(p.closed for p in providers)
         assert not session.consent and all(not b for b in session.buffers.values())
         with pytest.raises(ValueError):await session.audio("candidate", bytes(3200))
@@ -76,7 +76,7 @@ def test_withdraw_during_inference_discards_late_caption():
         async def send(v):events.append(v)
         s=CaptionSession(Slow);await s.connect("recruiter",send);await s.connect("candidate",send)
         await s.approve("recruiter");await s.approve("candidate")
-        for _ in range(19):await s.audio("candidate",bytes(3200))
+        for _ in range(39):await s.audio("candidate",bytes(3200))
         task=asyncio.create_task(s.audio("candidate",bytes(3200)));await entered.wait()
         await s.stop();finish.set();await task
         assert not any(e["kind"]=="caption" for e in events)
@@ -91,7 +91,7 @@ def test_invalid_provider_text_stops_without_output(text):
         async def send(v):events.append(v)
         s=CaptionSession(factory);await s.connect("recruiter",send);await s.connect("candidate",send)
         await s.approve("recruiter");await s.approve("candidate")
-        for _ in range(20):await s.audio("candidate",bytes(3200))
+        for _ in range(40):await s.audio("candidate",bytes(3200))
         assert s.stopped and not any(e["kind"]=="caption" for e in events)
     asyncio.run(scenario())
 
@@ -112,7 +112,7 @@ def test_provider_failure_is_stopped_and_does_not_expose_details(stage):
         s=CaptionSession(Failed);await s.connect("recruiter",send);await s.connect("candidate",send)
         await s.approve("recruiter");await s.approve("candidate")
         if stage=="transcribe":
-            for _ in range(20):await s.audio("candidate",bytes(3200))
+            for _ in range(40):await s.audio("candidate",bytes(3200))
         assert s.stopped and "PRIVATE" not in str(events)
         assert not any(e["kind"]=="caption" for e in events)
     asyncio.run(scenario())
@@ -126,7 +126,7 @@ def test_slow_cpu_overflow_stops_instead_of_accumulating_audio():
         async def send(v):pass
         s=CaptionSession(Slow);await s.connect("recruiter",send);await s.connect("candidate",send)
         await s.approve("recruiter");await s.approve("candidate")
-        for _ in range(19):await s.audio("candidate",bytes(3200))
+        for _ in range(39):await s.audio("candidate",bytes(3200))
         task=asyncio.create_task(s.audio("candidate",bytes(3200)));await entered.wait()
         for _ in range(41):await s.audio("candidate",bytes(3200))
         assert s.stopped and not s.buffers["candidate"]
@@ -203,11 +203,11 @@ def test_pending_chunk_recovers_from_inference_delay_and_is_cleared_on_withdrawa
         await s.approve("recruiter")
         await s.approve("candidate")
         provider = s.providers["candidate"]
-        for _ in range(19): await s.audio("candidate", bytes(3200))
+        for _ in range(39): await s.audio("candidate", bytes(3200))
         task = asyncio.create_task(s.audio("candidate", bytes(3200)))
         await entered.wait()
-        for _ in range(20): await s.audio("candidate", bytes(3200))
-        assert not s.stopped and len(s.buffers["candidate"]) == 64000
+        for _ in range(40): await s.audio("candidate", bytes(3200))
+        assert not s.stopped and len(s.buffers["candidate"]) == 128000
         if withdraw: await s.stop()
         finish.set()
         await task
@@ -239,7 +239,7 @@ def test_worker_uses_one_offline_cpu_decoding_pass(monkeypatch):
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=Model))
     monkeypatch.setitem(sys.modules, "numpy", SimpleNamespace(frombuffer=lambda *a, **k: Samples(), float32="float32"))
     monkeypatch.setattr(sys, "argv", ["worker", "synthetic-model"])
-    monkeypatch.setattr(sys, "stdin", SimpleNamespace(buffer=io.BytesIO(struct.pack("!I", 64000)+bytes(64000))))
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(buffer=io.BytesIO(struct.pack("!I", 128000)+bytes(128000))))
     output=io.StringIO();monkeypatch.setattr(sys, "stdout", output)
     local_whisper_worker.main()
     assert len(calls)==1 and calls[0]["temperature"]==0.0
@@ -259,10 +259,10 @@ def test_sustained_two_role_audio_has_bounded_memory_and_exact_caption_accountin
             now[0]=frame/10
             # Independent roles, occasional grouped delivery; preserve every frame.
             await asyncio.gather(s.audio("recruiter",bytes(3200)),s.audio("candidate",bytes(3200)))
-            assert all(len(buffer)<=64000 for buffer in s.buffers.values())
-        assert not s.stopped and s.sequence==120
+            assert all(len(buffer)<=128000 for buffer in s.buffers.values())
+        assert not s.stopped and s.sequence==60
         assert s.frames==dict(recruiter=1200,candidate=1200)
-        assert all(len(p.frames)==60 for p in s.providers.values())
+        assert all(len(p.frames)==30 for p in s.providers.values())
         assert {e["role"] for e in events if e["kind"]=="caption"}=={"recruiter","candidate"}
         now[0]=120;await s.audio("recruiter",bytes(3200))
         assert s.stopped and not any(s.buffers.values())
@@ -286,15 +286,19 @@ def test_websocket_burst_dispatch_does_not_mistake_fast_frames_for_backlog(monke
             with client.websocket_connect("/api/v1/interview-access/captions",headers={"origin":"http://localhost:5173"}) as socket:
                 assert socket.receive_json()["kind"]=="waiting"
                 socket.send_text("consent");assert socket.receive_json()["kind"]=="active"
-                for _ in range(20):socket.send_bytes(bytes(3200))
+                for i in range(40):
+                    socket.send_bytes(bytes(3200))
+                    if i==19:
+                        import time
+                        time.sleep(1.05)
                 assert socket.receive_json()["kind"]=="caption"
-                assert not session.stopped and session.frames["candidate"]==20
+                assert not session.stopped and session.frames["candidate"]==40
                 socket.send_text("stop");assert socket.receive_json()["kind"]=="stopped"
     finally: route.sessions.clear()
 
 
 @pytest.mark.parametrize("withdraw",[False,True])
-def test_two_pending_chunks_recover_from_physical_decode_spike_without_loss(withdraw):
+def test_bounded_four_second_batch_recovers_without_loss(withdraw):
     async def scenario():
         entered,release=asyncio.Event(),asyncio.Event();now=[0.];events=[]
         class Spike(Provider):
@@ -305,18 +309,35 @@ def test_two_pending_chunks_recover_from_physical_decode_spike_without_loss(with
         async def send(value):events.append(value)
         s=CaptionSession(Spike,clock=lambda:now[0]);await s.connect("recruiter",send);await s.connect("candidate",send)
         await s.approve("recruiter");await s.approve("candidate");p=s.providers["candidate"]
-        for i in range(19):now[0]=(i+1)/10;await s.audio("candidate",bytes(3200))
-        now[0]=2.;task=asyncio.create_task(s.audio("candidate",bytes(3200)));await entered.wait()
-        for i in range(40):now[0]=2.1+i/10;await s.audio("candidate",bytes(3200))
+        for i in range(39):now[0]=(i+1)/10;await s.audio("candidate",bytes(3200))
+        now[0]=4.;task=asyncio.create_task(s.audio("candidate",bytes(3200)));await entered.wait()
+        for i in range(40):now[0]=4.1+i/10;await s.audio("candidate",bytes(3200))
         assert not s.stopped and len(s.buffers["candidate"])==128000
         assert len(s.buffer_times["candidate"])==40
         if withdraw:await s.stop()
         release.set();await task
-        assert len(p.frames)==(1 if withdraw else 3)
-        assert all(len(frame)==64000 for frame in p.frames)
+        assert len(p.frames)==(1 if withdraw else 2)
+        assert all(len(frame)==128000 for frame in p.frames)
         assert not s.buffers["candidate"] and not s.buffer_times["candidate"]
         if not withdraw:
             captions=[e for e in events if e["kind"]=="caption"]
-            assert [round(c["end"]) for c in captions[::2]]==[2,4,6]
+            assert [round(c["end"]) for c in captions[::2]]==[4,8]
         await s.stop()
+    asyncio.run(scenario())
+
+
+def test_whisper_pipe_accepts_exact_four_second_chunk_and_rejects_larger_audio(tmp_path):
+    import struct
+    from types import SimpleNamespace
+    async def scenario():
+        writes=[]
+        async def drain():pass
+        async def read():return b'{"text":"Synthetic caption"}\n'
+        worker=LocalWhisper(tmp_path)
+        worker.process=SimpleNamespace(stdin=SimpleNamespace(write=writes.append,drain=drain),stdout=SimpleNamespace(readline=read))
+        assert await worker.transcribe(bytes(128000))=="Synthetic caption"
+        assert struct.unpack("!I",writes[0][:4])[0]==128000
+        for size in [0,128001,128002]:
+            with pytest.raises(ValueError):await worker.transcribe(bytes(size))
+        assert len(writes)==1
     asyncio.run(scenario())

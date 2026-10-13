@@ -4,6 +4,7 @@ import json
 import struct
 import sys
 from pathlib import Path
+MAX_CHUNK_BYTES = 128000  # Four seconds, mono PCM16 at 16 kHz.
 
 
 class LocalWhisper:
@@ -23,7 +24,7 @@ class LocalWhisper:
             raise ValueError("Local model unavailable")
 
     async def transcribe(self, pcm):
-        if not self.process or not 0 < len(pcm) <= 64000 or len(pcm) % 2:
+        if not self.process or not 0 < len(pcm) <= MAX_CHUNK_BYTES or len(pcm) % 2:
             raise ValueError("Invalid audio")
         self.process.stdin.write(struct.pack("!I", len(pcm)) + pcm)
         await self.process.stdin.drain()

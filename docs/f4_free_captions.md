@@ -33,8 +33,8 @@ this proof adds no LiveKit subscriber/inference connection.
   processing gate when received; no networked system guarantees zero transmission
   latency. Late recognition results are suppressed. Participant disconnect,
   authorization loss/revocation, timeout or failure stop the caption session.
-- Each role has its own local model subprocess and two-second bounded chunks.
-  One additional two-second chunk per role may wait in RAM during inference; larger
+- Each role has its own local model subprocess and four-second bounded chunks.
+  One additional four-second chunk per role may wait in RAM during inference; larger
   backlogs stop captions. Native inference is terminated on stop instead of leaving a CPU thread running.
   Missing model/package fails closed. Slow inference exceeding buffer capacity
   stops rather than accumulating a whole interview or pretending nothing was lost.
@@ -44,7 +44,7 @@ this proof adds no LiveKit subscriber/inference connection.
   production consent system. Fresh connections/consent are required after stopping.
 - Captions are short final chunk results, not native streaming/interim Whisper
   output. Relative timestamps represent chunk receipt timing, not precise word
-  alignment. Two-second boundaries can cut words; limited synthetic measurements are below.
+  alignment. Chunk boundaries can cut words; limited synthetic measurements are below.
   Roles establish authenticated stream provenance, not verified speaker identity;
   malicious senders or acoustic cross-talk can contaminate audio. Headphones help.
 - React keeps only 30 visible caption events in memory, renders escaped text and
@@ -226,3 +226,68 @@ recording, stored transcript or audio download was used.
 accuracy, and full-interview transcription. The four-second queue absorbs transient
 delays; it cannot make a persistently slower-than-real-time CPU keep up.
 See the full-interview recommendations in `f4_streaming_stt_plan.md`.
+
+## Four-second batching and cross-device diagnosis — 13 Oct 2026
+
+**Confirmed latest physical stop:** 40.20 seconds, `audio_buffer_overflow`, with
+401 received 100-ms frames per role. No transport failure was recorded. Several
+completed physical decodes exceeded two seconds, and the four-second pending
+reserve filled. Non-silent physical speech can cost more than the short synthetic
+fixtures; actual noise/overlap/recognition-complexity contributions were not proved.
+Historical CPU utilization for this physical session was not captured.
+
+**Measured local batching comparison:** concurrent two-role decoding, same local
+CPU/int8 model, six varied synthetic offsets per role. Two-second batches averaged
+940 ms (max 1109), real-time factor 0.47. Four-second batches averaged 961 ms
+(max 1094), real-time factor 0.24. The comparable call cost supports amortizing
+per-call inference overhead rather than extending the queue again. This is
+synthetic evidence, not a replay or recording of personal speech.
+
+**Implemented correction:** four-second chunks (128,000 bytes of 16-kHz mono PCM16)
+with the pending limit unchanged at four seconds per role. Parent/worker framing
+and service batching share the same bound. One active plus one pending chunk
+remains bounded; no audio is silently removed to keep up. Two-party consent, mute,
+withdrawal, overload failure and the 120-second cap remain unchanged. Source
+receipt timestamps are preserved.
+
+**Controlled actual API/WebSocket/local-provider check:** 30.27 seconds through
+the existing Vite WebSocket proxy, authenticated recruiter/candidate sessions,
+explicit two-party consent and varied synthetic PCM. 274 frames per role sent
+and received; six nonempty captions per role delivered to both sockets. No
+unstated overload/transport stop. Operator withdrawal ended processing at
+30.28 seconds; the final 3.4 seconds per role were not decoded and were cancelled
+as required by withdrawal. This was not a browser-capture, physical-device,
+LiveKit-media or cross-network test. Mean decode time 938/924 ms; after-chunk-end
+API delivery mean/max 0.931/1.188 seconds. Worker RAM peak 476 MiB.
+
+**Trade-off:** final captions now wait for a four-second batch before inference;
+first-sample latency can therefore be approximately five seconds in this synthetic
+check. This does not establish accuracy or meet an approved interactive latency
+SLA. Earlier full-interview latency proposals require review. Real physical
+120-second reliability remains unverified; request owner participation before
+another full physical test. A persistently slower-than-real-time decoder can
+still exhaust the fixed pending bound.
+
+**Cross-device recommendation only:** invitation URLs use the recruiter page's
+origin. A link made on 127.0.0.1/localhost points back to the receiving device,
+not the office laptop. Additionally, a consumed single-use invitation cannot
+be moved to another browser; issue a fresh link from the reachable test origin.
+Join windows, expiry, revocation and consent still apply.
+
+Use one LAN-only trusted HTTPS origin on the same private network, with a free
+local reverse proxy such as Caddy. Keep frontend/backend bound to loopback;
+proxy the UI and `/api` (including WebSockets) through that single origin. Trust
+the local test CA explicitly on both devices; do not bypass certificate warnings.
+Restrict the listener/firewall to authorized test devices, allow only the exact
+HTTPS Origin/Host, and enforce Secure/HttpOnly/SameSite cookies while retaining
+the candidate cookie path. Current development cookies omit Secure, so this
+must be addressed in an approved isolated TLS configuration before testing.
+Do not disable security checks or expose development services publicly.
+
+No proxy, certificates, tunneling tool, network/firewall changes or deployment
+were performed. Installation, certificate trust, listener/firewall configuration
+and the two-device live test all require explicit approval.
+
+References: [MDN secure microphone/camera contexts](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia),
+[Caddy local automatic HTTPS](https://caddyserver.com/docs/automatic-https),
+[Caddy WebSocket reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).

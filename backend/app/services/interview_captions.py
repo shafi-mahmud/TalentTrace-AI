@@ -2,10 +2,11 @@
 import asyncio
 import time
 from collections import deque
+from app.integrations.stt.local_whisper import MAX_CHUNK_BYTES
 
 ROLES = {"recruiter", "candidate"}
-CHUNK_BYTES = 64000
-MAX_PENDING_BYTES = 2 * CHUNK_BYTES  # Four seconds per role; never a growing queue.
+CHUNK_BYTES = MAX_CHUNK_BYTES
+MAX_PENDING_BYTES = CHUNK_BYTES  # Pending bound stays four seconds per role.
 
 
 class CaptionSession:
@@ -79,8 +80,8 @@ class CaptionSession:
         buffer = self.buffers[role]
         buffer.extend(pcm)
         self.buffer_times[role].append(self.clock() - self.started)
-        # Measured physical decoding occasionally exceeds two seconds. Allow one
-        # extra pending chunk, but fail closed when this fixed capacity is exceeded.
+        # Four-second batching amortizes measured inference overhead. Keep only
+        # one pending chunk and fail closed when this fixed capacity is exceeded.
         if len(buffer) > MAX_PENDING_BYTES:
             await self.stop()
             return
@@ -92,7 +93,7 @@ class CaptionSession:
                 if self.clock() - self.started >= 120:
                     await self.stop()
                     return
-                timestamps = [self.buffer_times[role].popleft() for _ in range(20)]
+                timestamps = [self.buffer_times[role].popleft() for _ in range(CHUNK_BYTES // 3200)]
                 start, end = max(0, timestamps[0] - 0.1), timestamps[-1]
                 audio = bytes(buffer[:CHUNK_BYTES])
                 del buffer[:CHUNK_BYTES]

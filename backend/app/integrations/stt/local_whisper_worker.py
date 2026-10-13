@@ -1,6 +1,7 @@
 """Private in-memory pipe; no files, logs, downloads or remote STT calls."""
 import os
 import sys
+from app.integrations.stt.local_whisper import MAX_CHUNK_BYTES
 
 
 def main():
@@ -17,7 +18,7 @@ def main():
         if len(header) != 4:
             return
         size = struct.unpack("!I", header)[0]
-        if not 0 < size <= 64000 or size % 2:
+        if not 0 < size <= MAX_CHUNK_BYTES or size % 2:
             return
         pcm = sys.stdin.buffer.read(size)
         if len(pcm) != size:
