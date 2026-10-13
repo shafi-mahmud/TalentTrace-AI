@@ -145,3 +145,84 @@ until a permitted isolated runtime passes continuity, cancellation and cap check
 Metrics collected outside Git contain only bounded numeric timing, byte counts,
 role labels, buffer sizes, decoder threshold categories and resource counters.
 No raw PCM, captions, prompts, credentials or participant tokens are logged.
+
+## Physical-microphone diagnosis — 13 Oct 2026
+
+**User-observed:** real Edge microphone captions appeared, including inaccuracies
+and duplicated phrases. This does not establish independent microphones or
+cross-network verification. Speaker labels identify authenticated capture streams,
+not diarization: two sessions capturing the same microphone can label the same
+words under both roles. No automatic deduplication or provider change is justified.
+
+**Confirmed by safe runtime metrics:** four physical runs stopped after 4.38,
+14.23, 16.41 and 12.17 seconds, all on bounded PCM-buffer overflow, not the
+120-second cap. The latest run had 120 recruiter and 121 candidate 100-ms frames.
+The browser frame counter resets for each new caption AudioContext; 121 represents
+approximately 12.1 seconds, not the full two-minute allowance. Nonzero PCM and
+completed/nonempty decoding and caption delivery were observed for both roles.
+Incoming RMS maxima were 0.261163/0.278254; RMS alone does not prove good speech
+quality or recognition accuracy. Inference still active at overflow exceeded two
+seconds (latest approximately 2.11 seconds); no speech content was logged.
+
+The server initiated the overload stop and the browser then closed its dedicated
+caption AudioContext. The LiveKit microphone remaining live/enabled is intentional
+so the interview can continue. Thus closed caption context was a shutdown result,
+not evidence that physical microphone capture caused this stop. Decode errors
+after worker termination are not proof of malformed microphone PCM. The exact
+contributors to slower physical recognition (speech/noise, shared microphone,
+CPU contention) require further controlled measurement.
+
+**UI correction:** report Live only after AudioContext resume succeeds and its
+state is running; handle unexpected closed context or ended source track; detach
+listeners on cleanup; suppress late startup/error callbacks from an obsolete
+session. Normal shutdown explicitly separates captions from the still-live
+interview microphone/video. Consent, bounded buffers, overload handling, local
+provider and two-minute limit remain unchanged. Four production-handler regression
+tests cover early closure, pending-start cleanup, normal server stop, non-running
+resume and ended tracks. Frontend: 134 tests, type check and build passed.
+
+**Remaining limitation:** physical two-speaker sustained transcription is not
+verified. Repeat a short English test with headphones, one speaking microphone
+at a time and the other muted, then compare with separate physical devices. Stop
+on overload; do not silently discard audio or claim missing speech was recognized.
+
+## Bounded reliability correction and controlled check — 13 Oct 2026
+
+**Measured:** latest physical input remained approximately 10–11 100-ms frames
+per second. Speaking-role inference often took 1.3–2.0 seconds and was still
+active after 2.25 seconds at a 32.34-second overflow. Muted-role decoding was
+mostly inexpensive silence, but zero-valued frames were still forwarded. This
+explains the immediate overload mechanism versus the faster synthetic input;
+the contribution of noise, overlapping microphones and speech complexity inside
+the model remains unconfirmed. Do not infer those causes from RMS alone.
+
+**Implemented:** allow two pending two-second chunks per role, capped at 128,000
+bytes (four seconds), plus the active 64,000-byte chunk. Decode exact two-second
+chunks in order without discarding speech or growing the queue. Timestamp metadata
+retains bounded frame-receipt timing during queueing and muted gaps. Persistent
+overload still stops safely. The original 120-second cap remains unchanged.
+
+The interview mute now gates the separate browser-to-STT path explicitly, including
+disabled or device-muted tracks. Heartbeats, consent and the peer stream remain
+active. Pending pre-mute audio is retained; no pause is hidden as fresh speech.
+This is not a complete gap-event or reconnect protocol.
+
+**Controlled verification:** real FastAPI/WebSocket/LiveKit/local CPU Whisper with
+varied, longer in-memory synthetic English speech. At 45.3 seconds both roles were
+active, 43 caption results had been produced and no overflow occurred. Operator
+withdrawal was received at 56.16 seconds, rather than exactly 45 seconds. Inference
+mean/max was 929/1391 ms (recruiter) and 935/1390 ms (candidate); maximum measured
+pending audio was 1.9 seconds. Both roles completed 27 chunk decodes, all nonempty.
+No accuracy claim is made for those generated results. Worker RAM peaked at
+480.4 MiB; mean CPU approximately 176% and sampled peak 390% of one logical core
+(approximately 22%/49% of eight logical cores). Sampling is approximate.
+
+A separate brief real mute check observed recruiter/candidate frame deltas 20/0
+over two seconds; after unmute, 21/20. Withdrawal stopped captions without ending
+the video interview. Local model and provider were unchanged; no cloud STT call,
+recording, stored transcript or audio download was used.
+
+**Still unverified:** sustained two-minute physical speech, reliable recognition
+accuracy, and full-interview transcription. The four-second queue absorbs transient
+delays; it cannot make a persistently slower-than-real-time CPU keep up.
+See the full-interview recommendations in `f4_streaming_stt_plan.md`.

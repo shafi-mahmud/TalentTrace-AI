@@ -135,3 +135,70 @@ authorization gate. Cancellation must suppress late output as well as future
 audio. Temporary captions are not permanent transcripts. The first proof preserves
 the existing interview and stops safely on STT failure; it does not complete F4 or
 the LangGraph Co-Pilot. No trainer-owned WBS/SRS changes are made here.
+
+## Full-interview continuation plan — owner clarification, 13 Oct 2026
+
+**Documented architectural goal:** the owner confirmed that 120 seconds is only
+the initial proof limit. Eventual F4 should transcribe throughout an authorized
+interview, potentially 10–30 minutes or its configured duration. This section is
+a plan, not implementation. No trainer-owned WBS/SRS is changed; their detailed
+retention and latency rules were not available in the inspected repository.
+Current 120-second/time/frame/event limits remain in force.
+
+**Recommended incremental design:** retain the existing LiveKit interview and
+authenticated role-specific microphone bridge, with local CPU Whisper workers.
+Do not add another agent or assume a free Cloud STT quota.
+
+- **Sustained resources:** benchmark representative English speech for 10, then
+  30 minutes before changing the proof cap. Include silence, turn-taking, concurrent
+  speech, device changes and other laptop workloads. Require stable resident memory
+  and average decode real-time factor below one per role with headroom (proposed
+  target below 0.75). Reuse model processes; bound UI captions and diagnostics.
+  Four seconds of queue is a jitter reserve, not evidence of sustained capacity.
+- **Duration authorization:** separately replace proof limits only after review.
+  Bound STT to the configured interview window and both valid role sessions,
+  including expiry/revocation. Derive safe frame/event bounds from approved duration
+  and rate; do not simply remove limits or extend them to arbitrary client values.
+- **Queues/backpressure:** use per-role sequence/sample clocks, explicit delivery
+  acknowledgements and bounded browser/server queues. Track queue age as well as
+  bytes. Never silently discard speech. If throughput cannot recover within the
+  latency budget, pause/stop STT with a timestamped gap and an explicit user notice;
+  interview media continues. Resuming requires current authorization and consent,
+  with no replay of unapproved/withdrawn audio.
+- **Caption latency:** proposed acceptance targets are p95 within three seconds
+  after a spoken chunk ends and p99 within five seconds under representative load.
+  These require owner/trainer confirmation and real measurements. Measure from
+  source sample timestamps to rendering, not polling observations alone. Detect
+  latency/queue-age breaches explicitly rather than presenting old text as live.
+- **Attribution:** bind each stream to its authorized opaque participant identity
+  and role. This establishes source provenance, not acoustic diarization. Shared
+  microphones and cross-talk require separate devices/headphones; no fabricated
+  speaker assignment or automatic removal of legitimate repeated answers.
+- **Mute/disconnect:** forward no muted microphone audio; retain an explicit
+  timestamped pause/gap. Preserve pre-mute speech within the bounded queue. Track
+  ended/replaced devices and reconnect epochs; suppress obsolete results. Distinguish
+  an idle muted participant from transport failure using heartbeats and mute state.
+- **Consent/cancellation:** both participants consent server-side before processing.
+  Either withdrawal immediately closes the processing gate, kills inference, clears
+  temporary audio/captions and suppresses late output. Reconnection must not grant
+  renewed consent implicitly. Revocation and interview expiry remain independent
+  enforcement controls.
+- **Accuracy/correction:** evaluate word error on consented synthetic reference
+  scripts and overlapping speech, not merely nonempty results. Show uncertainty,
+  timestamps and gaps; allow human correction with provenance before downstream
+  use. STT must not make hiring decisions. Larger models/providers are not assumed
+  solutions without evidence, hardware/cost checks and approval.
+- **Storage/retention:** current proof saves no transcript/audio. Before persistence,
+  obtain an approved purpose, both-party consent, retention/deletion policy and
+  access rules. Plan owner-scoped PostgreSQL transcript segments only if authorized,
+  encrypted transport/storage, least-privilege access and correction/version audit
+  history without speech in logs. Do not invent a retention period or enable audio
+  recording. Transcript storage is separate from LangGraph checkpoint state.
+- **Recovery/gaps:** represent disconnected, muted, overloaded, failed and withheld
+  intervals explicitly. Never fill gaps with guessed text. Acknowledged sequence
+  boundaries prevent duplicate replay; any cancelled tail must be reported as
+  untranscribed. Rejoin/retry policy must preserve consent and bounded memory.
+
+**Next gate:** first complete the unchanged 120-second physical proof with the
+owner. Then separately review duration/latency/retention policy and profile the
+10-minute local pipeline. Full-interview functionality remains Planned.
