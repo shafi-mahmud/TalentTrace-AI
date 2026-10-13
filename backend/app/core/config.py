@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     livekit_api_secret: SecretStr | None = None
     livekit_synthetic_demo_enabled: bool = False
     local_caption_model_path: Path | None = None
+    local_caption_test_duration_seconds: int = Field(default=120, ge=120, le=300)
     llm_model: LLMModelName = "openai/gpt-oss-120b"
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"]
@@ -60,6 +61,10 @@ class Settings(BaseSettings):
         return value
 
     def model_post_init(self, __context: Any) -> None:
+        if self.local_caption_test_duration_seconds != 120 and (
+            self.environment != "development" or not self.livekit_synthetic_demo_enabled
+        ):
+            raise ConfigurationError("Extended captions require isolated synthetic development testing.")
         if self.langgraph_checkpoint_database_url is not None:
             try:
                 from psycopg.conninfo import conninfo_to_dict

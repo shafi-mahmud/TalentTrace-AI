@@ -38,3 +38,11 @@ test("development API proxy forwards authenticated caption WebSockets", async()=
   assert.equal(config.server.proxy["/api"].ws,true);
   assert.equal(config.server.proxy["/api"].target,"http://localhost:8000");
 });
+
+test("extended caption bounds require an explicit server duration",()=>{
+  const value={kind:"caption",role:"candidate",sequence:150,start:296,end:300,text:"Synthetic final caption"};
+  assert.equal(isCaption(value),false);assert.equal(isCaption(value,300),true);
+  for(const limit of [0,301,300.5])assert.equal(isCaption(value,limit),false);
+  assert.equal(isCaption({...value,end:301},300),false);
+  assert.equal(isCaption({...value,sequence:151},300),false);
+});

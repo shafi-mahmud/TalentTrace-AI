@@ -93,3 +93,14 @@ test("interview mute stops separate STT forwarding and unmute resumes without ne
   h.track.enabled=true;h.track.muted=true;send();assert.equal(ws.sent.length,3);
   h.cleanup();send();assert.equal(ws.sent.filter((v:any)=>typeof v!=="string").length,2);
 });
+
+test("five-minute test uses server bounds and cleanup preserves the interview track",async()=>{
+  const h=harness(),ws=h.consent();h.event(ws,{kind:"active",duration_seconds:300});await h.flush();
+  assert.match(h.states[1],/300 seconds/);
+  h.event(ws,{kind:"caption",role:"candidate",sequence:150,start:296,end:300,text:"Synthetic tail"});
+  assert.equal(h.states[2].length,1);
+  h.event(ws,{kind:"stopped"});await h.flush();assert.equal(h.states[2].length,0);
+  assert.equal(h.track.readyState,"live");assert.equal(h.audios[0].state,"closed");
+  const bad=harness(),other=bad.consent();bad.event(other,{kind:"active",duration_seconds:301});await bad.flush();
+  assert.equal(other.readyState,3);assert.equal(bad.audios.length,0);
+});

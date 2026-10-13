@@ -1,10 +1,11 @@
 export interface Caption {kind:"caption";role:"recruiter"|"candidate";sequence:number;start:number;end:number;text:string}
-export function isCaption(v:unknown):v is Caption {
+export function isCaption(v:unknown, durationSeconds=120):v is Caption {
+  if(!Number.isInteger(durationSeconds) || durationSeconds<1 || durationSeconds>300)return false;
   if(!v || typeof v!=="object")return false;
   const c=v as Caption;
   return Object.keys(c).length===6 && c.kind==="caption" && ["recruiter","candidate"].includes(c.role)
-    && Number.isInteger(c.sequence) && c.sequence>0 && c.sequence<=120
-    && Number.isFinite(c.start) && c.start>=0 && Number.isFinite(c.end) && c.end>=c.start && c.end<=120
+    && Number.isInteger(c.sequence) && c.sequence>0 && c.sequence<=Math.max(120,Math.floor(durationSeconds/2))
+    && Number.isFinite(c.start) && c.start>=0 && Number.isFinite(c.end) && c.end>=c.start && c.end<=durationSeconds
     && typeof c.text==="string" && c.text.length>0 && c.text.length<=1000 && !/[\x00-\x1f\x7f-\x9f]/.test(c.text);
 }
 export function captionUrl(candidate:boolean,jobId?:string,interviewId?:string):string {

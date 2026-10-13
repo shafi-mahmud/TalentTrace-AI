@@ -1,5 +1,7 @@
 """Authenticated temporary microphone bridge; never calls a cloud STT provider."""
 import asyncio
+from datetime import datetime, timedelta, timezone
+import time
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket
@@ -32,7 +34,10 @@ async def authorize(socket, job_id=None, interview_id=None):
             invitation, interview = await candidate_session(request, db)
             identity, role = invitation.id, "candidate"
         join_window(interview)
-        return interview.id, role, identity
+        expires = interview.scheduled_at + timedelta(minutes=interview.duration_minutes + 15)
+        if role == "candidate":
+            expires = min(expires, invitation.expires_at)
+        return interview.id, role, identity, expires
 
 
 async def serve(socket, job_id=None, interview_id=None):
@@ -44,12 +49,15 @@ async def serve(socket, job_id=None, interview_id=None):
     monitor = None
     try:
         association = await authorize(socket, job_id, interview_id)
-        key, role, _ = association
+        key, role, _, expires = association
         if key not in sessions:
             if sessions:  # Explicit single-room proof bound.
                 raise ValueError("Caption capacity unavailable")
-            sessions[key] = CaptionSession(lambda: LocalWhisper(settings.local_caption_model_path))
+            sessions[key] = CaptionSession(lambda: LocalWhisper(settings.local_caption_model_path),
+                duration_seconds=settings.local_caption_test_duration_seconds)
         session = sessions[key]
+        deadline = time.monotonic() + max(0, (expires - datetime.now(timezone.utc)).total_seconds())
+        session.authorization_deadline = min(session.authorization_deadline, deadline) if session.authorization_deadline is not None else deadline
         await socket.accept()
         await session.connect(role, socket.send_json)
         await socket.send_json({"kind": "waiting"})
@@ -60,7 +68,7 @@ async def serve(socket, job_id=None, interview_id=None):
                 try:
                     if await authorize(socket, job_id, interview_id) != association:
                         raise ValueError("Access changed")
-                    if session.started is not None and session.clock() - session.started >= 120:
+                    if session.expired():
                         raise ValueError("Caption window ended")
                     if session.started is None and session.clock() - session.created >= 120:
                         raise ValueError("Consent window ended")

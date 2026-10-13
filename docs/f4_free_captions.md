@@ -329,3 +329,49 @@ accuracy and more calls. Next evaluate bounded look-back boundary selection offl
 using the same model, without overlap, speech dropping or added pending capacity.
 Continuous speech must still use the maximum. Real noise and overlapping speakers
 remain unverified; the mixed-waveform test only proves sample conservation.
+
+
+### Implemented bounded extended-duration test - 13 October 2026
+
+Decision: retain tiny.en/int8/greedy and fixed four-second batching. Pause-aware
+segmentation remains an offline experiment, not approved for live integration.
+
+Implemented, automated-test verified only: LOCAL_CAPTION_TEST_DURATION_SECONDS
+has a 120-second default and accepts 120-300 seconds. A value above 120 requires
+ENVIRONMENT=development and LIVEKIT_SYNTHETIC_DEMO_ENABLED=true. It is server
+configuration, not a client request option. Use 300 only in an approved isolated
+runtime; the flag does not itself prove database/network isolation. No existing
+runtime settings were changed and no five-minute live test has been performed.
+
+Session processing ends at the earlier of the configured duration and the existing
+interview join-window expiry (scheduled duration plus the existing 15-minute grace).
+Candidate invitation expiry can shorten the shared caption session further.
+Audio ingestion and post-decode publication check this deadline; the existing
+one-second authorization watcher additionally stops access after revocation or
+ownership changes, including while muted. Consent withdrawal/disconnection closes
+workers, clears pending audio/captions and suppresses late results. Reconnection
+requires both new consents and cannot bypass an expired authorization window.
+This does not remotely disconnect already connected LiveKit participants.
+
+The server active event reports duration_seconds. Frontend caption validation and
+status respect that limit, up to 300 seconds and 150 events, retaining only 30
+visible captions. Consent copy discloses the possible isolated five-minute test.
+Four-second active and four-second pending audio bounds per role remain unchanged;
+no transcript storage, model change, retries or speech dropping was introduced.
+An incomplete tail is canceled at termination, not claimed as transcribed.
+
+Risks: longer sessions increase exposure to slow/noisy decoding, CPU contention and
+provider/process failures. Previous synthetic two-worker measurements used about
+0.4-0.5 GiB worker/benchmark RAM and up to about 55% of eight logical CPUs; these
+are not five-minute resource guarantees. Physical four-second decode maxima reached
+about 3.19 seconds. Queues stay bounded and still fail explicitly on overload.
+First-sample caption latency remains roughly four seconds accumulation plus decode.
+Accuracy of natural physical speech remains limited and unverified by synthetic WER.
+
+Next supervised check, requiring approval before restart/live execution: configure
+only isolated backend 8011 to 300 seconds, verify matching frontend 5184 protocol,
+prepare a fresh synthetic interview and unclaimed invitation, then collect numeric
+per-role ingress, backlog, latency, CPU/RAM and stop-reason metrics for five minutes.
+Check mute, both consents, cap, video independence and withdrawal in separate bounded
+phases; do not claim both a full-cap and early-withdrawal pass from one session.
+Preserve all databases and other demo services; restore the default after the test.

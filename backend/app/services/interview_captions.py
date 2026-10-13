@@ -10,7 +10,11 @@ MAX_PENDING_BYTES = CHUNK_BYTES  # Pending bound stays four seconds per role.
 
 
 class CaptionSession:
-    def __init__(self, provider_factory, clock=time.monotonic):
+    def __init__(self, provider_factory, clock=time.monotonic, duration_seconds=120, authorization_deadline=None):
+        if isinstance(duration_seconds, bool) or not isinstance(duration_seconds, int) or not 120 <= duration_seconds <= 300:
+            raise ValueError("Bounded caption duration required")
+        self.duration_seconds = duration_seconds
+        self.authorization_deadline = authorization_deadline
         self.factory, self.clock = provider_factory, clock
         self.peers, self.consent, self.buffers, self.providers = {}, set(), {}, {}
         self.started = None
@@ -21,6 +25,11 @@ class CaptionSession:
         self.processing = set()
         self.buffer_times = {}
         self.frames = {role: 0 for role in ROLES}
+
+    def expired(self):
+        now = self.clock()
+        return ((self.authorization_deadline is not None and now >= self.authorization_deadline)
+                or (self.started is not None and now - self.started >= self.duration_seconds))
 
     async def connect(self, role, send):
         if role not in ROLES or role in self.peers or self.stopped:
@@ -36,6 +45,9 @@ class CaptionSession:
         async with self.lock:
             if role not in self.peers or self.stopped:
                 raise ValueError("Caption consent unavailable")
+            if self.expired():
+                await self.stop()
+                return
             self.consent.add(role)
             if self.consent == ROLES and self.started is None:
                 try:
@@ -43,11 +55,11 @@ class CaptionSession:
                         provider = self.factory()
                         self.providers[name] = provider
                         await provider.start()
-                        if self.stopped:
+                        if self.stopped or self.expired():
                             await provider.close()
                             raise ValueError("Consent withdrawn")
                     self.started = self.clock()
-                    await self.broadcast({"kind": "active"})
+                    await self.broadcast({"kind": "active", "duration_seconds": self.duration_seconds})
                 except Exception:
                     await self.stop()
             elif self.started is None:
@@ -68,13 +80,13 @@ class CaptionSession:
     async def audio(self, role, pcm):
         if self.stopped or self.consent != ROLES or self.started is None:
             raise ValueError("Audio requires both consents")
-        if self.clock() - self.started >= 120:
+        if self.expired():
             await self.stop()
             return
         if role not in self.peers or len(pcm) != 3200:
             raise ValueError("Bounded PCM16 frame required")
         self.frames[role] += 1
-        if self.frames[role] > 1200:
+        if self.frames[role] > self.duration_seconds * 10:
             await self.stop()
             return
         buffer = self.buffers[role]
@@ -90,7 +102,7 @@ class CaptionSession:
         try:
             self.processing.add(role)
             while not self.stopped and len(buffer) >= CHUNK_BYTES:
-                if self.clock() - self.started >= 120:
+                if self.expired():
                     await self.stop()
                     return
                 timestamps = [self.buffer_times[role].popleft() for _ in range(CHUNK_BYTES // 3200)]
@@ -98,10 +110,13 @@ class CaptionSession:
                 audio = bytes(buffer[:CHUNK_BYTES])
                 del buffer[:CHUNK_BYTES]
                 text = await self.providers[role].transcribe(audio)
+                if self.expired():
+                    await self.stop()
+                    return
                 if not self.stopped and text:
                     if len(text) > 1000 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text):
                         raise ValueError("Unsafe caption")
-                    if self.sequence >= 120:
+                    if self.sequence >= max(120, self.duration_seconds // 2):
                         await self.stop()
                         return
                     self.sequence += 1

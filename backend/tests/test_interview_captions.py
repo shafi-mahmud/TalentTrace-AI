@@ -1,5 +1,6 @@
 """Offline synthetic PCM/provider tests; no Cloud, microphone, model or DB call."""
 import asyncio
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -146,7 +147,7 @@ def test_socket_rejects_foreign_origin_or_secret_query_before_authorization(monk
 
 def test_real_websocket_early_audio_fails_consent_gate(monkeypatch):
     monkeypatch.setattr(route,"settings",route.settings.model_copy(update={"local_caption_model_path":"synthetic", "livekit_synthetic_demo_enabled":True}))
-    async def authorized(*args):return uuid4(),"candidate",uuid4()
+    async def authorized(*args):return uuid4(),"candidate",uuid4(),datetime.now(timezone.utc)+timedelta(minutes=10)
     monkeypatch.setattr(route,"authorize",authorized)
     with TestClient(app) as client:
         with client.websocket_connect("/api/v1/interview-access/captions",headers={"origin":"http://localhost:5173"}) as socket:
@@ -274,7 +275,8 @@ def test_websocket_burst_dispatch_does_not_mistake_fast_frames_for_backlog(monke
     monkeypatch.setattr(route,"settings",route.settings.model_copy(update={"local_caption_model_path":"synthetic", "livekit_synthetic_demo_enabled":True}))
     # Keep repeated authorization identity stable.
     identity=uuid4()
-    async def authorized(*args):return key,"candidate",identity
+    expiry=datetime.now(timezone.utc)+timedelta(minutes=10)
+    async def authorized(*args):return key,"candidate",identity,expiry
     monkeypatch.setattr(route,"authorize",authorized)
     async def send(value):pass
     session=CaptionSession(Provider)
@@ -341,3 +343,90 @@ def test_whisper_pipe_accepts_exact_four_second_chunk_and_rejects_larger_audio(t
             with pytest.raises(ValueError):await worker.transcribe(bytes(size))
         assert len(writes)==1
     asyncio.run(scenario())
+
+
+def test_extended_duration_requires_synthetic_development_and_is_bounded():
+    from app.core.config import Settings, ConfigurationError
+    from pydantic import ValidationError
+    base=dict(_env_file=None, database_url=None, langgraph_checkpoint_database_url=None)
+    assert Settings(**base).local_caption_test_duration_seconds == 120
+    assert Settings(**base,livekit_synthetic_demo_enabled=True,local_caption_test_duration_seconds=300).local_caption_test_duration_seconds==300
+    for environment,enabled in [('production',True),('development',False)]:
+        with pytest.raises(ConfigurationError):
+            Settings(**base,environment=environment,livekit_synthetic_demo_enabled=enabled,local_caption_test_duration_seconds=300)
+    for value in [119,301]:
+        with pytest.raises(ValidationError):Settings(**base,local_caption_test_duration_seconds=value)
+
+
+@pytest.mark.parametrize('deadline',[None,140.0])
+def test_five_minute_session_stops_at_earlier_authorization_deadline(deadline):
+    async def scenario():
+        now=[0.];events=[]
+        async def send(v):events.append(v)
+        s=CaptionSession(Provider,clock=lambda:now[0],duration_seconds=300,authorization_deadline=deadline)
+        await s.connect('recruiter',send);await s.connect('candidate',send)
+        await s.approve('recruiter');await s.approve('candidate')
+        providers=list(s.providers.values())
+        limit=int(deadline or 300)
+        for frame in range(limit*10):
+            now[0]=frame/10
+            for role in ['recruiter','candidate']:await s.audio(role,bytes(3200))
+            assert all(len(b)<=128000 for b in s.buffers.values())
+        assert not s.stopped and s.sequence==limit//4*2
+        now[0]=limit;await s.audio('recruiter',bytes(3200))
+        assert s.stopped and not s.providers and not s.consent
+        assert all(p.closed for p in providers) and not any(s.buffer_times.values())
+        with pytest.raises(ValueError):await s.audio('candidate',bytes(3200))
+        fresh=CaptionSession(Provider,clock=lambda:now[0],duration_seconds=300,authorization_deadline=deadline)
+        await fresh.connect('recruiter',send);await fresh.connect('candidate',send)
+        await fresh.approve('recruiter')
+        if deadline is not None:assert fresh.stopped
+        else:assert not fresh.started and not fresh.providers  # reconnect requires both new consents
+        await fresh.stop()
+    asyncio.run(scenario())
+
+
+def test_expiry_during_extended_decode_suppresses_late_caption_and_closes_workers():
+    async def scenario():
+        now=[0.];entered=asyncio.Event();release=asyncio.Event();events=[]
+        class Slow(Provider):
+            async def transcribe(self,pcm):entered.set();await release.wait();return 'Late synthetic caption'
+        async def send(v):events.append(v)
+        s=CaptionSession(Slow,clock=lambda:now[0],duration_seconds=300,authorization_deadline=5)
+        await s.connect('recruiter',send);await s.connect('candidate',send)
+        await s.approve('recruiter');await s.approve('candidate');providers=list(s.providers.values())
+        for _ in range(39):await s.audio('candidate',bytes(3200))
+        task=asyncio.create_task(s.audio('candidate',bytes(3200)));await entered.wait()
+        now[0]=5;release.set();await task
+        assert s.stopped and all(p.closed for p in providers)
+        assert not [e for e in events if e['kind']=='caption']
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('reason',['expiry','revocation'])
+def test_extended_websocket_authorization_loss_closes_resources(monkeypatch,reason):
+    key,identity=uuid4(),uuid4();calls=[]
+    expiry=datetime.now(timezone.utc)+timedelta(seconds=.2 if reason=='expiry' else 600)
+    monkeypatch.setattr(route,'settings',route.settings.model_copy(update={'local_caption_model_path':'synthetic','livekit_synthetic_demo_enabled':True,'local_caption_test_duration_seconds':300}))
+    async def authorize(*args):
+        calls.append(1)
+        if reason=='revocation' and len(calls)>1:raise ValueError('Access revoked')
+        return key,'candidate',identity,expiry
+    monkeypatch.setattr(route,'authorize',authorize)
+    async def send(v):pass
+    session=CaptionSession(Provider,duration_seconds=300)
+    asyncio.run(session.connect('recruiter',send));session.consent.add('recruiter');route.sessions[key]=session
+    providers=[]
+    try:
+        with TestClient(app) as client:
+            with client.websocket_connect('/api/v1/interview-access/captions',headers={'origin':'http://localhost:5173'}) as ws:
+                assert ws.receive_json()['kind']=='waiting';ws.send_text('consent')
+                assert ws.receive_json()['duration_seconds']==300;providers.extend(session.providers.values())
+                assert ws.receive_json()['kind']=='stopped';assert session.stopped
+                ws.send_text('stop')
+        assert all(p.closed for p in providers) and not session.providers and not session.consent
+        # The manually supplied recruiter peer has no real socket/finalizer.
+        # Candidate cleanup must remove only its peer; the stopped session
+        # remains until that recruiter disconnects (as in the real UI).
+        assert set(session.peers)=={'recruiter'} and session.stopped
+    finally:route.sessions.clear()
