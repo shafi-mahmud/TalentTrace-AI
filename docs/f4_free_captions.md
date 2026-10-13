@@ -375,3 +375,24 @@ per-role ingress, backlog, latency, CPU/RAM and stop-reason metrics for five min
 Check mute, both consents, cap, video independence and withdrawal in separate bounded
 phases; do not claim both a full-cap and early-withdrawal pass from one session.
 Preserve all databases and other demo services; restore the default after the test.
+
+
+### Provisional model decision and requirements closure - 13 October 2026
+
+Retain tiny.en/CPU/int8/greedy/fixed-four-second batching. The same accepted
+75.3-second physical read-aloud input gave tiny/base script-based WER 35.09/33.33%,
+approximate technical-term metric 3/4 out of 11, and mean decode 1.022/1.722 seconds.
+Base's modest accuracy improvement does not justify a deployed model switch.
+No speech was reprocessed. Captions remain unverified until reviewed.
+
+See [F4 requirements review and inline architecture decision](f4_requirements_review.md)
+for the synthetic/physical comparison, normalization/reference/tail bias, available
+architecture evidence, missing official BID/WBS/clarifications, and the proposed
+transient review increment. Full-interview duration, transcript review/persistence
+and F5 integration are not completed by this proof.
+
+Only the comparison harness on 5185/8012 was stopped. Isolated F4 5184/8011 remains
+untouched with effective 120-second default. Audited harness paths have no saved
+microphone audio or decoded transcript artifacts; logs are empty and saved results
+contain aggregate metrics only. This is a scoped code/filesystem review, not a
+forensic guarantee about operating-system/browser memory or swap.
