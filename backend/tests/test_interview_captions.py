@@ -128,7 +128,7 @@ def test_slow_cpu_overflow_stops_instead_of_accumulating_audio():
         await s.approve("recruiter");await s.approve("candidate")
         for _ in range(19):await s.audio("candidate",bytes(3200))
         task=asyncio.create_task(s.audio("candidate",bytes(3200)));await entered.wait()
-        for _ in range(21):await s.audio("candidate",bytes(3200))
+        for _ in range(41):await s.audio("candidate",bytes(3200))
         assert s.stopped and not s.buffers["candidate"]
         finish.set();await task
     asyncio.run(scenario())
@@ -291,3 +291,32 @@ def test_websocket_burst_dispatch_does_not_mistake_fast_frames_for_backlog(monke
                 assert not session.stopped and session.frames["candidate"]==20
                 socket.send_text("stop");assert socket.receive_json()["kind"]=="stopped"
     finally: route.sessions.clear()
+
+
+@pytest.mark.parametrize("withdraw",[False,True])
+def test_two_pending_chunks_recover_from_physical_decode_spike_without_loss(withdraw):
+    async def scenario():
+        entered,release=asyncio.Event(),asyncio.Event();now=[0.];events=[]
+        class Spike(Provider):
+            async def transcribe(self,pcm):
+                self.frames.append(pcm)
+                if len(self.frames)==1:entered.set();await release.wait()
+                return "Synthetic caption"
+        async def send(value):events.append(value)
+        s=CaptionSession(Spike,clock=lambda:now[0]);await s.connect("recruiter",send);await s.connect("candidate",send)
+        await s.approve("recruiter");await s.approve("candidate");p=s.providers["candidate"]
+        for i in range(19):now[0]=(i+1)/10;await s.audio("candidate",bytes(3200))
+        now[0]=2.;task=asyncio.create_task(s.audio("candidate",bytes(3200)));await entered.wait()
+        for i in range(40):now[0]=2.1+i/10;await s.audio("candidate",bytes(3200))
+        assert not s.stopped and len(s.buffers["candidate"])==128000
+        assert len(s.buffer_times["candidate"])==40
+        if withdraw:await s.stop()
+        release.set();await task
+        assert len(p.frames)==(1 if withdraw else 3)
+        assert all(len(frame)==64000 for frame in p.frames)
+        assert not s.buffers["candidate"] and not s.buffer_times["candidate"]
+        if not withdraw:
+            captions=[e for e in events if e["kind"]=="caption"]
+            assert [round(c["end"]) for c in captions[::2]]==[2,4,6]
+        await s.stop()
+    asyncio.run(scenario())

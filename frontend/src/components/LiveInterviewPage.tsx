@@ -96,7 +96,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     <button className="button button-secondary" onClick={()=>void leave()} disabled={!joined && !busy}>Leave interview</button>
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
-    <InterviewCaptions connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id}
+    <InterviewCaptions connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
     <button className="button button-secondary" onClick={onBack}>Back to screening</button>

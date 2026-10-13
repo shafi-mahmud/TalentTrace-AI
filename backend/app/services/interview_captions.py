@@ -1,8 +1,11 @@
 """Single-worker, single-room two-party consent; no persistent state or transcript."""
 import asyncio
 import time
+from collections import deque
 
 ROLES = {"recruiter", "candidate"}
+CHUNK_BYTES = 64000
+MAX_PENDING_BYTES = 2 * CHUNK_BYTES  # Four seconds per role; never a growing queue.
 
 
 class CaptionSession:
@@ -15,6 +18,7 @@ class CaptionSession:
         self.lock = asyncio.Lock()
         self.stopped = False
         self.processing = set()
+        self.buffer_times = {}
         self.frames = {role: 0 for role in ROLES}
 
     async def connect(self, role, send):
@@ -22,6 +26,7 @@ class CaptionSession:
             raise ValueError("Caption session unavailable")
         self.peers[role] = send
         self.buffers[role] = bytearray()
+        self.buffer_times[role] = deque()
 
     async def broadcast(self, value):
         await asyncio.gather(*(asyncio.wait_for(send(value), 1) for send in self.peers.values()))
@@ -53,6 +58,8 @@ class CaptionSession:
         self.consent.clear()
         for buffer in self.buffers.values():
             buffer.clear()
+        for timestamps in self.buffer_times.values():
+            timestamps.clear()
         await asyncio.gather(*(p.close() for p in self.providers.values()), return_exceptions=True)
         self.providers.clear()
         await asyncio.gather(*(asyncio.wait_for(send({"kind": "stopped"}), 1) for send in self.peers.values()), return_exceptions=True)
@@ -71,21 +78,24 @@ class CaptionSession:
             return
         buffer = self.buffers[role]
         buffer.extend(pcm)
-        # Keep at most one pending two-second chunk while inference finishes.
-        if len(buffer) > 64000:
+        self.buffer_times[role].append(self.clock() - self.started)
+        # Measured physical decoding occasionally exceeds two seconds. Allow one
+        # extra pending chunk, but fail closed when this fixed capacity is exceeded.
+        if len(buffer) > MAX_PENDING_BYTES:
             await self.stop()
             return
-        if len(buffer) < 64000 or role in self.processing:
+        if len(buffer) < CHUNK_BYTES or role in self.processing:
             return
         try:
             self.processing.add(role)
-            while not self.stopped and len(buffer) >= 64000:
-                end = self.clock() - self.started
-                if end >= 120:
+            while not self.stopped and len(buffer) >= CHUNK_BYTES:
+                if self.clock() - self.started >= 120:
                     await self.stop()
                     return
-                audio = bytes(buffer)
-                buffer.clear()
+                timestamps = [self.buffer_times[role].popleft() for _ in range(20)]
+                start, end = max(0, timestamps[0] - 0.1), timestamps[-1]
+                audio = bytes(buffer[:CHUNK_BYTES])
+                del buffer[:CHUNK_BYTES]
                 text = await self.providers[role].transcribe(audio)
                 if not self.stopped and text:
                     if len(text) > 1000 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text):
@@ -95,7 +105,7 @@ class CaptionSession:
                         return
                     self.sequence += 1
                     await self.broadcast({"kind": "caption", "role": role, "sequence": self.sequence,
-                                          "start": max(0, end - 2), "end": end, "text": text})
+                                          "start": start, "end": end, "text": text})
         except Exception:
             await self.stop()
         finally:
