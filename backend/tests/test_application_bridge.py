@@ -122,5 +122,20 @@ def test_real_postgres_concurrent_import_and_migration(tmp_path):
     rows=(await session.scalars(select(ExternalCvSubmissionRecord))).all()
     assert len(rows)==1 and rows[0].job_id==job and rows[0].application_email=='demo@example.test'
    assert len(list(tmp_path.rglob('*.pdf')))==1
+   # Exercise the actual SQL reader using a role with SELECT-only grants.
+   from app.services.intake_reader import TrustedIntakeReader,IntakeBinding
+   from sqlalchemy import text
+   role='bridge_reader_'+uuid4().hex[:10]
+   async with engine.begin() as connection:
+    await connection.execute(text('CREATE ROLE '+role+' NOLOGIN'))
+    await connection.execute(text('GRANT USAGE ON SCHEMA public TO '+role))
+    await connection.execute(text('GRANT SELECT ON external_cv_submissions,job_profiles,recruiters TO '+role))
+   source_engine=create_async_engine(url,hide_parameters=True,connect_args={'server_settings':{'role':role}})
+   try:
+    reader_binding=b.model_copy(update={'source_job_reference':REFERENCE})
+    reader=TrustedIntakeReader(async_sessionmaker(source_engine,expire_on_commit=False),tmp_path,IntakeBinding(target=reader_binding,intake_recruiter_id=owner,intake_job_id=job))
+    manifest,data=await reader(reader_binding,'same_submission')
+    assert data==PDF and manifest.contact.email=='demo@example.test'
+   finally:await source_engine.dispose()
   finally:await engine.dispose()
  asyncio.run(run())
