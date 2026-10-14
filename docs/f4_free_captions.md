@@ -396,3 +396,23 @@ untouched with effective 120-second default. Audited harness paths have no saved
 microphone audio or decoded transcript artifacts; logs are empty and saved results
 contain aggregate metrics only. This is a scoped code/filesystem review, not a
 forensic guarantee about operating-system/browser memory or swap.
+
+## Fresh-session saved-score restoration (14 October 2026)
+
+Implemented: Candidate Screening → selected owned confirmed job → Load saved scores.
+A read-only GET /api/v1/jobs/{job_id}/scores discovers up to 20 current-version/current-
+revision batches and reuses load_scores validation. Foreign jobs return 404; unconfirmed,
+changing jobs or excess batches return 409. No parsing/model call or schema change.
+The UI reuses ScoreDetails and InterviewScheduling; only eligible results are selectable.
+Eligible unscored selection retains the existing explicit uncertainty acknowledgment.
+Job/revision changes clear selection and suppress stale responses. Raw screening results
+are not reconstructed from score rows. Saved explanations/source references are shown.
+
+Verified: 140 frontend tests, type checking/build and 26 focused backend score/interview
+regressions passed. Authenticated browser loaded persisted scores, disabled excluded
+selection, selected an unscheduled eligible synthetic candidate, and saved one 30-minute
+Asia/Dhaka interview for 14 October 15:37 (09:37 UTC). Interview page opened and invitation
+creation exposed its copy control without disclosing the bearer link in logs. No Groq
+call/upload occurred. Physical join, media and captions are pending owner-operated checks.
+Backend 8011 restarted using the existing isolated diagnostic launcher, retaining data
+and 120-second tiny.en configuration. Intake and other demonstrations remain unchanged.

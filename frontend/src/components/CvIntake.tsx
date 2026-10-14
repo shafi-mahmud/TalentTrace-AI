@@ -1,3 +1,4 @@
+import SavedScores from './SavedScores';
 import { useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { uploadCvs, validateCvSelection } from "../api/cvUploads";
@@ -239,6 +240,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
         {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={setSelectedUpload} /></>}
+        {criteriaDraft?.revision && <SavedScores key={criteriaDraft.draftId} jobId={criteriaDraft.draftId} revision={criteriaDraft.revision} onOpenInterview={onOpenInterview} />}
         {criteriaDraft?.revision && <InterviewScheduling jobId={criteriaDraft.draftId} criteriaRevision={criteriaDraft.revision}
           scoring={screening?.scoring ?? null} candidate={screening?.scoring?.candidates.find(c=>c.upload_id===selectedUpload) ?? null} onOpenInterview={onOpenInterview} />}
         </section>

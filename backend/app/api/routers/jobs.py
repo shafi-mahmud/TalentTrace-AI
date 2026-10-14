@@ -105,3 +105,25 @@ async def conversation(conversation_id: UUID, user=Depends(current_recruiter), s
             "reply": adapter.validate_python(turn.response).model_dump(mode="json", exclude_none=True)} for turn in turns]}
     except ValidationError:
         raise HTTPException(500, "Saved conversation could not be validated.") from None
+
+@router.get('/jobs/{job_id}/scores', response_model=list[ScoringBatch])
+async def saved_job_scores(job_id: UUID, user=Depends(current_recruiter), session=Depends(database_session)):
+    """Bounded current-revision discovery; never invokes parsing or screening."""
+    from app.db.models.recruiter import CandidateScoreRecord
+    from app.services.score_records import SCORING_VERSION
+    job = await owned_job(session, user.id, job_id)
+    if job.confirmed_snapshot is None:
+        raise HTTPException(409, 'Review and confirm current criteria first.')
+    revision, snapshot = job.revision, job.confirmed_snapshot
+    batches = (await session.scalars(select(CandidateScoreRecord.batch_id).where(
+        CandidateScoreRecord.job_id == job.id,
+        CandidateScoreRecord.criteria_revision == revision,
+        CandidateScoreRecord.scoring_version == SCORING_VERSION).distinct().order_by(
+        CandidateScoreRecord.batch_id).limit(21))).all()
+    if len(batches) > 20:
+        raise HTTPException(409, 'Saved batch listing limit exceeded.')
+    results = [await load_scores(session, job, batch_id) for batch_id in batches]
+    await session.refresh(job)
+    if job.revision != revision or job.confirmed_snapshot != snapshot:
+        raise HTTPException(409, 'Job changed. Reload current criteria.')
+    return results
