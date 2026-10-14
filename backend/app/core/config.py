@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     livekit_synthetic_demo_enabled: bool = False
     local_caption_model_path: Path | None = None
     local_caption_test_duration_seconds: int = Field(default=120, ge=120, le=300)
+    interview_email_enabled: bool = False
+    interview_email_sender: str | None = None
+    interview_email_recipients: list[str] = Field(default_factory=list)
+    interview_public_origin: str | None = None
+    interview_smtp_host: str | None = None
+    interview_smtp_port: int = Field(default=465, ge=1, le=65535)
+    interview_smtp_username: SecretStr | None = None
+    interview_smtp_password: SecretStr | None = None
     llm_model: LLMModelName = "openai/gpt-oss-120b"
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"]

@@ -38,6 +38,8 @@ async def selected(session,owner,job_id,body):
  return job
 @router.post('/jobs/{job_id}/scheduling-invitations')
 async def invite(job_id:UUID,body:Selection,user=Depends(current_recruiter),session=Depends(database_session)):
+ return await create_scheduling_invitation(job_id,body,user,session)
+async def create_scheduling_invitation(job_id,body,user,session,*,commit=True):
  await lock_interviewer(session,user.id);await selected(session,user.id,job_id,body)
  exists=await session.scalar(select(InterviewSchedule.id).where(InterviewSchedule.job_id==job_id,InterviewSchedule.batch_id==body.batch_id,InterviewSchedule.upload_id==body.upload_id))
  if exists:raise HTTPException(409,'Candidate already scheduled.')
@@ -45,7 +47,9 @@ async def invite(job_id:UUID,body:Selection,user=Depends(current_recruiter),sess
  for row in old:row.revoked=True
  raw=secrets.token_urlsafe(32);expires=datetime.now(timezone.utc)+timedelta(days=7)
  session.add(SchedulingInvitation(recruiter_id=user.id,job_id=job_id,batch_id=body.batch_id,upload_id=body.upload_id,criteria_revision=body.criteria_revision,token_hash=token_hash(raw),expires_at=expires,unscored_confirmed=body.confirm_eligible_unscored,revoked=False))
- await session.commit();return {'token':raw,'expires_at':expires}
+ if commit:await session.commit()
+ else:await session.flush()
+ return {'token':raw,'expires_at':expires}
 async def capability(session,body,request):
  throttle(request)
  row=await session.scalar(select(SchedulingInvitation).where(SchedulingInvitation.token_hash==token_hash(body.token.get_secret_value())))
@@ -76,5 +80,14 @@ async def book(body:Booking,request:Request,session=Depends(database_session)):
  row.interview_id=result.id
  raw=secrets.token_urlsafe(32);expires=start+timedelta(minutes=75)
  session.add(InterviewInvitation(interview_id=result.id,token_hash=token_hash(raw),expires_at=expires,revoked=False))
+ email_status='not_requested';attempt=None
+ if row.recipient_email:
+  from app.db.models.recruiter import InterviewEmailAttempt
+  attempt=InterviewEmailAttempt(scheduling_invitation_id=row.id,kind='confirmation',status='sending')
+  session.add(attempt)
  await session.commit()
- return {'interview':result,'joining_token':raw,'expires_at':expires}
+ if attempt:
+  from app.services.interview_email import finish_attempt
+  from app.core.config import settings
+  email_status=await finish_attempt(session,attempt,settings,row.recipient_email,'confirmation',raw,result)
+ return {'interview':result,'joining_token':raw,'expires_at':expires,'email_status':email_status}

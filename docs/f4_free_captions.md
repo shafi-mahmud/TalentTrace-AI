@@ -458,3 +458,47 @@ Not implemented: email delivery, calendar synchronization, rescheduling/cancella
 multiple interviewer resources, configurable policy administration. Next: readiness
 check/backup and explicit approval to migrate isolated F4 demo; then supervised booking.
 Email needs an approved sender/recipient workflow and delivery/duplicate-send tracking.
+
+## One-click synthetic scheduling/confirmation email
+
+Implemented, disabled by default: select eligible saved candidate, enter an approved
+synthetic recipient, then Send Scheduling Invitation. No persisted CV email exists in
+score records; addresses are explicitly recruiter-supplied and backend-allowlisted.
+Example-domain recipients are rejected. SMTP_SSL uses the standard library with
+certificate validation, socket timeouts and no debug logging/retries. There is no
+configured sender in this environment and no Gmail OAuth/Calendar integration.
+
+Required ignored configuration: INTERVIEW_EMAIL_ENABLED (leave false until approval),
+INTERVIEW_EMAIL_SENDER, INTERVIEW_EMAIL_RECIPIENTS (JSON list), INTERVIEW_PUBLIC_ORIGIN
+(reachable HTTPS origin), INTERVIEW_SMTP_HOST, INTERVIEW_SMTP_PORT (default 465),
+INTERVIEW_SMTP_USERNAME and INTERVIEW_SMTP_PASSWORD. Only isolated development with
+synthetic-demo opt-in is allowed. Choose an approved dedicated sender and controlled
+real test mailbox; never derive/send to fictional CV emails. No account or billing
+setup occurs automatically. Credentials never enter frontend state.
+
+Migration 0007_interview_email adds a private recipient binding to the scheduling
+invitation and a token-free delivery ledger. One attempt per invitation/kind is unique.
+A durable sending reservation commits before SMTP, so concurrent/repeated clicks reuse
+known state rather than resend. Interrupted sending reads as uncertain. Accepted means
+SMTP acceptance, not delivered/read. Failed, uncertain and not-configured are explicit;
+there is no automatic retry or durable token/message spool. Manual replacement requires
+review; replacing links can invalidate links in older messages.
+
+Candidate booking commits its interview, consumed scheduling token, joining invitation
+and confirmation attempt first. Confirmation then uses the SAME newly generated joining
+bearer in memory and includes Asia/Dhaka date, start/end and duration. Mail failure does
+not undo/duplicate booking; candidate sees email status plus Copy joining link. Lost or
+uncertain response requires recruiter joining-access recovery; plaintext tokens are
+never stored in delivery metadata. No automatic resending after uncertainty.
+
+Only fake transport was exercised, including disposable PostgreSQL duplicate suppression
+and confirmation timeout with preserved booking. Migration 0007 was tested on schedule_test
+at 54401 only; existing F4 database 54378 and its services remain unmigrated/unchanged.
+Real sending requires a readiness/backup/migration check, approved sender and allowlisted
+recipient, reachable HTTPS origin and separate authorization for one test email.
+
+Email increment verification: 31 affected backend tests passed before the final blank-
+credential readiness regression; that guard is verified separately. 145 frontend tests,
+production build/type checking, compilation and diff checks passed. Transport tests are
+fake-only. SMTP accepted/uncertain delivery semantics and duplicate suppression were
+verified on disposable PostgreSQL. No real messages or demo-schema changes occurred.

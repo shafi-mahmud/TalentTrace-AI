@@ -1,5 +1,5 @@
 """Relational recruiter ownership; validated JSON artifacts are not candidate records."""
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, CheckConstraint, Float
@@ -111,6 +111,7 @@ class InterviewInvitation(Base):
 class SchedulingInvitation(Base):
     """Separate scheduling capability; no raw bearer or candidate contact data."""
     __tablename__ = 'scheduling_invitations'
+    recipient_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     recruiter_id: Mapped[UUID] = mapped_column(ForeignKey('recruiters.id'), index=True)
     job_id: Mapped[UUID] = mapped_column(ForeignKey('job_profiles.id'), index=True)
@@ -122,3 +123,12 @@ class SchedulingInvitation(Base):
     unscored_confirmed: Mapped[bool] = mapped_column(default=False)
     revoked: Mapped[bool] = mapped_column(default=False)
     interview_id: Mapped[UUID | None] = mapped_column(ForeignKey('interview_schedules.id'), nullable=True)
+
+class InterviewEmailAttempt(Base):
+    __tablename__ = 'interview_email_attempts'
+    __table_args__ = (UniqueConstraint('scheduling_invitation_id', 'kind', name='uq_interview_email_kind'),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    scheduling_invitation_id: Mapped[UUID] = mapped_column(ForeignKey('scheduling_invitations.id'), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

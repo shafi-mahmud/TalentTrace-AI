@@ -20,3 +20,6 @@ api_router.include_router(screening.router, dependencies=[Depends(current_recrui
 
 from app.api.routers import self_scheduling
 api_router.include_router(self_scheduling.router)
+
+from app.api.routers import interview_email
+api_router.include_router(interview_email.router)
