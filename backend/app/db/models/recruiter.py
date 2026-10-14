@@ -107,3 +107,18 @@ class InterviewInvitation(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(default=False)
     candidate_session_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+
+class SchedulingInvitation(Base):
+    """Separate scheduling capability; no raw bearer or candidate contact data."""
+    __tablename__ = 'scheduling_invitations'
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    recruiter_id: Mapped[UUID] = mapped_column(ForeignKey('recruiters.id'), index=True)
+    job_id: Mapped[UUID] = mapped_column(ForeignKey('job_profiles.id'), index=True)
+    batch_id: Mapped[UUID] = mapped_column()
+    upload_id: Mapped[UUID] = mapped_column()
+    criteria_revision: Mapped[int] = mapped_column()
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    unscored_confirmed: Mapped[bool] = mapped_column(default=False)
+    revoked: Mapped[bool] = mapped_column(default=False)
+    interview_id: Mapped[UUID | None] = mapped_column(ForeignKey('interview_schedules.id'), nullable=True)

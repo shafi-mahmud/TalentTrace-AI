@@ -1,3 +1,4 @@
+import CandidateScheduling from './components/CandidateScheduling';
 import { lazy, Suspense, useEffect, useReducer, useRef, useState } from "react";
 import RecruiterSignIn from "./components/RecruiterSignIn";
 import { listJobs, workingJob } from "./api/jobs";
@@ -71,6 +72,7 @@ export default function App({initialInvitation=null}:{initialInvitation?:string|
     const token=takeInvitation(window.location,window.history);
     setInvitationContext(previous=>({token,revision:previous.revision+1}));
   }};window.addEventListener("hashchange",changed);return()=>window.removeEventListener("hashchange",changed);},[]);
+  if(window.location.pathname==="/interview-schedule")return <CandidateScheduling />;
   if(window.location.pathname==="/interview-join")return <CandidateInterview key={invitationContext.revision} initialToken={invitationContext.token} />;
   return <RecruiterSignIn>{user => <Workspace recruiterId={user.id} />}</RecruiterSignIn>;
 }

@@ -17,3 +17,6 @@ api_router.include_router(job_descriptions.router, dependencies=[Depends(current
 api_router.include_router(recruiter_chat.router, dependencies=[Depends(current_recruiter)])
 api_router.include_router(cv_uploads.router, dependencies=[Depends(current_recruiter)])
 api_router.include_router(screening.router, dependencies=[Depends(current_recruiter)])
+
+from app.api.routers import self_scheduling
+api_router.include_router(self_scheduling.router)

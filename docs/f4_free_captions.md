@@ -416,3 +416,45 @@ creation exposed its copy control without disclosing the bearer link in logs. No
 call/upload occurred. Physical join, media and captions are pending owner-operated checks.
 Backend 8011 restarted using the existing isolated diagnostic launcher, retaining data
 and 120-second tiny.en configuration. Intake and other demonstrations remain unchanged.
+
+## Candidate self-scheduling increment (synthetic demo rules)
+
+Implemented: selected eligible saved candidate → Generate scheduling invitation →
+Copy scheduling link → candidate opens /interview-schedule without recruiter login →
+View available slots → Book this interview → private joining link. No email is sent.
+The seven proposed weekday starts, Friday alternative starts, Asia/Dhaka and 60-minute
+appointments are demo rules, not official BJIT policy. Availability covers today plus
+13 days, omits past starts and overlaps, and is rechecked on booking.
+
+Scheduling capabilities are independent of interview joining capabilities. Only SHA-256
+hashes of 256-bit random tokens are stored; scheduling tokens expire in seven days.
+Replacing a scheduling invitation revokes previous links for the same selection.
+Job/batch/upload/recruiter/revision are bound server-side; candidate requests contain
+only bearer and selected UTC start. Current saved eligibility and explicit approval
+are rechecked. Unscored eligible selection requires recruiter acknowledgment.
+Booking consumes the scheduling invitation atomically, creates the existing interview
+record/screening snapshot, and creates a separate hashed one-use interview invitation.
+The joining bearer is returned once, retained only in the candidate page's memory;
+if delivery is uncertain or the page is lost, recruiter issues joining access through
+existing controls. No automatic booking retry. Fragment tokens are removed from URLs.
+
+Both manual and candidate scheduling lock the Recruiter row before job validation,
+then check half-open time overlaps and write within the same transaction. In this
+increment the recruiter is the interviewer/resource. Touching endpoints are allowed;
+actual overlap returns 409. Existing candidate uniqueness remains a second safeguard.
+No direct SQL/import path should insert interviews bypassing this guard. Scheduling
+slots are advisory until reservation commits. Existing overlaps are not repaired.
+
+Migration 0006_self_scheduling adds only scheduling_invitations. It was applied and
+verified on disposable PostgreSQL schedule_test at loopback 54401, never the existing
+F4 demo at 54378. Real PostgreSQL tests exercised candidate/candidate and candidate/manual
+races (one success, one conflict), consumed-token rejection, and removal of booked slots.
+Focused expiry/revocation/stale-selection, request protection and slot/overlap tests
+passed; frontend tests cover unscored approval, fragment cleanup and protected requests.
+Live candidate browser booking remains unverified until separately approved demo migration
+and backend reload. Existing 5184/8011 and intake services were not restarted.
+
+Not implemented: email delivery, calendar synchronization, rescheduling/cancellation,
+multiple interviewer resources, configurable policy administration. Next: readiness
+check/backup and explicit approval to migrate isolated F4 demo; then supervised booking.
+Email needs an approved sender/recipient workflow and delivery/duplicate-send tracking.

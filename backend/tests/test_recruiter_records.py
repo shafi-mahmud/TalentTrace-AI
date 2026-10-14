@@ -52,6 +52,7 @@ class SessionDouble:
             left, right = self.value(expr.left, context), self.value(expr.right, context)
             if expr.operator in (operators.eq, operators.is_): return left == right
             if expr.operator is operators.gt: return left > right
+            if expr.operator is operators.lt: return left < right
             raise AssertionError("Unimplemented test SQL operator")
         return getattr(context[expr.table.name], expr.name)
 

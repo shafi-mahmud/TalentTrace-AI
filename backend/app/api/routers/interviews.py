@@ -70,6 +70,11 @@ def public_interview(row, job):
 @router.post("/jobs/{job_id}/interviews", response_model=InterviewResponse, status_code=201)
 async def schedule_interview(job_id: UUID, body: InterviewRequest,
     user=Depends(current_recruiter), session=Depends(database_session)):
+    return await create_selected_interview(job_id, body, user, session)
+
+async def create_selected_interview(job_id, body, user, session, *, commit=True):
+    from app.services.interview_booking import lock_interviewer, check_overlap
+    await lock_interviewer(session, user.id)
     job = await owned_job(session, user.id, job_id, lock=True)
     if body.criteria_revision != job.revision:
         raise HTTPException(409, "Job changed. Review the current screening results before scheduling.")
@@ -89,13 +94,15 @@ async def schedule_interview(job_id: UUID, body: InterviewRequest,
         InterviewSchedule.batch_id == body.batch_id, InterviewSchedule.upload_id == body.upload_id))
     if existing is not None:
         raise HTTPException(409, "An initial interview is already scheduled for this candidate.")
+    await check_overlap(session, user.id, body.scheduled_at, body.duration_minutes)
     row = InterviewSchedule(recruiter_id=user.id, job_id=job.id, batch_id=body.batch_id, upload_id=body.upload_id,
         criteria_revision=job.revision, scoring_version=saved.scoring_version, scheduled_at=body.scheduled_at,
         timezone=body.timezone, duration_minutes=body.duration_minutes, unscored_confirmed=unscored,
         screening_snapshot=candidate.model_dump(mode="json"))
     session.add(row)
     try:
-        await session.commit()
+        if commit: await session.commit()
+        else: await session.flush()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(409, "Interview could not be saved. Reload saved interviews before another attempt.") from None

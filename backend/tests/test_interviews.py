@@ -74,7 +74,7 @@ def test_selection_owner_revision_duplicates_and_unscored_confirmation(monkeypat
             assert initial.json()["scheduled_at"].endswith("Z")
             assert "meeting_url" not in initial.json() and "recruiter_id" not in initial.json()
             assert (await owner.post(path,json=supplied)).status_code==409
-            uncertain=request(batch_id,candidates[1].upload_id)
+            uncertain=request(batch_id,candidates[1].upload_id,scheduled_at=(datetime.fromisoformat(supplied["scheduled_at"])+timedelta(hours=1)).isoformat())
             warning=await owner.post(path,json=uncertain)
             assert warning.status_code==409 and "explicitly confirm" in warning.json()["detail"]
             accepted=await owner.post(path,json={**uncertain,"confirm_eligible_unscored":True})
