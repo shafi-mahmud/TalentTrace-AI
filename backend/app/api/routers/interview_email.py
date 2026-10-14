@@ -1,5 +1,5 @@
 """Explicit allowlisted recruiter send. No resend after a recorded attempt."""
-from uuid import UUID
+from uuid import UUID,uuid4
 from fastapi import APIRouter,Depends,HTTPException
 from pydantic import Field
 from sqlalchemy import select
@@ -15,10 +15,14 @@ class EmailSelection(Selection):
  recipient:str=Field(min_length=3,max_length=254,repr=False)
 @router.post('/jobs/{job_id}/scheduling-invitations/email')
 async def send_scheduling_email(job_id:UUID,body:EmailSelection,user=Depends(current_recruiter),session=Depends(database_session)):
+ return await send_selected_email(job_id,body,user,session)
+
+async def send_selected_email(job_id,body,user,session,*,configuration=None,on_reserved=None):
+ c=configuration or settings
  await lock_interviewer(session,user.id)
  await selected(session,user.id,job_id,body)
- to=recipient(settings,body.recipient)
- if not ready(settings):raise HTTPException(503,'Interview email is disabled or not configured.')
+ to=recipient(c,body.recipient)
+ if not ready(c):raise HTTPException(503,'Interview email is disabled or not configured.')
  # Under the same recruiter lock as invitation rotation/booking. Recorded outcomes
  # are never resent, including interrupted/uncertain sending state.
  previous=(await session.scalars(select(SchedulingInvitation).where(SchedulingInvitation.job_id==job_id,SchedulingInvitation.batch_id==body.batch_id,SchedulingInvitation.upload_id==body.upload_id,SchedulingInvitation.criteria_revision==body.criteria_revision,SchedulingInvitation.revoked.is_(False)).order_by(SchedulingInvitation.expires_at.desc()).limit(1))).first()
@@ -31,7 +35,8 @@ async def send_scheduling_email(job_id:UUID,body:EmailSelection,user=Depends(cur
  value=await create_scheduling_invitation(job_id,body,user,session,commit=False)
  invitation=await session.scalar(select(SchedulingInvitation).where(SchedulingInvitation.token_hash==token_hash(value['token'])))
  invitation.recipient_email=to
- attempt=InterviewEmailAttempt(scheduling_invitation_id=invitation.id,kind='scheduling',status='sending');session.add(attempt)
+ attempt=InterviewEmailAttempt(id=uuid4(),scheduling_invitation_id=invitation.id,kind='scheduling',status='sending');session.add(attempt)
+ if on_reserved:on_reserved(attempt)
  await session.commit() # Durable reservation precedes SMTP; no transaction spans network I/O.
- status=await finish_attempt(session,attempt,settings,to,'scheduling',value['token'])
+ status=await finish_attempt(session,attempt,c,to,'scheduling',value['token'])
  return {'email_status':status,'reused':False}
