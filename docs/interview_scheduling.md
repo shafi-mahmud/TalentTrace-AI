@@ -1,5 +1,21 @@
 # F3 increment 1 — recruiter selection and scheduling
 
+## Implemented — separate recruiter scheduling workspace
+
+Use **Interview Scheduling** in the top navigation, or
+`/#interview-scheduling`. Candidate Screening keeps requirements, scores,
+evidence and **Select for interview**, plus **Go to Interview Scheduling**.
+Selection transfers the current job, batch and candidate in memory. The page
+reuses the existing individual invitation, bulk preview/confirmation/status,
+manual booking and saved-interview components and APIs.
+
+The active job UUID is remembered per recruiter in session storage and reloaded
+through the owned-jobs API after refresh. Candidate selection is not persisted;
+reload saved scores to select again. Foreign, stale or unconfirmed selections
+are discarded. Candidate `/interview-schedule` and `/interview-join` routes are
+unchanged. Navigation alone sends no invitations or booking requests; retained
+bulk operation status and saved interviews may be fetched read-only.
+
 ## Implemented
 
 Eligible cards in screening results offer **Select for interview**. The recruiter

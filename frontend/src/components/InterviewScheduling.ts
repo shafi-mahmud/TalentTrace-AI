@@ -45,17 +45,20 @@ export function InterviewScheduling({jobId,criteriaRevision,scoring,candidate,on
   const [start,setStart]=useState(""); const [zone,setZone]=useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [duration,setDuration]=useState(30);const [confirmed,setConfirmed]=useState(false);
   const [rows,setRows]=useState<Interview[]>([]);const [error,setError]=useState("");const [busy,setBusy]=useState(false);
+  const [loadingRows,setLoadingRows]=useState(true);
   const pending=useRef(false);const generation=useRef(0);
   useLayoutEffect(()=>{generation.current++;setStart("");setConfirmed(false);setError("");setBusy(false);},[jobId,criteriaRevision,scoring?.batch_id,candidate?.upload_id]);
-  useEffect(()=>{const current=generation.current;setRows([]);
+  useEffect(()=>{const current=generation.current;setRows([]);setLoadingRows(true);
     listInterviews(jobId).then(value=>{if(current===generation.current)setRows(value);})
-      .catch(()=>{if(current===generation.current)setError("Saved interviews could not be loaded. Reload before scheduling.");});
+      .catch(()=>{if(current===generation.current)setError("Saved interviews could not be loaded. Reload before scheduling.");})
+      .finally(()=>{if(current===generation.current)setLoadingRows(false);});
     return ()=>{generation.current++;};
   },[jobId,criteriaRevision,scoring?.batch_id,candidate?.upload_id]);
   const alreadyScheduled=!!candidate && !!scoring && rows.some(row=>row.batch_id===scoring.batch_id && row.upload_id===candidate.upload_id);
-  async function reload() {const current=generation.current;setError("");
+  async function reload() {const current=generation.current;setError("");setLoadingRows(true);
     try {const value=await listInterviews(jobId);if(current===generation.current)setRows(value);}
-    catch {if(current===generation.current)setError("Saved interviews could not be loaded.");}}
+    catch {if(current===generation.current)setError("Saved interviews could not be loaded.");}
+    finally {if(current===generation.current)setLoadingRows(false);}}
   async function submit(event:FormEvent) {
     event.preventDefault(); if(!candidate || !scoring || pending.current || alreadyScheduled)return;
     const schedule=localSchedule(start,zone);
@@ -73,9 +76,9 @@ export function InterviewScheduling({jobId,criteriaRevision,scoring,candidate,on
     finally {pending.current=false;if(current===generation.current)setBusy(false);}
   }
   return h("section", {className:"card", "aria-label":"Interview scheduling"},h("h2",null,"Interview scheduling"),
-    candidate && scoring ? h(ScheduleForm,{candidate,start,zone,duration,confirmed,busy,alreadyScheduled,onStart:setStart,onZone:setZone,onDuration:setDuration,onConfirmed:setConfirmed,onSubmit:submit})
+    candidate && scoring ? h(ScheduleForm,{candidate,start,zone,duration,confirmed,busy:busy||loadingRows,alreadyScheduled,onStart:setStart,onZone:setZone,onDuration:setDuration,onConfirmed:setConfirmed,onSubmit:submit})
       : h("p",null,"Select an eligible candidate above to schedule an interview."),
     error && h("p",{role:"alert",className:"error-banner"},error),
-    h("button",{type:"button",className:"button button-secondary",onClick:()=>void reload(),disabled:busy},"Reload saved interviews"),
-    h(SavedInterviews,{rows,criteriaRevision,onOpenInterview}));
+    h("button",{type:"button",className:"button button-secondary",onClick:()=>void reload(),disabled:busy||loadingRows},"Reload saved interviews"),
+    loadingRows ? h("div",null,h("h3",null,"Saved interviews"),h("p",{role:"status"},"Loading saved interviews…")) : h(SavedInterviews,{rows,criteriaRevision,onOpenInterview}));
 }

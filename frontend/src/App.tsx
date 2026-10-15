@@ -1,3 +1,6 @@
+import InterviewSchedulingPage from './components/InterviewSchedulingPage';
+import type {InterviewSelection} from './components/SavedScores';
+import {workspaceModeFromHash, workspaceHash} from './state/workspaceNavigation';
 import CandidateScheduling from './components/CandidateScheduling';
 import { lazy, Suspense, useEffect, useReducer, useRef, useState } from "react";
 import RecruiterSignIn from "./components/RecruiterSignIn";
@@ -14,10 +17,12 @@ import { WorkspaceNavigation } from "./components/cvIntakePresentation";
 import { initialRecruiterWorkspaceState, recruiterWorkspaceReducer, restoreActiveJob, rememberActiveJob } from "./state/recruiterWorkspace";
 
 function Workspace({recruiterId}: {recruiterId: string}) {
+  const [schedulingVisited,setSchedulingVisited]=useState(()=>workspaceModeFromHash(window.location.hash)==="scheduling");
+  const [selection,setSelection]=useState<InterviewSelection|null>(null);
   const [liveInterview,setLiveInterview]=useState<Interview|null>(null);
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
   const [jobError, setJobError] = useState("");
-  const [workspace, dispatch] = useReducer(recruiterWorkspaceReducer, recruiterId, id => ({...initialRecruiterWorkspaceState, activeDraftId: restoreActiveJob(window.sessionStorage, id)}));
+  const [workspace, dispatch] = useReducer(recruiterWorkspaceReducer, recruiterId, id => ({...initialRecruiterWorkspaceState, mode: workspaceModeFromHash(window.location.hash), activeDraftId: restoreActiveJob(window.sessionStorage, id)}));
   const {mode, drafts, activeDraftId} = workspace;
   const currentWorkspace = useRef(workspace);
   currentWorkspace.current = workspace;
@@ -36,10 +41,18 @@ function Workspace({recruiterId}: {recruiterId: string}) {
   }
   useEffect(() => {refreshJobs(true); return () => {loadSequence.current++;};}, []);
   useEffect(() => {rememberActiveJob(window.sessionStorage, recruiterId, activeDraftId);}, [recruiterId, activeDraftId]);
+  function changeMode(mode: typeof workspace.mode) {
+    if(mode==="scheduling")setSchedulingVisited(true);
+    setLiveInterview(null); window.location.hash=workspaceHash(mode); dispatch({type:"mode_changed",mode});
+  }
+  function goToScheduling(value?:InterviewSelection) {if(value)setSelection(value); changeMode("scheduling");}
+  useEffect(()=>{const changed=()=>{if(workspaceModeFromHash(window.location.hash)==="scheduling")setSchedulingVisited(true);setLiveInterview(null);dispatch({type:"mode_changed",mode:workspaceModeFromHash(window.location.hash)});};window.addEventListener("hashchange",changed);return()=>window.removeEventListener("hashchange",changed);},[]);
+  useEffect(()=>{setSelection(null);},[activeDraftId,drafts[activeDraftId??""]?.revision,workspace.criteriaContextRevision]);
+  useEffect(()=>{window.history.replaceState(null,"",window.location.pathname+window.location.search+"#"+workspaceHash(mode));},[mode]);
   const activeDraft = activeDraftId ? drafts[activeDraftId] ?? null : null;
   useEffect(()=>{setLiveInterview(current=>current && current.job_id!==activeDraftId ? null:current);},[activeDraftId]);
   return <>
-    <WorkspaceNavigation mode={mode} onChange={mode => {setLiveInterview(null);dispatch({type: "mode_changed", mode});}} />
+    <WorkspaceNavigation mode={mode} onChange={changeMode} />
     <div className="active-job-bar"><label>Active job<select value={activeDraftId ?? ""} onChange={event => {
       setLiveInterview(null);
       const job = savedJobs.find(job => job.id === event.target.value);
@@ -59,10 +72,11 @@ function Workspace({recruiterId}: {recruiterId: string}) {
       onContinueToCv={draftId => dispatch({type: "continue_to_screening", draftId})}
       onNewChat={() => dispatch({type: "new_chat"})} /></RecruiterChatPage></div>
     <div hidden={Boolean(liveInterview) || mode !== "cv"}><CvIntake draft={activeDraft} contextResetKey={workspace.criteriaContextRevision}
-      onOpenInterview={setLiveInterview}
+      onGoToScheduling={goToScheduling}
       onJobSaved={job => {dispatch({type: "draft_generated", draft: workingJob(job)}); refreshJobs();}}
       onCriteriaChange={criteria => activeDraftId && dispatch({type: "criteria_changed", draftId: activeDraftId, criteria})}
       onCriteriaReviewed={reviewed => activeDraftId && dispatch({type: "criteria_reviewed", draftId: activeDraftId, reviewed})} /></div>
+    <div hidden={Boolean(liveInterview) || mode !== "scheduling"}>{schedulingVisited && <InterviewSchedulingPage draft={activeDraft} selection={selection} onSelect={setSelection} onOpenInterview={setLiveInterview} />}</div>
   </>;
 }
 

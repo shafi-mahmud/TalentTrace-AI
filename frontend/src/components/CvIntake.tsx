@@ -1,4 +1,5 @@
 import SavedScores from './SavedScores';
+import type { InterviewSelection } from './SavedScores';
 import { useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { uploadCvs, validateCvSelection } from "../api/cvUploads";
@@ -22,11 +23,9 @@ import type { SavedJob } from "../api/jobs";
 import { isScoringWeights, loadScores } from "../api/scoring";
 import type { ScoringWeights } from "../types/screening";
 import { ScoringWeightsEditor } from "./ScoringWeightsEditor";
-import { InterviewScheduling } from "./InterviewScheduling";
-import type { Interview } from "../api/interviews";
 
-export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed, onJobSaved,onOpenInterview}: {
-  onOpenInterview:(value:Interview)=>void;
+export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCriteriaReviewed, onJobSaved,onGoToScheduling}: {
+  onGoToScheduling:(selection?:InterviewSelection)=>void;
   onJobSaved: (job: SavedJob) => void;
   contextResetKey: number;
   draft: WorkingCriteriaDraft | null; onCriteriaChange: (criteria: WorkingCriteriaDraft["criteria"]) => void;
@@ -46,7 +45,6 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   const [parsing, setParsing] = useState(false);
   const [snapshot, setSnapshot] = useState<ReviewedJobSnapshot | null>(null);
   const [screening, setScreening] = useState<BatchScreeningResponse | null>(null);
-  const [selectedUpload, setSelectedUpload] = useState<string | null>(null);
   const [screeningBusy, setScreeningBusy] = useState(false);
   const [manualDraft, setManualDraft] = useState<WorkingCriteriaDraft | null>(null);
   const [manualJobTitle, setManualJobTitle] = useState("");
@@ -59,7 +57,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   const busy = loading || extracting || processingOcr || parsing || screeningBusy;
   const screeningPrerequisite = screeningPrerequisiteMessage({busy, hasSuggestions: Boolean(criteriaDraft), hasBatch: Boolean(result),
     hasSnapshot: Boolean(snapshot), referenceMatches: Boolean(result && snapshot && snapshot.job_reference === result.job_reference)});
-  function invalidateCriteria() { screeningRevision.current++; setSnapshot(null); setScreening(null); setSelectedUpload(null); }
+  function invalidateCriteria() { screeningRevision.current++; setSnapshot(null); setScreening(null); }
   useLayoutEffect(() => { invalidateCriteria(); }, [criteriaDraft?.draftId, criteriaDraft?.criteria, criteriaDraft?.reviewed]);
   useLayoutEffect(() => {
     if (criteriaDraft?.jobReference) setReference(criteriaDraft.jobReference);
@@ -180,11 +178,12 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
     finally {setScreeningBusy(false);}
   }
 
-  return <div className="app-shell chat-page">
+  return <div className="app-shell chat-page recruiter-page screening-page">
     <main>
       <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>Candidate Screening Workspace</h1><p className="page-description">Set up job criteria and a CV batch in either order, then review evidence-backed screening results.</p></div>
+      <button className="button button-secondary" onClick={() => onGoToScheduling()}>Go to Interview Scheduling</button>
       <ScreeningWorkflowSteps hasSuggestions={Boolean(criteriaDraft)} hasSnapshot={Boolean(snapshot)} hasBatch={Boolean(result)} isScreened={Boolean(screening)} />
-      <section className="card cv-intake-card" aria-label="Candidate screening workspace">
+      <section className="screening-setup" aria-label="Candidate screening workspace">
         <div className="field"><label htmlFor="cv-job-reference">Job Reference</label>
           <input id="cv-job-reference" value={reference} readOnly={Boolean(criteriaDraft?.jobReference)} maxLength={23} required placeholder="Create or select a job first" onChange={event => {
             setReference(event.target.value); invalidateCriteria(); changeReviewed(false); setError(""); setSetupError("");
@@ -239,10 +238,8 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
-        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={setSelectedUpload} /></>}
-        {criteriaDraft?.revision && <SavedScores key={criteriaDraft.draftId} jobId={criteriaDraft.draftId} revision={criteriaDraft.revision} onOpenInterview={onOpenInterview} />}
-        {criteriaDraft?.revision && <InterviewScheduling jobId={criteriaDraft.draftId} criteriaRevision={criteriaDraft.revision}
-          scoring={screening?.scoring ?? null} candidate={screening?.scoring?.candidates.find(c=>c.upload_id===selectedUpload) ?? null} onOpenInterview={onOpenInterview} />}
+        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={uploadId => {const batch=screening.scoring; const candidate=batch?.candidates.find(c=>c.upload_id===uploadId); if(batch && candidate) onGoToScheduling({batch,candidate});}} /></>}
+        {criteriaDraft?.revision && <SavedScores key={criteriaDraft.draftId} jobId={criteriaDraft.draftId} revision={criteriaDraft.revision} onSelectCandidate={onGoToScheduling} />}
         </section>
       </section>
     </main>

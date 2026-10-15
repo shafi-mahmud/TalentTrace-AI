@@ -424,3 +424,37 @@ body { background: var(--page); color: var(--ink); }
 /* Recruiter-only audio/video proof. */
 .interview-media { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0; }
 .interview-media video { width: 100%; max-height: 360px; background: #122c29; border-radius: 8px; }
+/* Focused recruiter screening/scheduling readability. */
+.recruiter-page { font-size: 16px; line-height: 1.65; }
+.recruiter-page .page-intro h1 { font-size: clamp(30px, 4vw, 40px); }
+.recruiter-page h2 { font-size: 23px; line-height: 1.3; margin: 0 0 16px; }
+.recruiter-page h3 { font-size: 19px; }
+.recruiter-page p, .recruiter-page li, .recruiter-page input, .recruiter-page select,
+.recruiter-page textarea, .recruiter-page .page-description { font-size: 16px; }
+.recruiter-page label, .recruiter-page small, .recruiter-page .helper-text,
+.recruiter-page .form-note, .recruiter-page summary, .recruiter-page .eyebrow,
+.recruiter-page .workflow-steps li { font-size: 14px; color: #435e53; }
+.recruiter-page .button, .recruiter-page button { font-size: 15px; min-height: 44px; padding: 10px 16px; border: 1px solid #bacfc4; border-radius: 7px; }
+.recruiter-page button:not(.button) { color: #204f40; background: #f3f7f4; margin: 4px 8px 8px 0; }
+.recruiter-page button:disabled { opacity: .65; cursor: not-allowed; }
+.recruiter-page .card { padding: 24px; margin: 20px 0; box-shadow: none; }
+.recruiter-page .card .card { border-radius: 8px; background: #fbfdfc; }
+.recruiter-page .candidate-card { margin: 16px 0; padding: 20px; overflow-wrap: anywhere; }
+.recruiter-page input[type=checkbox] { width: auto; flex-shrink: 0; }
+.recruiter-page label { flex-wrap: wrap; }
+.recruiter-page input, .recruiter-page select { min-height: 44px; }
+.recruiter-page .error-banner { color: #842c22; }
+.scheduling-sections { display: grid; gap: 4px; }
+.scheduling-page form { padding: 16px 0; }
+.scheduling-page li { margin-bottom: 16px; }
+.scheduling-page .empty-state { padding: 28px; }
+.workspace-modes { flex-wrap: wrap; gap: 6px; }
+.workspace-modes button { font-size: 15px; min-height: 44px; }
+.active-job-bar label { font-size: 14px; }
+.active-job-bar select, .active-job-bar .button { font-size: 16px; min-height: 44px; }
+@media(max-width:640px) {
+  .recruiter-page .card { padding: 16px; }
+  .recruiter-page .candidate-card { padding: 12px; }
+  .workspace-modes button { font-size: 14px; flex: 1 1 auto; }
+  .recruiter-page form { padding: 16px 0; }
+}

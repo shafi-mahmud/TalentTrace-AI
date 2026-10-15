@@ -16,7 +16,7 @@ export function resetCriteriaContextForNewChat<T extends ResettableCriteriaConte
   return {...state, reference: "", manualDraft: null, manualJobTitle: "", setupError: "", snapshot: null, screening: null};
 }
 
-export type WorkspaceMode = "jd" | "cv";
+export type WorkspaceMode = "jd" | "cv" | "scheduling";
 
 export function screeningPrerequisiteMessage({busy, hasSuggestions, hasBatch, hasSnapshot, referenceMatches}: {
   busy: boolean; hasSuggestions: boolean; hasBatch: boolean; hasSnapshot: boolean; referenceMatches: boolean;
@@ -37,7 +37,8 @@ export function WorkspaceNavigation({mode, onChange}: {mode: WorkspaceMode; onCh
         h("span", null, "TalentTrace", h("span", {className: "brand-ai"}, " AI"))),
       h("nav", {className: "workspace-modes", "aria-label": "Recruiter workspace views"},
         h("button", {type: "button", "aria-pressed": mode === "jd", onClick: () => onChange("jd")}, "JD Assistant"),
-        h("button", {type: "button", "aria-pressed": mode === "cv", onClick: () => onChange("cv")}, "Candidate Screening"))));
+        h("button", {type: "button", "aria-pressed": mode === "cv", onClick: () => onChange("cv")}, "Candidate Screening"),
+        h("button", {type: "button", "aria-pressed": mode === "scheduling", onClick: () => onChange("scheduling")}, "Interview Scheduling"))));
 }
 
 export function ScreeningWorkflowSteps({hasSuggestions, hasSnapshot, hasBatch, isScreened}: {
