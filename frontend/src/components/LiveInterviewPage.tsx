@@ -19,10 +19,14 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   const [remoteMuted,setRemoteMuted]=useState(false);const [remoteCameraOff,setRemoteCameraOff]=useState(false);
   const local=useRef<HTMLDivElement>(null);const remote=useRef<HTMLDivElement>(null);
   const room=useRef<Room|null>(null);const generation=useRef(0);
+  const captionFinalizer=useRef<(()=>Promise<void>)|null>(null);
+  const leaving=useRef(false);
   const media=useRef<ReturnType<typeof syntheticInterviewMedia>|null>(null);
   function stopMedia() {media.current?.dispose();media.current=null;local.current?.replaceChildren();remote.current?.replaceChildren();}
-  async function leave() {generation.current++;const active=room.current;room.current=null;
-    stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Left interview");try {await active?.disconnect(true);} catch {}}
+  async function leave(normal=false) {
+    if(normal){if(leaving.current)return;leaving.current=true;setBusy(true);await captionFinalizer.current?.();}
+    generation.current++;const active=room.current;room.current=null;
+    stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Left interview");try {await active?.disconnect(true);} catch {}finally{leaving.current=false;}}
   useEffect(()=>()=>{generation.current++;const active=room.current;room.current=null;stopMedia();void active?.disconnect(true).catch(()=>{});},[jobId,interview?.id]);
   useEffect(()=>{if(!joined)return;let cancelled=false;const current=generation.current;const check=()=>{
     if(candidate)void candidateStatus().catch(()=>{if(!cancelled && current===generation.current){void leave();setError("Interview access ended or was revoked.");}});
@@ -93,10 +97,10 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     <button className="button button-primary" onClick={()=>void join()} disabled={!confirmed || busy || joined}>Join interview</button>
     <button className="button button-secondary" onClick={()=>void toggle("microphone")} disabled={!joined || busy}>{muted?"Unmute microphone":"Mute microphone"}</button>
     <button className="button button-secondary" onClick={()=>void toggle("camera")} disabled={!joined || busy}>{cameraOff?"Turn camera on":"Turn camera off"}</button>
-    <button className="button button-secondary" onClick={()=>void leave()} disabled={!joined && !busy}>Leave interview</button>
+    <button className="button button-secondary" onClick={()=>void leave(true)} disabled={(!joined && !busy) || leaving.current}>Leave interview</button>
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
-    <InterviewCaptions connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted}
+    <InterviewCaptions connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
     <button className="button button-secondary" onClick={onBack}>Back to screening</button>

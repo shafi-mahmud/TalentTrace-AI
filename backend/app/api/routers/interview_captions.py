@@ -1,5 +1,6 @@
 """Authenticated temporary microphone bridge; never calls a cloud STT provider."""
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 import time
 from uuid import UUID
@@ -60,6 +61,10 @@ async def serve(socket, job_id=None, interview_id=None):
         session.authorization_deadline = min(session.authorization_deadline, deadline) if session.authorization_deadline is not None else deadline
         await socket.accept()
         await session.connect(role, socket.send_json)
+        async def check_authorization():
+            if await authorize(socket, job_id, interview_id) != association:
+                raise ValueError('Access changed')
+        session.authorization_checks[role] = check_authorization
         await socket.send_json({"kind": "waiting"})
 
         async def watch():
@@ -96,7 +101,8 @@ async def serve(socket, job_id=None, interview_id=None):
             if message["type"] == "websocket.disconnect":
                 break
             if message.get("bytes") is not None:
-                if len(message["bytes"]) != 3200:
+                if (not 0 < len(message["bytes"]) <= 3200 or len(message["bytes"]) % 2
+                        or (len(message["bytes"]) != 3200 and not session.finishing)):
                     raise ValueError("Invalid PCM frame")
                 tasks = {t for t in tasks if not t.done()}
                 if len(tasks) >= 2:
@@ -107,6 +113,14 @@ async def serve(socket, job_id=None, interview_id=None):
                 await asyncio.sleep(0)
             elif message.get("text") == "stop":
                 break
+            elif message.get("text") == "finish":
+                await check_authorization()
+                await session.request_finish(role)
+            elif message.get("text", '').startswith('{'):
+                if len(message['text']) > 200:
+                    raise ValueError('Unbounded control')
+                await check_authorization()
+                await session.end_audio(role, json.loads(message['text']))
             elif message.get("text") == "consent":
                 now = session.clock()
                 if now - last_control < 1:
@@ -121,6 +135,7 @@ async def serve(socket, job_id=None, interview_id=None):
         if session and socket.send_json in session.peers.values():
             await session.stop()
             session.peers.pop(role, None)
+            session.authorization_checks.pop(role, None)
             if not session.peers:
                 sessions.pop(key, None)
         if monitor:
@@ -128,6 +143,8 @@ async def serve(socket, job_id=None, interview_id=None):
         for task in tasks:
             task.cancel()
         await asyncio.gather(*(tasks | ({monitor} if monitor else set())), return_exceptions=True)
+        if session and session.finalizer:
+            await asyncio.gather(session.finalizer, return_exceptions=True)
         try:
             await socket.close()
         except RuntimeError:

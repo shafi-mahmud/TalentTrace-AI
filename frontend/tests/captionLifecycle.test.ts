@@ -4,11 +4,12 @@ import {readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import {runInNewContext} from "node:vm";
 import ts from "typescript";
-import {isCaption} from "../src/api/captions.ts";
+import {isCaption,isFinalization} from "../src/api/captions.ts";
 
 // Exercise production handlers with controlled hooks/browser APIs, no media/network.
 function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspended?:boolean}={}) {
-  const states:any[]=[],refs:any[]=[],effects:any[]=[],sockets:any[]=[],audios:any[]=[],worklets:any[]=[];
+  const states:any[]=[],refs:any[]=[],effects:any[]=[],sockets:any[]=[],audios:any[]=[],worklets:any[]=[],timers=new Map<number,{callback:()=>void;ms:number}>();
+  const finalizerRef:{current:(()=>Promise<void>)|null}={current:null};let timerId=100;
   let stateIndex=0,refIndex=0,finishModule=()=>{},finishResume=()=>{};
   const moduleReady=options.pendingModule?new Promise<void>(r=>{finishModule=r;}):Promise.resolve();
   const resumeReady=options.pendingResume?new Promise<void>(r=>{finishResume=r;}):Promise.resolve();
@@ -37,11 +38,11 @@ function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspende
     {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText
     .replaceAll("import.meta.url",JSON.stringify(new URL("../src/components/InterviewCaptions.tsx",import.meta.url).href));
   const exports:any={},require=createRequire(import.meta.url);
-  runInNewContext(compiled,{exports,require:(n:string)=>n==="react"?hooks:n==="../api/captions"?{captionUrl:()=>"ws://synthetic.test",isCaption}:require(n),
-    URL,AudioContext:Audio,MediaStream:class{},AudioWorkletNode:class{port:any={onmessage:null};constructor(){worklets.push(this);}connect(){}},WebSocket:Socket,
-    setTimeout:()=>1,clearTimeout(){},setInterval:()=>2,clearInterval(){}});
+  runInNewContext(compiled,{exports,require:(n:string)=>n==="react"?hooks:n==="../api/captions"?{captionUrl:()=>"ws://synthetic.test",isCaption,isFinalization}:require(n),
+    URL,AudioContext:Audio,MediaStream:class{},AudioWorkletNode:class{port:any={onmessage:null,sent:[],postMessage(v:any){this.sent.push(v);}};constructor(){worklets.push(this);}connect(){}},WebSocket:Socket,
+    setTimeout:(callback:()=>void,ms:number)=>{const id=++timerId;timers.set(id,{callback,ms});return id;},clearTimeout:(id:number)=>timers.delete(id),setInterval:()=>2,clearInterval(){}});
   let microphoneMuted=false;
-  function render(){stateIndex=0;refIndex=0;return exports.default({connected:true,candidate:true,microphone:()=>track,microphoneMuted});}
+  function render(){stateIndex=0;refIndex=0;return exports.default({connected:true,candidate:true,microphone:()=>track,microphoneMuted,finalizerRef});}
   function find(node:any,p:(n:any)=>boolean):any {
     if(!node || typeof node!=="object")return null;if(p(node))return node;
     for(const child of [node.props?.children].flat(Infinity)){const found=find(child,p);if(found)return found;}return null;
@@ -50,7 +51,7 @@ function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspende
   function consent(){let tree=render();find(tree,n=>n.type==="input").props.onChange({target:{checked:true}});tree=render();
     find(tree,n=>n.type==="button" && n.props.children==="Consent to captions").props.onClick();const ws=sockets.at(-1);ws.onopen();return ws;}
   async function flush(){for(let i=0;i<12;i++)await Promise.resolve();}
-  return {states,track,audios,worklets,setMuted:(v:boolean)=>{microphoneMuted=v;return render();},cleanup,consent,flush,event:(ws:any,v:any)=>ws.onmessage({data:JSON.stringify(v)}),finishModule:()=>finishModule(),finishResume:()=>finishResume()};
+  return {states,track,audios,worklets,setMuted:(v:boolean)=>{microphoneMuted=v;return render();},cleanup,consent,flush,event:(ws:any,v:any)=>ws.onmessage({data:JSON.stringify(v)}),finishModule:()=>finishModule(),finishResume:()=>finishResume(),finish:()=>finalizerRef.current!(),timeout:(ms:number)=>{const t=[...timers.values()].find(t=>t.ms===ms);assert.ok(t);t.callback();}};
 }
 
 test("Live status requires running AudioContext; unexpected closure ends captions without stopping microphone",async()=>{
@@ -103,4 +104,51 @@ test("five-minute test uses server bounds and cleanup preserves the interview tr
   assert.equal(h.track.readyState,"live");assert.equal(h.audios[0].state,"closed");
   const bad=harness(),other=bad.consent();bad.event(other,{kind:"active",duration_seconds:301});await bad.flush();
   assert.equal(other.readyState,3);assert.equal(bad.audios.length,0);
+});
+
+test("normal finish flushes residual PCM, waits for ACK and terminal result before closing",async()=>{
+  const h=harness(),ws=h.consent();h.event(ws,{kind:"active"});await h.flush();
+  h.worklets[0].port.onmessage({data:new ArrayBuffer(3200)});
+  let resolved=false;const pending=h.finish().then(()=>{resolved=true;});
+  assert.equal(ws.sent.at(-1),"finish");assert.equal(ws.readyState,1);
+  h.event(ws,{kind:"finishing",deadline_seconds:35});
+  assert.equal(h.worklets[0].port.sent.at(-1).kind,"flush");
+  h.worklets[0].port.onmessage({data:new ArrayBuffer(100)});
+  h.worklets[0].port.onmessage({data:{kind:"flushed",captured_samples:1650}});
+  assert.deepEqual(JSON.parse(ws.sent.at(-1)),{kind:"end",frames:2,samples:1650,captured_samples:1650});
+  assert.equal(h.audios[0].state,"closed");assert.equal(ws.readyState,1);assert.equal(resolved,false);
+  h.event(ws,{kind:"accepted",frames:2,samples:1650});
+  h.event(ws,{kind:"caption",role:"candidate",sequence:1,start:0,end:.11,text:"Synthetic tail"});
+  assert.equal(h.states[2].length,1);
+  const empty={accepted_frames:0,accepted_samples:0,processed_samples:0,caption_events:0,captured_samples:0};
+  h.event(ws,{kind:"finalized",outcome:"drained",roles:{recruiter:empty,candidate:{accepted_frames:2,accepted_samples:1650,processed_samples:1650,caption_events:1,captured_samples:1650}}});
+  assert.equal(ws.readyState,1);assert.equal(resolved,false);
+  h.event(ws,{kind:"stopped"});
+  await pending;assert.equal(resolved,true);assert.equal(ws.readyState,3);
+  assert.match(h.states[1],/Finalization: drained/);assert.equal(h.states[2].length,0);
+  assert.equal(h.track.readyState,"live");assert.equal(h.track.enabled,true);
+});
+
+test("duplicate normal finish shares one request and withdrawal aborts instead of flushing",async()=>{
+  const h=harness(),ws=h.consent();h.event(ws,{kind:"active"});await h.flush();
+  const a=h.finish(),b=h.finish();assert.equal(a,b);assert.equal(ws.sent.filter((s:any)=>s==="finish").length,1);
+  h.cleanup();await a;assert.equal(ws.sent.at(-1),"stop");
+  assert.ok(!h.worklets[0].port.sent.some((v:any)=>v.kind==="flush"));
+});
+
+test("missing worklet flush and uncertain server response are bounded without retry",async()=>{
+  for(const timeout of [2000,40000]){
+    const h=harness(),ws=h.consent();h.event(ws,{kind:"active"});await h.flush();
+    const pending=h.finish();h.event(ws,{kind:"finishing",deadline_seconds:35});
+    h.timeout(timeout);await pending;
+    assert.equal(ws.readyState,3);assert.match(h.states[1],/incomplete|unconfirmed/);
+    assert.equal(ws.sent.filter((v:any)=>v==="finish").length,1);
+  }
+});
+
+test("network interruption while finishing resolves leave and stops capture",async()=>{
+  const h=harness(),ws=h.consent();h.event(ws,{kind:"active"});await h.flush();
+  const pending=h.finish();h.event(ws,{kind:"finishing",deadline_seconds:35});ws.onclose();await pending;
+  assert.equal(h.audios[0].state,"closed");assert.equal(h.track.readyState,"live");
+  assert.ok(!h.states[1].includes("drained"));
 });

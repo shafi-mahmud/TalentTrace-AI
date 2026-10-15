@@ -502,3 +502,70 @@ credential readiness regression; that guard is verified separately. 145 frontend
 production build/type checking, compilation and diff checks passed. Transport tests are
 fake-only. SMTP accepted/uncertain delivery semantics and duplicate suppression were
 verified on disposable PostgreSQL. No real messages or demo-schema changes occurred.
+
+
+## Graceful accepted-audio finalization (15 October 2026)
+
+Implemented in feature/f4-graceful-finalization, based on e0c859e. The
+original F4 runtime is not activated or changed by this increment.
+
+Explicit normal completion uses this bounded exchange:
+
+1. Finish captions normally, or normal Leave, sends `finish`.
+2. The server sends `finishing` to both consented participants.
+3. Each AudioWorklet stops capture and flushes its final PCM fragment. Each
+   browser sends `end` with forwarded frame/sample counts and observed samples.
+4. The server checks those counts against accepted audio and sends `accepted`.
+5. Existing in-flight and pending full chunks finish. Each role's worker then
+   processes its remaining partial chunk, without padding or invented speech.
+6. Final caption events precede `finalized`, worker cleanup and `stopped`.
+   The frontend keeps the socket and heartbeat alive until shutdown; normal
+   interview Leave waits for that exchange before disconnecting LiveKit.
+
+The existing six-field caption event remains unchanged. Regular frames remain
+3200 bytes (100 ms, mono PCM16, 16 kHz). Only while finishing, one terminal
+2-3198 byte even-length fragment is allowed per role. Audio after that fragment
+or the role's end marker is rejected. Ordered WebSocket delivery plus terminal
+count acknowledgements apply to this connection only; there are no replay IDs,
+reconnect recovery or proof of frames that never reached the server.
+
+In-memory accounting distinguishes browser-observed samples (client-reported,
+including muted observations), actually forwarded samples, backend-accepted
+samples, STT-processed samples and emitted caption-event counts. Silence can
+be processed successfully without a caption. Emission does not prove a human
+read the text. `drained` requires both end markers and every accepted sample
+processed. It does not certify every spoken word or full-interview completeness.
+
+Finalization has a 35-second server deadline. The existing 15-second recognition
+request timeout remains unchanged. Provider cleanup is bounded to two seconds
+per worker and outbound sends to one second per peer. Browser flush is bounded
+to two seconds and its entire wait to 40 seconds. Duplicate finish/end messages
+do not extend deadlines. Authentication, invitation expiry and the existing
+120-second default (bounded isolated-test maximum 300 seconds) still take
+precedence. One active and one pending four-second chunk per role, two router
+dispatch tasks per socket and the existing 25-message/second bound remain.
+End controls are limited to 200 characters.
+
+Consent withdrawal, legacy stop, authorization loss, capture failure, overflow,
+forced termination and network disconnect still immediately close the consent
+gate, discard queued buffers and close workers. They never initiate a drain.
+Shared shielded cleanup avoids abandoning cleanup when a caller is cancelled.
+Authorization is rechecked for finish/end and final-phase emissions/completion,
+in addition to the existing periodic check. Late output after stop is suppressed.
+If normal finishing cannot drain, its outcome is `partial` when some accepted
+samples were processed, otherwise `failed`. Missing or inconsistent terminal
+messages are unconfirmed; there is no automatic retry.
+
+Consent wording is unchanged: stopping clears visible captions. No raw audio
+or transcript is saved, and this increment provides no durable transcript or
+crash recovery. LiveKit transport, tiny.en and capture consent are unchanged.
+No transcript migration, recording, Moonshine or evaluation is activated.
+
+Validation uses synthetic PCM and mocked workers: empty/full/residual chunks,
+sub-100-ms browser tails, parallel role streams, pending/in-flight recognition,
+duplicate controls, silence, deadlines, worker errors, withdrawal, authorization
+loss, overflow, disconnect and frontend Leave waiting. Physical microphone
+normal-finalization behavior is not live verified by these tests.
+
+Recommended next increment: separately authorized transcript persistence with
+its own consent and retention design. It has not been started here.
