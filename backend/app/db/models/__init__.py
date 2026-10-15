@@ -2,5 +2,6 @@
 
 from app.db.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.db.models.recruiter import Recruiter, RecruiterSession, RecruiterConversation, ChatTurn, JobProfile
+from app.db.models.interview_transcript import InterviewTranscriptSession, InterviewTranscriptTurn
 
-__all__ = ["KnowledgeDocument", "KnowledgeChunk"]
+__all__ = ["KnowledgeDocument", "KnowledgeChunk", "InterviewTranscriptSession", "InterviewTranscriptTurn"]
