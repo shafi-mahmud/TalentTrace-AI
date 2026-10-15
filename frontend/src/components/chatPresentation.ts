@@ -15,7 +15,7 @@ export function replyToChatMessage(reply: RecruiterChatResponse): ChatMessage {
 }
 
 export function RecruiterChatPage({ children }: { children: ReactNode }) {
-  return h("div", { className: "app-shell chat-page" },
+  return h("div", { className: "app-shell chat-page jd-page" },
     h("main", null,
       h("div", { className: "page-intro" },
         h("h1", null, "Job description assistant"),
@@ -23,8 +23,14 @@ export function RecruiterChatPage({ children }: { children: ReactNode }) {
       h("aside", { className: "chat-policy-source", "aria-label": "Company Policy Knowledge Source" },
         h("span", { className: "demo-badge" }, "Demo policy source"),
         h("span", null, "Synthetic Demo Company Policy"),
-        h("span", null, "Server-side grounding · Semantic BGE + pgvector")),
+        h("details", {className:"supporting-details"},h("summary",null,"How it works"),
+          h("p",null,"Server-side grounding · Semantic BGE + pgvector. Review generated content and its policy citations before publishing."))),
       children));
+}
+
+export function EmptyConversation() {
+  return h("div",{className:"chat-empty"},h("h3",null,"What role are you hiring for?"),
+    h("p",null,"Describe the role and required skills, or load the synthetic demo to get started."));
 }
 
 function resultList(title: string, items: string[], skills = false) {

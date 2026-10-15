@@ -180,17 +180,19 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
 
   return <div className="app-shell chat-page recruiter-page screening-page">
     <main>
-      <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>Candidate Screening Workspace</h1><p className="page-description">Set up job criteria and a CV batch in either order, then review evidence-backed screening results.</p></div>
+      <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>Candidate Screening</h1><p className="page-description">Review requirements, screen CVs and select candidates. Set up criteria or upload files in either order.</p></div>
       <button className="button button-secondary" onClick={() => onGoToScheduling()}>Go to Interview Scheduling</button>
       <ScreeningWorkflowSteps hasSuggestions={Boolean(criteriaDraft)} hasSnapshot={Boolean(snapshot)} hasBatch={Boolean(result)} isScreened={Boolean(screening)} />
       <section className="screening-setup" aria-label="Candidate screening workspace">
-        <div className="field"><label htmlFor="cv-job-reference">Job Reference</label>
+        <details className="supporting-details job-reference-details" open={!criteriaDraft?.jobReference}><summary>Job reference</summary><div className="field"><label htmlFor="cv-job-reference">Job Reference</label>
           <input id="cv-job-reference" value={reference} readOnly={Boolean(criteriaDraft?.jobReference)} maxLength={23} required placeholder="Create or select a job first" onChange={event => {
             setReference(event.target.value); invalidateCriteria(); changeReviewed(false); setError(""); setSetupError("");
           }} />
           <p className="helper-text">This reference belongs to the active saved job. Requirements must be confirmed before screening.</p>
         </div>
-        {criteriaDraft?.jobReference && <p role="status" className="helper-text">{criteriaSaveStatus(criteriaDraft)}</p>}
+        </details>
+        {criteriaDraft?.jobReference && !criteriaDraft.reviewed && <p role="status" className="helper-text">{criteriaSaveStatus(criteriaDraft)}</p>}
+        <details className="stage-disclosure criteria-stage" open={!criteriaDraft?.reviewed}><summary>{criteriaDraft?.reviewed ? `Requirements confirmed · ${criteriaDraft.criteria.length} ${criteriaDraft.criteria.length === 1 ? "requirement" : "requirements"} · review or edit` : "Job requirements · review and confirm"}</summary>
         {criteriaDraft && <ScoringWeightsEditor weights={weights} disabled={busy} reviewed={criteriaDraft.reviewed}
           onChange={value => {setWeights(value); invalidateCriteria(); changeReviewed(false);}} />}
         {criteriaDraft ? <ScreeningCriteriaReview suggestions={criteriaDraft.suggestions} criteria={criteriaDraft.criteria} sources={criteriaDraft.sources}
@@ -208,9 +210,10 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
               <button className="button button-primary" type="submit" disabled={busy}>Add screening criteria</button>
             </form>
           </section>}
-        {snapshot && <p role="status" className="session-confirmation">Requirements saved and confirmed for <strong>{snapshot.job_reference}</strong></p>}
+        </details>
         <section className="card cv-intake-card" aria-label="Candidate CV upload">
-          <h2>Upload candidate CVs</h2>
+          {error && <div className="error-banner" role="alert">{error}</div>}
+          <details className="stage-disclosure upload-stage" open={!result}><summary>{result ? `${result.accepted_count} CVs uploaded · choose another batch` : "Upload candidate CVs"}</summary>
         <form onSubmit={submit}>
           <fieldset disabled={busy}>
             <legend className="sr-only">Candidate CV upload</legend>
@@ -223,11 +226,12 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
             </div>
             <SelectedCvFiles files={files} disabled={busy} onRemove={index => {setFiles(previous => previous.filter((_, i) => i !== index)); setError("");}} />
           </fieldset>
-          {error && <div className="error-banner" role="alert">{error}</div>}
           <button className="button button-primary" type="submit" disabled={busy}>{loading ? "Uploading CVs…" : "Upload CVs"}</button>
           {loading && <p role="status">Validating and storing your batch…</p>}
-          <p className="form-note">Trusted local demo. Profile extraction sends CV-derived text to Groq. Synthetic/sample CVs only. CV data is not sent to JD, RAG or MCP.</p>
+          <p className="form-note">Synthetic/sample CVs only. Profile extraction sends CV-derived text to Groq.</p>
+          <details className="supporting-details"><summary>How screening works</summary><p>Files are stored privately. CV data is not sent to JD, RAG or MCP. Review extracted evidence before making hiring decisions.</p></details>
         </form>
+        </details>
         {result && <CvUploadConfirmation result={result} onExtract={processingOcr || parsing || screeningBusy ? undefined : extract} extracting={extracting} />}
         {extraction && <CvExtractionSummary result={extraction} onOcr={runOcr} processingOcr={processingOcr} disabled={busy} />}
         {ocr && <CvOcrSummary result={ocr} />}

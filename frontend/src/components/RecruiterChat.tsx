@@ -4,7 +4,7 @@ import { isValidRecruiterMessage, RecruiterChatRequestError, sendRecruiterMessag
 import { publishDraft } from "../api/jobPublishing";
 import { listConversations, loadConversation } from "../api/jobs";
 import type { ChatMessage, WorkingCriteriaDraft } from "../types/recruiterChat";
-import { ChatMessageView, replyToChatMessage } from "./chatPresentation";
+import { ChatMessageView, EmptyConversation, replyToChatMessage } from "./chatPresentation";
 import { initialRecruiterChatState, recruiterChatReducer } from "../state/recruiterChatState";
 
 const DEMO_INSTRUCTION = "Create a Backend AI Engineer JD for a team building FastAPI services. Responsibilities include building APIs and automated tests. Required skills are Python, FastAPI and PostgreSQL. No minimum experience required.";
@@ -141,12 +141,12 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     onNewChat();
   }
 
-  return <section className="card chat-card" aria-labelledby="chat-title">
+  return <section className={`card chat-card ${messages.length ? "has-messages" : "is-empty"}`} aria-labelledby="chat-title">
     <label className="saved-conversation">Saved conversations<select value={conversationId ?? ""} disabled={sending || restoring || publishingBusy} onChange={e => void restore(e.target.value)}>
       <option value="">Choose a conversation</option>{conversations.map((row, index) => <option key={row.id} value={row.id}>Conversation {index + 1} · {new Date(row.expires_at).toLocaleString()}</option>)}
     </select></label>
     <div className="card-header">
-      <div><h2 id="chat-title">Recruiter chatbot</h2><p>Share requirements over a few messages. I’ll ask about anything missing.</p></div>
+      <div><h2 id="chat-title">Create a job description</h2></div>
       <div className="chat-header-actions">
         <button type="button" className="button button-secondary" disabled={sending || restoring || publishingBusy} onClick={() => {dispatch({type: "input_changed", value: DEMO_INSTRUCTION});}}>Load demo</button>
         <button type="button" className="button button-secondary" disabled={sending || restoring || publishingBusy} onClick={startNewChat}>New chat</button>
@@ -161,7 +161,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
           onContinue={draft ? () => onContinueToCv(draft.draftId) : undefined}
           onPublish={() => void publish(index)} onRevise={() => revise(message)}
           onRetry={message.localMessageId ? () => retryMessage(message.localMessageId!) : undefined} actionsDisabled={sending || restoring || publishingBusy} />;
-      }) : <p className="helper-text">Start with a job title and purpose. I’ll gather responsibilities, skills and the experience requirement before drafting.</p>}
+      }) : <EmptyConversation />}
       {sending && <p role="status">Checking the requirements you shared…</p>}
     </div>
     <form className="chat-composer" onSubmit={submit}>
@@ -170,7 +170,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
         <textarea ref={composer} id="chat-message" rows={3} maxLength={4000} value={input} disabled={sending || restoring || publishingBusy}
           onChange={event => dispatch({type: "input_changed", value: event.target.value})} placeholder={DEMO_INSTRUCTION}
           aria-describedby="chat-help" required />
-        <p className="helper-text" id="chat-help">Sent messages stay in the conversation. New answers add to the same session.</p>
+        <p className="sr-only" id="chat-help">Sent messages stay in the conversation. New answers add to the same session.</p>
       </div>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <button type="submit" className="button button-primary" disabled={sending || restoring || publishingBusy}>{restoring ? "Restoring conversation…" : sending ? "Checking details…" : "Send message"}</button>
