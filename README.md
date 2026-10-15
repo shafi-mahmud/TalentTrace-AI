@@ -13,3 +13,4 @@
 * [Work Breakdown Structure (P1.3)](docs/wbs.md) *(In progress)*
 * [High-Level Architecture (P1.4)](docs/architecture.md) *(In progress)*
 * [Risk Register (P1.5)](docs/risk_register.md) *(In progress)*
+* [Application counts and notifications](docs/application_notifications.md) — trainer-requested; implemented and tested in the feature branch, pending demo migration/browser activation.

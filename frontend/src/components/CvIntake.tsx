@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { uploadCvs, validateCvSelection } from "../api/cvUploads";
 import type { CvUploadResponse } from "../types/cvUpload";
+import ApplicationNotifications from "./ApplicationNotifications";
 import type { CvExtractionResponse } from "../types/cvExtraction";
 import { extractCvs } from "../api/cvExtraction";
 import { runCvOcr } from "../api/cvOcr";
@@ -184,6 +185,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
       <button className="button button-secondary" onClick={() => onGoToScheduling()}>Go to Interview Scheduling</button>
       <ScreeningWorkflowSteps hasSuggestions={Boolean(criteriaDraft)} hasSnapshot={Boolean(snapshot)} hasBatch={Boolean(result)} isScreened={Boolean(screening)} />
       <section className="screening-setup" aria-label="Candidate screening workspace">
+        {criteriaDraft?.draftId && <ApplicationNotifications key={criteriaDraft.draftId} jobId={criteriaDraft.draftId} refreshKey={result?.batch_id} />}
         <details className="supporting-details job-reference-details" open={!criteriaDraft?.jobReference}><summary>Job reference</summary><div className="field"><label htmlFor="cv-job-reference">Job Reference</label>
           <input id="cv-job-reference" value={reference} readOnly={Boolean(criteriaDraft?.jobReference)} maxLength={23} required placeholder="Create or select a job first" onChange={event => {
             setReference(event.target.value); invalidateCriteria(); changeReviewed(false); setError(""); setSetupError("");
