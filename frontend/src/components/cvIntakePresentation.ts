@@ -1,4 +1,5 @@
 import { createElement as h } from "react";
+import type {ReactNode} from "react";
 import type { CvUploadResponse } from "../types/cvUpload";
 import type { CvExtractionResponse } from "../types/cvExtraction";
 import type { CvOcrResponse } from "../types/cvOcr";
@@ -29,7 +30,7 @@ export function screeningPrerequisiteMessage({busy, hasSuggestions, hasBatch, ha
   return null;
 }
 
-export function WorkspaceNavigation({mode, onChange}: {mode: WorkspaceMode; onChange: (mode: WorkspaceMode) => void}) {
+export function WorkspaceNavigation({mode, onChange, accountControls}: {mode: WorkspaceMode; onChange: (mode: WorkspaceMode) => void; accountControls?:ReactNode}) {
   return h("header", {className: "app-topbar"},
     h("div", {className: "app-topbar-inner"},
       h("a", {className: "brand", href: "/", "aria-label": "TalentTrace AI home"},
@@ -38,7 +39,8 @@ export function WorkspaceNavigation({mode, onChange}: {mode: WorkspaceMode; onCh
       h("nav", {className: "workspace-modes", "aria-label": "Recruiter workspace views"},
         h("button", {type: "button", "aria-pressed": mode === "jd", onClick: () => onChange("jd")}, "JD Assistant"),
         h("button", {type: "button", "aria-pressed": mode === "cv", onClick: () => onChange("cv")}, "Candidate Screening"),
-        h("button", {type: "button", "aria-pressed": mode === "scheduling", onClick: () => onChange("scheduling")}, "Interview Scheduling"))));
+        h("button", {type: "button", "aria-pressed": mode === "scheduling", onClick: () => onChange("scheduling")}, "Interview Scheduling")),
+      h("div",{className:"header-account"},accountControls)));
 }
 
 export function ScreeningWorkflowSteps({hasSuggestions, hasSnapshot, hasBatch, isScreened}: {

@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { takeInvitation } from "./api/livekitInterview";
 import "./index.css";
+import "./design-system.css";
 
 
 // Capture once outside StrictMode's repeated initialization, never in storage.

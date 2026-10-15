@@ -1,9 +1,10 @@
+import RecruiterAccountMenu from "./RecruiterAccountMenu";
 import { useEffect, useState } from "react";
 import type { ReactNode, FormEvent } from "react";
 import { account, signIn, signOut, SignInRateLimitError } from "../api/session";
 import type { RecruiterAccount } from "../api/session";
 
-export default function RecruiterSignIn({children}: {children: ReactNode | ((user: RecruiterAccount) => ReactNode)}) {
+export default function RecruiterSignIn({children}: {children: (user: RecruiterAccount, accountControls: ReactNode) => ReactNode}) {
   const [user, setUser] = useState<RecruiterAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
@@ -42,12 +43,13 @@ export default function RecruiterSignIn({children}: {children: ReactNode | ((use
     }
     finally {setLoading(false);}
   }
-  if (user) return <div key={user.id}>
-    <div className="account-bar"><span>Signed in as {user.email}</span><button className="button button-secondary" disabled={loading} onClick={() => {
+  if (user) return <div key={user.id}>{children(user,
+    <RecruiterAccountMenu email={user.email} busy={loading} error={error} onSignOut={() => {
+      if (loading) return;
       setLoading(true); setError("");
       void signOut().then(() => setUser(null)).catch(() => setError("Sign-out was not confirmed.")).finally(() => setLoading(false));
-    }}>Sign out</button>{error && <p role="alert">{error}</p>}</div>{typeof children === "function" ? children(user) : children}
-  </div>;
+    }} />
+  )}</div>;
   return <main className="app-shell"><section className="card"><h1>Sign in to TalentTrace AI</h1>
     <p>Your jobs and conversations belong to your recruiter account.</p>
     <form onSubmit={submit}><div className="field"><label htmlFor="recruiter-email">Email</label><input id="recruiter-email" type="email" autoComplete="username" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} required /></div>

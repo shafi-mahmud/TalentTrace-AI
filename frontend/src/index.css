@@ -393,7 +393,6 @@ body { background: var(--page); color: var(--ink); }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
 
-.account-bar,
 .active-job-bar {
   display: flex;
   flex-wrap: wrap;
@@ -495,14 +494,12 @@ body { background: var(--page); color: var(--ink); }
 .workspace-modes { flex-wrap: wrap; gap: 6px; }
 .workspace-modes button { font-size: 15px; min-height: 42px; }
 .app-topbar-inner { min-height: 64px; padding-top: 8px; padding-bottom: 8px; }
-.account-bar { font-size: 14px; margin: 0 auto; padding: 8px 28px; }
-.account-bar .button { font-size: 14px; padding: 7px 12px; min-height: 36px; }
 .active-job-bar { max-width: 1280px; margin: 0 auto; padding: 12px 28px 0; }
 .active-job-bar label { font-size: 14px; margin: 0; }
 .active-job-bar select, .active-job-bar .button { font-size: 15px; min-height: 42px; }
 @media(max-width:760px) {
   :is(.jd-page, .recruiter-page) { padding: 0 16px; }
-  .account-bar, .active-job-bar { padding-left: 16px; padding-right: 16px; }
+  .active-job-bar { padding-left: 16px; padding-right: 16px; }
   .active-job-bar { gap: 8px; }
   .active-job-bar label { flex-basis: 100%; }
   .recruiter-page .card { padding: 16px; }

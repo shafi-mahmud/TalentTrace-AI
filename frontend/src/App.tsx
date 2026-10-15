@@ -3,6 +3,7 @@ import type {InterviewSelection} from './components/SavedScores';
 import {workspaceModeFromHash, workspaceHash} from './state/workspaceNavigation';
 import CandidateScheduling from './components/CandidateScheduling';
 import { lazy, Suspense, useEffect, useReducer, useRef, useState } from "react";
+import type {ReactNode} from "react";
 import RecruiterSignIn from "./components/RecruiterSignIn";
 import { listJobs, workingJob } from "./api/jobs";
 import type { SavedJob } from "./api/jobs";
@@ -16,7 +17,7 @@ import type { Interview } from "./api/interviews";
 import { WorkspaceNavigation } from "./components/cvIntakePresentation";
 import { initialRecruiterWorkspaceState, recruiterWorkspaceReducer, restoreActiveJob, rememberActiveJob } from "./state/recruiterWorkspace";
 
-function Workspace({recruiterId}: {recruiterId: string}) {
+function Workspace({recruiterId,accountControls}: {recruiterId: string;accountControls:ReactNode}) {
   const [schedulingVisited,setSchedulingVisited]=useState(()=>workspaceModeFromHash(window.location.hash)==="scheduling");
   const [selection,setSelection]=useState<InterviewSelection|null>(null);
   const [liveInterview,setLiveInterview]=useState<Interview|null>(null);
@@ -52,8 +53,8 @@ function Workspace({recruiterId}: {recruiterId: string}) {
   const activeDraft = activeDraftId ? drafts[activeDraftId] ?? null : null;
   useEffect(()=>{setLiveInterview(current=>current && current.job_id!==activeDraftId ? null:current);},[activeDraftId]);
   return <>
-    <WorkspaceNavigation mode={mode} onChange={changeMode} />
-    <div className="active-job-bar"><label>Active job<select value={activeDraftId ?? ""} onChange={event => {
+    <WorkspaceNavigation mode={mode} onChange={changeMode} accountControls={accountControls} />
+    {(mode!=="jd" || Boolean(liveInterview)) && <div className="active-job-bar"><label>Active job<select value={activeDraftId ?? ""} onChange={event => {
       setLiveInterview(null);
       const job = savedJobs.find(job => job.id === event.target.value);
       if (job) dispatch({type: "draft_generated", draft: workingJob(job)});
@@ -62,7 +63,7 @@ function Workspace({recruiterId}: {recruiterId: string}) {
       <button className="button button-secondary" onClick={() => {
         if (!activeDraft || window.confirm("Reload saved requirements? Unsaved edits will be replaced.")) refreshJobs(true);
       }}>Reload saved jobs</button>{jobError && <p role="alert">{jobError}</p>}
-    </div>
+    </div>}
     {liveInterview && liveInterview.job_id===activeDraftId && <Suspense fallback={<p role="status">Loading interview page…</p>}><LiveInterviewPage jobId={liveInterview.job_id} interview={liveInterview} onBack={()=>setLiveInterview(null)} /></Suspense>}
     <div hidden={Boolean(liveInterview) || mode !== "jd"}><RecruiterChatPage><RecruiterChat drafts={drafts}
       onDraftGenerated={draft => {dispatch({type: "draft_generated", draft}); refreshJobs();}}
@@ -88,5 +89,5 @@ export default function App({initialInvitation=null}:{initialInvitation?:string|
   }};window.addEventListener("hashchange",changed);return()=>window.removeEventListener("hashchange",changed);},[]);
   if(window.location.pathname==="/interview-schedule")return <CandidateScheduling />;
   if(window.location.pathname==="/interview-join")return <CandidateInterview key={invitationContext.revision} initialToken={invitationContext.token} />;
-  return <RecruiterSignIn>{user => <Workspace recruiterId={user.id} />}</RecruiterSignIn>;
+  return <RecruiterSignIn>{(user,accountControls) => <Workspace recruiterId={user.id} accountControls={accountControls} />}</RecruiterSignIn>;
 }
