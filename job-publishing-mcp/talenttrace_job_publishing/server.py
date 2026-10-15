@@ -1,4 +1,4 @@
-"""Standalone stdio MCP server; one publishing tool, no FastAPI or LangGraph."""
+"""Standalone MCP server: Discord publishing and offline LinkedIn preparation."""
 
 from mcp.server import MCPServer
 from mcp.server.context import CallNext, HandlerResult, ServerRequestContext
@@ -8,7 +8,8 @@ from pydantic import ValidationError
 
 from .config import PublishingConfigurationError, load_settings
 from .publishers.discord import DiscordPublisher, PublicationError
-from .schemas import JobCircular, PublishJobResult
+from .schemas import JobCircular, PublishJobResult, LinkedInPreparation
+from .publishers.linkedin import LinkedInPublisher
 
 
 async def validate_publication_arguments(
@@ -16,7 +17,7 @@ async def validate_publication_arguments(
 ) -> HandlerResult:
     # The SDK's generated argument wrapper may echo invalid input. Validate first
     # and return a fixed error, including when an undeclared credential is supplied.
-    if ctx.method == "tools/call" and (ctx.params or {}).get("name") == "publish_job":
+    if ctx.method == "tools/call" and (ctx.params or {}).get("name") in {"publish_job", "prepare_linkedin_job"}:
         arguments = (ctx.params or {}).get("arguments")
         try:
             if not isinstance(arguments, dict) or set(arguments) != {"job"}:
@@ -50,6 +51,18 @@ async def publish_job(job: JobCircular) -> PublishJobResult:
         raise ToolError(str(error)) from None
     except Exception:
         raise ToolError("Job publication failed. Check delivery before retrying.") from None
+
+
+@mcp.tool(annotations=ToolAnnotations(
+    read_only_hint=True, destructive_hint=False,
+    idempotent_hint=True, open_world_hint=False,
+))
+async def prepare_linkedin_job(job: JobCircular) -> LinkedInPreparation:
+    """Prepare a feed announcement for manual review. Does NOT publish to LinkedIn."""
+    try:
+        return LinkedInPublisher().prepare(job)
+    except Exception:
+        raise ToolError("LinkedIn announcement could not be prepared within content limits. Nothing was published.") from None
 
 
 if __name__ == "__main__":

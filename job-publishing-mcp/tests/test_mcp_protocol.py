@@ -14,7 +14,7 @@ def test_tools_list_has_one_business_tool_and_typed_schemas():
     async def check():
         async with Client(server.mcp) as client:
             tools = (await client.list_tools()).tools
-        assert [tool.name for tool in tools] == ["publish_job"]
+        assert [tool.name for tool in tools] == ["publish_job", "prepare_linkedin_job"]
         schema = tools[0].input_schema
         assert set(schema["properties"]) == {"job"}
         job_schema = schema["$defs"]["JobCircular"] if "$defs" in schema else schema["properties"]["job"]
@@ -133,6 +133,6 @@ def test_real_stdio_tool_discovery_without_publication():
         with open(os.devnull, "w", encoding="utf-8") as diagnostics:
             async with Client(stdio_client(params, errlog=diagnostics), read_timeout_seconds=15) as client:
                 result = await client.list_tools()
-                assert [tool.name for tool in result.tools] == ["publish_job"]
+                assert [tool.name for tool in result.tools] == ["publish_job", "prepare_linkedin_job"]
                 # Deliberately never call publish_job across the subprocess boundary.
     asyncio.run(check())

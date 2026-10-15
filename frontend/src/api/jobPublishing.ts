@@ -3,6 +3,26 @@ import type { JobDescriptionGenerationResponse } from "../types/jobDescription";
 import type { PublicationResult, PublishingContext } from "../types/recruiterChat";
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 
+export async function prepareLinkedInDraft(result: JobDescriptionGenerationResponse, context: PublishingContext = {}, jobId?: string): Promise<{destination: "linkedin"; status: "prepared"; mode: "manual"; announcement: string}> {
+  if (!jobId) throw new Error("Select a saved job first.");
+  const draft = result.job_description;
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/v1/recruiter-chat/linkedin/prepare`, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({job_id: jobId, title: draft.title, summary: draft.summary,
+      responsibilities: draft.responsibilities, required_skills: draft.required_skills,
+      preferred_skills: draft.preferred_skills, qualifications: draft.qualifications,
+      ...(context.location ? {location: context.location} : {}),
+      ...(context.employment_type ? {employment_type: context.employment_type} : {}),
+      ...(context.work_arrangement ? {work_arrangement: context.work_arrangement} : {})}),
+  });
+  if (!response.ok) throw new Error("LinkedIn preparation failed. Nothing was published.");
+  const body = await response.json();
+  if (body?.destination !== "linkedin" || body?.status !== "prepared" || body?.mode !== "manual"
+    || typeof body.announcement !== "string" || !body.announcement.trim() || body.announcement.length > 3000)
+    throw new Error("Invalid LinkedIn preparation response. Nothing was published.");
+  return body;
+}
+
 export async function publishDraft(result: JobDescriptionGenerationResponse, context: PublishingContext = {}, jobId?: string): Promise<PublicationResult> {
   const draft = result.job_description;
   let response: Response;

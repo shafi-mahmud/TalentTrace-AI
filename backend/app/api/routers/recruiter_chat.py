@@ -2,7 +2,7 @@ import logging
 from uuid import uuid4
 
 from app.integrations.job_publishing.mcp_client import get_job_publisher, PublicationUnavailable
-from app.schemas.job_publication import PublicationResult, RecruiterPublishRequest
+from app.schemas.job_publication import PublicationResult, RecruiterPublishRequest, LinkedInPreparation
 
 from fastapi import APIRouter, status, Depends, HTTPException
 from app.core.auth import current_recruiter, database_session
@@ -77,6 +77,17 @@ async def publish_job(request: RecruiterPublishRequest, user=Depends(current_rec
         return JSONResponse(status_code=503, content={"code": "job_publication_unavailable", "message": "Job publishing is not configured."})
     except Exception:
         return JSONResponse(status_code=502, content={"code": "job_publication_unconfirmed", "message": "Publication was not confirmed. Check Discord before another attempt; delivery may have occurred."})
+
+
+@router.post("/linkedin/prepare", response_model=LinkedInPreparation)
+async def prepare_linkedin(request: RecruiterPublishRequest, user=Depends(current_recruiter), session=Depends(database_session)):
+    await authorize_publication(session, user.id, request)
+    try:
+        return await get_job_publisher().prepare_linkedin(request)
+    except PublicationUnavailable:
+        return JSONResponse(status_code=503, content={"code": "linkedin_preparation_unavailable", "message": "LinkedIn preparation is unavailable."})
+    except Exception:
+        return JSONResponse(status_code=502, content={"code": "linkedin_preparation_failed", "message": "LinkedIn announcement could not be prepared. Nothing was published."})
 
 
 async def authorize_publication(session, owner_id, request):

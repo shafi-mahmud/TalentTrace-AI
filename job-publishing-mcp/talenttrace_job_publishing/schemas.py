@@ -77,3 +77,11 @@ class PublishJobResult(BaseModel):
     destination: Literal["discord"] = "discord"
     status: Literal["published"] = "published"
     external_id: Annotated[str, StringConstraints(pattern=r"^[0-9]{17,20}$")]
+
+
+class LinkedInPreparation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+    destination: Literal["linkedin"] = "linkedin"
+    status: Literal["prepared"] = "prepared"
+    mode: Literal["manual"] = "manual"
+    announcement: Annotated[str, StringConstraints(min_length=1, max_length=3000)]

@@ -1,4 +1,5 @@
 import { createElement as h } from "react";
+import { LinkedInPromotion } from "./LinkedInPromotion.ts";
 import type { ReactNode } from "react";
 import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
 import type { ChatMessage, RecruiterChatResponse, PublicationState } from "../types/recruiterChat";
@@ -113,5 +114,6 @@ export function ChatMessageView({ message, criteriaDraft, onCriteriaChange, onCr
       ...message.missingFields.map(field => h("li", { key: field }, MISSING_FIELD_LABELS[field]))) : null,
     message.role === "assistant" && message.jobDescriptionResult
       ? h(DraftMessage, { result: message.jobDescriptionResult, publication: message.publication, criteriaDraft,
-        onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, actionsDisabled }) : null);
+        onCriteriaChange, onCriteriaReviewed, onContinue, onPublish, onRevise, actionsDisabled }) : null,
+    message.role === "assistant" && message.jobDescriptionResult ? h(LinkedInPromotion, {key: JSON.stringify([message.draftId, message.jobDescriptionResult, message.publishingContext]), result: message.jobDescriptionResult, context: message.publishingContext, jobId: message.draftId, disabled: actionsDisabled}) : null);
 }

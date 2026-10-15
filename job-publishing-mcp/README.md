@@ -2,7 +2,7 @@
 
 **Status: Implemented and live verified — standalone MCP-to-Discord foundation, 07 Oct 2026.**
 
-TalentTrace owns this small MCP server. Its one business tool, `publish_job`,
+TalentTrace owns this small MCP server. Its external publication tool, `publish_job`,
 accepts a validated `JobCircular`, delegates to `DiscordPublisher`, and returns
 only `destination`, `status`, and the external Discord message ID. It uses the
 official Python MCP SDK v2 (`MCPServer`), with stdio as the default transport.
@@ -113,7 +113,17 @@ This increment supports ordinary text channels, not forum/media thread setup.
 
 - Publication idempotency/deduplication and additional destinations.
 - JD approval enforcement, authorization and publication audit/persistence.
-- Blogger, Telegram and other destinations, including LinkedIn/X.
+- Blogger, Telegram and other automatic destinations, including LinkedIn/X.
+
+## Implemented LinkedIn manual preparation (15 Oct 2026)
+
+The same server also exposes read-only `prepare_linkedin_job`, returning
+`destination=linkedin`, `status=prepared`, `mode=manual` and announcement text.
+It never authenticates to LinkedIn or publishes. JD Assistant offers a preview,
+confirmed copy and ordinary LinkedIn feed link for recruiter-completed posting.
+See [LinkedIn job promotion](../docs/linkedin_job_promotion.md) for access research,
+configuration, tests and the distinction from formal LinkedIn Jobs listings.
+Only Discord has an implemented external API publication adapter.
 
 An MCP server exposes protocol tools; it is not a LangGraph agent and does not
 generate or approve a JD. The trainer-demo backend client now maps the inline draft and supplied optional
