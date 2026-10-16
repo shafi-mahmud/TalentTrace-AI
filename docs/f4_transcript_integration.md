@@ -236,6 +236,57 @@ unconfirmed/incomplete outcome as a complete interview transcript.
 
 ## Changed-file inventory relative to 2a4a15b
 
+### Independent final verification — 16 October 2026
+
+Verified baseline: clean `ca1f0af`, with one Alembic head
+`0013_transcript_lifecycle`. The 135 focused backend tests passed again against
+disposable PostgreSQL, including upgrade/downgrade/re-upgrade, cross-process
+revocation, both write/withdrawal lock orders, cleanup retries, restart recovery,
+foreign-owner denial and incomplete-finalization handling. Frontend: 177 passed;
+TypeScript and production build passed (existing bundle-size warning only).
+
+An additional private, ignored verification harness reused the authenticated
+HTTP/two-WebSocket integration test with the actual `LocalWhisper` subprocesses
+and installed CPU int8 tiny.en model. It replayed 3.9 seconds of existing Windows
+SAPI synthetic benchmark audio per role, in paced PCM frames with the same
+one-second heartbeat used by the browser. Both speaker roles produced saved
+turns, normal finish drained residual audio, the owning recruiter retrieved a
+completed capture, and candidate withdrawal verified deletion and denied reads.
+The final real-worker and retention-boundary checks both passed. The initial
+harness lacked heartbeats and disconnected during model startup; correcting the
+harness required no application changes. All test containers were disposable.
+
+This is real local STT through ASGI HTTP/WebSockets and PostgreSQL, **not** a
+browser, LiveKit media, physical-device or microphone test. Those parts of the
+new storage integration remain unverified. Earlier physical temporary-caption
+verification does not establish browser verification of this branch.
+
+The exact immutable deadline is `min(first authorized capture time, scheduled
+end) + 30 days`; the scheduled end caps the **anchor**, not the final deadline.
+The extra PostgreSQL check verified readable text after scheduled end and until
+one microsecond before the deadline, then denied access and verified cleanup at
+expiry. This intentionally conservative policy promises a maximum, not 30 full
+days of availability after actual completion. No premature interview-end expiry
+or critical implementation defect was found; no corrective code commit was made.
+
+Integration inspection: local `develop` is `2cd7536` and is an ancestor, with
+54 commits on this branch and none unique to `develop`. Seven transcript commits
+follow original F4 `e0c859e`, from `7a4fd57` through `ca1f0af`. Preserve their order
+and migrations 0010–0013; do not cherry-pick only the final commit. Migration
+0011 has the identical Git blob `3b85b5a` in the notification branch (working-copy
+line endings differ), so later integration must retain one copy of that revision.
+Notification router/model registration and separate LinkedIn publishing changes
+still require integration review; no merge/conflict-resolution run was performed.
+
+Recommended activation remains: reviewed integration branch, combined regressions,
+verified target database/backup, approved migration through 0013, private model
+and LiveKit configuration, exact frontend origin/cookies, explicit storage opt-in
+and one backend worker. Keep email disabled and cleanup running. Complete a fresh
+two-browser consent/save/review/withdrawal rehearsal before declaring this storage
+UI demo-ready. Production additionally needs backup/export retention handling,
+candidate credential recovery policy and operational deletion monitoring. F5
+evaluation and external-AI disclosure remain separate, unimplemented work here.
+
 Final verification on 16 October 2026: full backend suite 1,278 passed and 12
 skipped; final affected transcript/privacy/caption/access/LiveKit suite 135 passed
 after the last recovery/privacy changes. Frontend 177 passed, none skipped;
