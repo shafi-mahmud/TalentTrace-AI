@@ -82,6 +82,9 @@ def pg():
         migration('0011_application_views:0012_transcript_privacy_guard')
         assert '1' in sql("SELECT count(*) FROM information_schema.columns WHERE table_name='interview_schedules' AND column_name='transcript_storage_revoked_at' AND data_type='timestamp with time zone';")
         assert '1' in sql(f"SELECT count(*) FROM recruiters WHERE id='{marker}';")
+        migration('0012_transcript_privacy_guard:0013_transcript_lifecycle')
+        migration('0013_transcript_lifecycle:0012_transcript_privacy_guard',down=True)
+        migration('0012_transcript_privacy_guard:0013_transcript_lifecycle')
         yield URL.create('postgresql+asyncpg',username='transcript_test',password=password,
             host='127.0.0.1',port=54402,database='transcript_test')
     finally:
@@ -522,7 +525,7 @@ def test_privacy_migration_has_one_linear_head():
     from alembic.script import ScriptDirectory
     cfg=Config(str(Path(__file__).resolve().parents[1]/'alembic.ini'))
     scripts=ScriptDirectory.from_config(cfg)
-    assert scripts.get_heads()==['0012_transcript_privacy_guard']
+    assert scripts.get_heads()==['0013_transcript_lifecycle']
     assert scripts.get_revision('0012_transcript_privacy_guard').down_revision=='0011_application_views'
     assert scripts.get_revision('0011_application_views').down_revision=='0010_interview_transcripts'
 
@@ -562,4 +565,73 @@ def test_pg_unauthorized_withdrawal_cannot_set_marker(pg):
             await f.authority.withdraw(no_mutation,interview_id=f.interview,job_id=f.job)
         async with f.factory() as db:
             assert (await db.get(InterviewSchedule,f.interview)).transcript_storage_revoked_at is None
+    run(pg,scenario)
+
+
+def test_pg_retention_expiry_denies_access_and_sweep_verifies_deletion(pg):
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    async def scenario(f):
+        await start(f);f.now[0]+=timedelta(seconds=10)
+        await f.service.append_final(f.owner,event(f.capture))
+        async with f.factory() as db:
+            deadline=(await db.get(InterviewSchedule,f.interview)).transcript_retention_deadline
+            assert deadline <= f.now[0]+timedelta(days=30)
+        f.now[0]=deadline
+        with pytest.raises(TranscriptError,match='transcript_retention_expired'):
+            await f.service.list_turns(f.owner,f.interview)
+        with pytest.raises(TranscriptError,match='transcript_retention_expired'):
+            await f.service.append_final(f.owner,event(f.capture,sequence=2))
+        privacy=TranscriptPrivacyService(f.service)
+        assert (await privacy.sweep())['failed']==0
+        async with f.factory() as db:
+            row=await db.get(InterviewSchedule,f.interview)
+            assert row.transcript_deletion_status=='deleted' and row.transcript_storage_revoked_at
+            assert await db.get(Capture,f.capture) is None
+            assert await db.scalar(select(func.count()).select_from(Turn).where(Turn.session_id==f.capture))==0
+        await privacy.delete_revoked(f.owner,f.interview) # Idempotent.
+    run(pg,scenario)
+
+
+def test_pg_after_window_candidate_privacy_cookie_and_unauthorized_deletion(pg):
+    from app.services.transcript_privacy import TranscriptPrivacyService, PRIVACY_COOKIE
+    async def scenario(f):
+        privacy=TranscriptPrivacyService(f.service)
+        await start(f)
+        raw,expires=await privacy.issue_candidate_access(f.request(True),f.interview)
+        request=Request({'type':'http','method':'POST','headers':[
+            (b'x-talenttrace-request',b'1'),(b'cookie',(PRIVACY_COOKIE+'='+raw).encode())]})
+        async with f.factory.begin() as db:
+            row=await db.get(InterviewSchedule,f.interview)
+            row.scheduled_at=datetime.now(timezone.utc)-timedelta(days=1)
+            invite=await db.scalar(select(InterviewInvitation).where(InterviewInvitation.interview_id==f.interview))
+            invite.expires_at=datetime.now(timezone.utc)-timedelta(seconds=1)
+        with pytest.raises(TranscriptError):await f.authority.participant(f.request(True),interview_id=f.interview)
+        from fastapi import HTTPException
+        with pytest.raises((TranscriptError,HTTPException)):
+            await privacy.withdraw(request,uuid4())
+        result=await privacy.withdraw(request,f.interview)
+        assert result['withdrawn'] and result['deletion_verified']
+        assert (await privacy.withdraw(request,f.interview))['deletion_verified']
+    run(pg,scenario)
+
+
+def test_pg_privacy_cleanup_failure_retry_and_concurrency(pg):
+    from sqlalchemy import event as sa_event
+    from sqlalchemy.exc import OperationalError
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    async def scenario(f):
+        privacy=TranscriptPrivacyService(f.service)
+        await start(f);f.now[0]+=timedelta(seconds=10)
+        await f.service.append_final(f.owner,event(f.capture))
+        def fail(connection,cursor,statement,parameters,context,many):
+            if statement.lstrip().startswith('DELETE FROM interview_transcript_turns'):
+                raise OperationalError('synthetic deletion failure',{},Exception('unavailable'))
+        sa_event.listen(f.engine.sync_engine,'before_cursor_execute',fail)
+        try:
+            view=await privacy.withdraw(f.request(),f.interview,f.job)
+            assert view['withdrawn'] and view['deletion_status']=='failed' and not view['deletion_verified']
+            with pytest.raises(TranscriptError):await f.service.list_turns(f.owner,f.interview)
+        finally:sa_event.remove(f.engine.sync_engine,'before_cursor_execute',fail)
+        await asyncio.gather(privacy.delete_revoked(f.owner,f.interview),privacy.delete_revoked(f.owner,f.interview))
+        assert (await privacy.status(f.request(),f.interview,f.job))['deletion_verified']
     run(pg,scenario)

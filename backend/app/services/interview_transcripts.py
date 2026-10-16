@@ -1,7 +1,7 @@
 """Internal, owner-scoped persistence. No caption hook, HTTP route or retry loop."""
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import asyncio
 import hashlib
 import hmac
@@ -136,6 +136,8 @@ class StorageConsentAuthority:
                     interview_id=interview_id, job_id=job_id)
                 if interview.transcript_storage_revoked_at is None:
                     interview.transcript_storage_revoked_at = self.clock()
+                if interview.transcript_deletion_status != 'deleted':
+                    interview.transcript_deletion_status = 'pending'
                 owner = interview.recruiter_id
             self.revoke(interview_id)  # Optimization only; database is authoritative.
             return owner
@@ -181,6 +183,8 @@ class TranscriptPersistenceService:
         interview, job = pair
         if storage and interview.transcript_storage_revoked_at is not None:
             raise TranscriptError('storage_authorization_revoked')
+        if storage and interview.transcript_retention_deadline is not None and self.clock() >= interview.transcript_retention_deadline:
+            raise TranscriptError('transcript_retention_expired')
         if current:
             if job.confirmed_snapshot is None or job.revision != interview.criteria_revision:
                 raise TranscriptError('interview_revision_changed')
@@ -198,7 +202,10 @@ class TranscriptPersistenceService:
         if recruiter.actor_id != owner:
             raise TranscriptError('storage_consent_not_verified')
         async with transaction(self.factory) as db:
-            await self._owned(db, owner, interview_id, current=True, lock=True)
+            interview = await self._owned(db, owner, interview_id, current=True, lock=True)
+            if interview.transcript_retention_deadline is None:
+                interview.transcript_retention_deadline = min(self.clock(),
+                    interview.scheduled_at + timedelta(minutes=interview.duration_minutes)) + timedelta(days=30)
             invitation = await db.scalar(select(InterviewInvitation).where(
                 InterviewInvitation.id == candidate.actor_id, InterviewInvitation.interview_id == interview_id,
                 InterviewInvitation.revoked.is_(False), InterviewInvitation.expires_at > self.clock(),

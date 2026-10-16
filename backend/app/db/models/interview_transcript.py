@@ -2,6 +2,7 @@
 from datetime import datetime
 from uuid import UUID
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
@@ -18,6 +19,8 @@ class InterviewTranscriptSession(Base):
         Index('ix_transcript_interview_start', 'interview_id', 'started_at', 'id'),
         Index('uq_transcript_active_interview', 'interview_id', unique=True, postgresql_where=text("status='active'")),
     )
+    finalization_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    capture_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     id: Mapped[UUID] = mapped_column(primary_key=True)
     interview_id: Mapped[UUID] = mapped_column(ForeignKey('interview_schedules.id', ondelete='RESTRICT'))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -47,3 +50,11 @@ class InterviewTranscriptTurn(Base):
     start_ms: Mapped[int] = mapped_column(Integer)
     end_ms: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class TranscriptPrivacyAccess(Base):
+    """Withdrawal-only capability, issued from an authenticated candidate session."""
+    __tablename__ = 'transcript_privacy_access'
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    interview_id: Mapped[UUID] = mapped_column(ForeignKey('interview_schedules.id', ondelete='RESTRICT'), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

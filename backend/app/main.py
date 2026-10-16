@@ -1,4 +1,7 @@
 from typing import Final
+from contextlib import asynccontextmanager
+import asyncio
+from app.services.transcript_runtime import maintenance_loop
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -26,7 +29,18 @@ PUBLIC_VALIDATION_MESSAGES: Final[dict[str, str]] = {
 }
 
 
-app = FastAPI(title=f"{settings.app_name} API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app):
+    task = asyncio.create_task(maintenance_loop()) if settings.transcript_storage_enabled else None
+    try:
+        yield
+    finally:
+        if task:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+app = FastAPI(title=f"{settings.app_name} API", version="0.1.0", lifespan=lifespan)
 
 
 @app.middleware("http")
