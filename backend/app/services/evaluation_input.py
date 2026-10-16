@@ -68,6 +68,11 @@ def build_input(parent, snapshot, captures, rows):
         raise EvaluationInputError('evaluation_transcript_missing_or_unbounded')
     try:
         job = ReviewedJobSnapshot.model_validate(snapshot)
+        # Arrival/query order must not change pairing or the input fingerprint.
+        # Preserve per-capture sequence; never rewrite source text or event IDs.
+        captures=sorted(captures,key=lambda c:(c.started_at,c.id))
+        capture_order={capture.id:index for index,capture in enumerate(captures)}
+        rows=sorted(rows,key=lambda row:(capture_order.get(row.session_id,-1),row.sequence,row.id))
         identities, sequences, capture_ids, refs = set(), set(), set(), []
         durations = {}
         for capture in captures:

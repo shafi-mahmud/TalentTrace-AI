@@ -43,6 +43,17 @@ def test_valid_finalized_input_and_exact_evidence(caplog):
     assert data.turns[0].session_id == data.captures[0].id
 
 
+def test_source_arrival_order_does_not_change_pairing_or_fingerprint():
+    from app.services.interview_qa import pair_transcript
+    from app.services.interview_analysis import fingerprint
+    parent,snapshot,captures,rows=source()
+    ordered=build_input(parent,snapshot,captures,rows)
+    shuffled=build_input(parent,snapshot,list(reversed(captures)),list(reversed(rows)))
+    assert fingerprint(ordered)==fingerprint(shuffled)
+    assert pair_transcript(ordered)==pair_transcript(shuffled)
+    assert rows[0].sequence==1
+
+
 @pytest.mark.parametrize('change', ['active','interrupted','partial','failed','no_end',
     'missing_summary','uncertain_commit','different_count','different_samples','no_consent','wrong_version'])
 def test_incomplete_and_contradictory_metadata_refused(change):

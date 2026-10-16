@@ -25,3 +25,10 @@ def test_reference_boundary_is_explicit_synthetic_not_company_policy():
     refs=asyncio.run(SyntheticTechnicalRetriever().retrieve(data,pair_transcript(data)))
     assert len(refs)==1 and refs[0].provenance=='synthetic_demo'
     assert 'mutable' in refs[0].text
+
+
+def test_semantic_paraphrase_does_not_invent_confirmed_requirement_coverage():
+    data=dialogue([('recruiter','Describe a dynamic array.'),('candidate','Its contents can change.')])
+    mapped=map_requirements(data,pair_transcript(data))[0]
+    assert mapped.coverage=='not_evidenced' and not mapped.qa_ids
+    assert 'semantic coverage remains unassessed' in mapped.explanation

@@ -72,3 +72,11 @@ def test_connection_check_interrupts_pairing_without_losing_source():
     pairs=pair_transcript(data)
     assert pairs[0].status=='uncertain' and pairs[0].answer==''
     assert pairs[1].answer=='It queues samples.'
+
+
+def test_multipart_question_and_contradictory_multiturn_answer_preserve_uncertainty():
+    data=dialogue([('recruiter','Are Python lists mutable? Why?'),
+        ('candidate','Python lists cannot change.'),('candidate','Actually lists are mutable.')])
+    pair=pair_transcript(data)[0]
+    assert pair.status=='uncertain' and len(pair.answer_turns)==2
+    assert pair.answer=='Python lists cannot change.\nActually lists are mutable.'
