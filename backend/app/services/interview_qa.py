@@ -21,10 +21,14 @@ class QAPair(Contract):
     answer_role: Literal['candidate'] = 'candidate'
 
 
+def auxiliary_question_form(text):
+    return bool(re.match(r'^(is|are|was|were|does|do|did|can|could|should|would|will|has|have)\b',text.strip(),re.I))
+
+
 def is_question(text):
     return '?' in text or bool(re.match(
         r'^(what|why|how|when|where|which|who|can you|could you|would you|do you|did you|have you|tell me|explain|describe)\b',
-        text.strip(),re.I))
+        text.strip(),re.I)) or auxiliary_question_form(text)
 
 
 def is_connection_check(text):
@@ -54,6 +58,8 @@ def pair_transcript(source: EvaluationInput) -> tuple[QAPair, ...]:
             pending_without_answer=question is not None and not answers
             flush();question=turn;answers=[];warnings=[]
             if pending_without_answer:warnings.append('preceding_unanswered_question_requires_review')
+            if '?' not in turn.text and auxiliary_question_form(turn.text):
+                warnings.append('asr_question_form_requires_review')
             if turn.text.count('?')>1:warnings.append('multipart_question_requires_review')
         elif question is not None and turn.role=='candidate':
             if is_question(turn.text):

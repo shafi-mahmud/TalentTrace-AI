@@ -80,3 +80,20 @@ def test_multipart_question_and_contradictory_multiturn_answer_preserve_uncertai
     pair=pair_transcript(data)[0]
     assert pair.status=='uncertain' and len(pair.answer_turns)==2
     assert pair.answer=='Python lists cannot change.\nActually lists are mutable.'
+
+
+def test_fragmented_asr_auxiliary_question_is_uncertain_without_rewriting_source():
+    data=dialogue([('recruiter','In Python.'),('candidate','Bye.'),
+        ('recruiter','are lists mutable.'),('candidate','on lists are mutable. You can append new items.')])
+    pairs=pair_transcript(data)
+    assert len(pairs)==1 and pairs[0].status=='uncertain'
+    assert pairs[0].question=='are lists mutable.'
+    assert pairs[0].answer=='on lists are mutable. You can append new items.'
+    assert pairs[0].warnings==('asr_question_form_requires_review',)
+    assert data.turns[0].id not in pairs[0].question_turns
+    assert data.turns[1].id not in pairs[0].answer_turns
+
+
+def test_declarative_answer_not_promoted_to_question():
+    data=dialogue([('recruiter','The list is mutable.'),('candidate','I have used lists.')])
+    assert pair_transcript(data)==()
