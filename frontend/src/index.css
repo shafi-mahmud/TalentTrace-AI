@@ -513,3 +513,40 @@ body { background: var(--page); color: var(--ink); }
   .recruiter-page .workflow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-modes button { font-size: 14px; flex: 1 1 auto; }
 }
+
+/* F6 report: typography shared by screen and the isolated native print copy. */
+.consolidated-assessment { overflow-wrap: anywhere; line-height: 1.55; }
+.consolidated-assessment .assessment-heading { border-bottom: 2px solid #245e50; padding-bottom: 12px; margin-bottom: 16px; }
+.consolidated-assessment .assessment-brand { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.consolidated-assessment h3 { font-size: 24px; margin: 6px 0; }
+.consolidated-assessment h4 { border-bottom: 1px solid #ccd6d1; padding-bottom: 6px; margin-top: 24px; }
+.assessment-print-context { border: 1px solid #ccd6d1; padding: 10px 14px; font-size: 12px; }
+.assessment-print-root { display: none; }
+@page { size: auto; margin: 16mm; }
+@media print {
+  /* A direct-body portal prevents hidden ancestors, dashboard layout and blank gaps. */
+  body > * { display: none !important; }
+  body > #talenttrace-assessment-print { display: block !important; }
+  body::before { content: 'Open a consolidated assessment and use Print / Save as PDF to prepare a fresh authorized report.'; }
+  body:has(> #talenttrace-assessment-print)::before { content: none; }
+  html, body { background: white !important; color: black !important; margin: 0; min-width: 0; min-height: 0; }
+  #talenttrace-assessment-print { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.45; }
+  #talenttrace-assessment-print .card { display: block; padding: 0; margin: 0; border: 0; border-radius: 0; box-shadow: none; background: white; }
+  #talenttrace-assessment-print :is(button, input, select, textarea, nav) { display: none !important; }
+  #talenttrace-assessment-print :is(h3,h4,h5,summary) { color: black; break-after: avoid-page; page-break-after: avoid; }
+  #talenttrace-assessment-print h3 { font-size: 19pt; }
+  #talenttrace-assessment-print h4 { font-size: 13pt; }
+  #talenttrace-assessment-print :is(p,li) { orphans: 3; widows: 3; overflow-wrap: anywhere; white-space: pre-wrap; }
+  #talenttrace-assessment-print :is(details,article,section,div) { max-height: none; overflow: visible; break-inside: auto; }
+  #talenttrace-assessment-print summary { list-style: none; font-weight: bold; margin-top: 10pt; }
+  #talenttrace-assessment-print summary::-webkit-details-marker { display: none; }
+  #talenttrace-assessment-print a { color: black; text-decoration: none; overflow-wrap: anywhere; }
+  #talenttrace-assessment-print table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  #talenttrace-assessment-print thead { display: table-header-group; }
+  #talenttrace-assessment-print tr { break-inside: avoid; }
+  #talenttrace-assessment-print :is(td,th) { padding: 5pt; border: 1px solid #aaa; overflow-wrap: anywhere; }
+  #talenttrace-assessment-print .assessment-heading { break-inside: avoid; }
+}
+@media print {
+  #talenttrace-assessment-print :is(p,li,strong,summary) { color: #111; background: transparent; box-shadow: none; }
+}

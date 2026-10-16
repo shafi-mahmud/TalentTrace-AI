@@ -1,3 +1,5 @@
+import {createPortal,flushSync} from 'react-dom';
+import {printAssessment} from '../api/assessmentPrinting.ts';
 import {createElement as h,useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
 import {fetchReport} from '../api/consolidatedAssessment.ts';
 import type {ConsolidatedReport,EvidenceState} from '../api/consolidatedAssessment';
@@ -13,13 +15,15 @@ const messages:Record<EvidenceState,string>={
  unavailable:'Interview evidence is unavailable or could not be verified. Missing evidence is not poor performance.',
  ambiguous:'Multiple saved analysis versions exist. Explicit version selection is required.'};
 
-export function AssessmentView({report:r}:{report:ConsolidatedReport}) {
+export function AssessmentView({report:r,preparedAt}:{report:ConsolidatedReport;preparedAt?:string}) {
  const instance=useId();
  const prefix=`f6-${instance}-${r.job_id}-${r.batch_id}-${r.upload_id}`;
  const sourceLink=(id:string,text:string)=>h('a',{key:id,href:`#${prefix}-${id}`,onClick:(event:{preventDefault:()=>void})=>{event.preventDefault();const target=document.getElementById(`${prefix}-${id}`);const details=target?.closest('details');if(details)details.open=true;target?.scrollIntoView({block:'center'});}},text);
- const quote=(q:{turn_id:string;quote:string},n:number)=>h('li',{key:n},sourceLink(q.turn_id,`“${q.quote}” — source turn`));
- return h('section',{className:'card','aria-label':'Consolidated candidate assessment'},
-  h('h3',null,'Consolidated assessment · F6 Increment 1'),h('p',null,r.job_title),
+ const quote=(q:{turn_id:string;quote:string},n:number)=>h('li',{key:n},sourceLink(q.turn_id,`“${q.quote}” — source turn ${q.turn_id}`));
+ return h('section',{className:'card consolidated-assessment','aria-label':'Consolidated candidate assessment'},
+  h('header',{className:'assessment-heading'},h('p',{className:'assessment-brand'},'TalentTrace AI · Confidential recruiter report'),h('h3',null,'Consolidated candidate assessment'),h('p',null,r.job_title)),
+  h('p',null,`Job ${r.job_reference} · ${r.job_id}`),
+  preparedAt&&h('div',{className:'assessment-print-context'},h('p',null,`Print view prepared (UTC): ${preparedAt}`),h('p',null,'Fresh authorized retrieval of saved evidence. This preparation did not rerun screening or interview evaluation.'),h('p',null,'Confidential: printed and PDF copies are outside application retention and cannot be revoked. Store securely and dispose according to your policy.')),
   h('p',null,`Application ${r.upload_id} · batch ${r.batch_id} · criteria revision ${r.criteria_revision}`),
   h('p',{className:'helper-text'},r.notice),
   h('h4',null,'CV screening and F2'),
@@ -31,11 +35,12 @@ export function AssessmentView({report:r}:{report:ConsolidatedReport}) {
   r.cv.dimensions.length===0&&h('p',null,'No persisted F2 dimension evidence is available; no breakdown is invented.'),
   h('h4',null,'Interview evidence and F5'),h('p',{role:'status'},messages[r.interview.state]),
   r.interview.state==='available'&&h('div',null,
-   h('p',null,`Saved operation ${r.interview.operation_id} · rubric ${r.interview.rubric_version}`),
+   h('p',null,`Interview ${r.interview.interview_id} · saved operation ${r.interview.operation_id} · rubric ${r.interview.rubric_version}`),
+   h('p',null,`Interview evidence retention deadline (UTC): ${r.interview.retention_deadline}`),
    h('p',null,r.interview.warning),
    h('h4',null,'Requirement coverage and gaps'),
    ...r.interview.requirements.map(m=>h('article',{key:m.criterion_id},h('h5',null,`${m.description} · ${m.coverage}`),
-    h('p',null,m.explanation),h('p',null,m.follow_up),...m.turn_ids.map(id=>sourceLink(id,`Source ${id.slice(0,8)} `)))),
+    h('p',null,m.explanation),h('p',null,m.follow_up),...m.turn_ids.map(id=>sourceLink(id,`Source ${id} `)))),
    h('h4',null,'Rubric, evidence-linked strengths and verification areas'),
    ...r.interview.assessment!.answers.map(a=>h('article',{key:a.qa_id},
     h('h5',null,r.interview.pairs.find(p=>p.id===a.qa_id)?.question??'Saved question'),
@@ -43,18 +48,20 @@ export function AssessmentView({report:r}:{report:ConsolidatedReport}) {
      h('p',null,d.justification),h('ul',null,...d.evidence.map(quote)))),
     h('p',null,a.follow_up),...a.technical_citations.map((c,n)=>h('p',{key:n},`${c.reference_id}: ${c.quote}`)))),
    h('details',null,h('summary',null,'Saved technical references'),...r.interview.references.map(ref=>h('article',{key:ref.id},h('strong',null,ref.id),h('p',null,ref.text),
-    h('p',null,`${ref.provenance} · ${ref.source_title??''} · ${ref.url??''} · ${ref.version??''}`)))),
-   h('details',null,h('summary',null,'Authorized timestamped source turns'),...r.interview.turns.map(t=>h('p',{key:t.id,id:`${prefix}-${t.id}`},`${t.role} · capture ${t.session_id} · ${t.start_ms}–${t.end_ms} ms: ${t.text}`)))));
+    h('p',null,`${ref.provenance} · ${ref.source_title??''} · ${ref.url??''} · ${ref.version??''} · document ${ref.document_id??''} · ${ref.location??''} · ${ref.retrieval_basis??''}`)))),
+   h('details',null,h('summary',null,'Authorized timestamped source turns'),...r.interview.turns.map(t=>h('p',{key:t.id,id:`${prefix}-${t.id}`},`${t.id} · ${t.role} · capture ${t.session_id} · ${t.start_ms}–${t.end_ms} ms: ${t.text}`)))));
 }
 
 export default function ConsolidatedAssessment({jobId,batchId,uploadId}:{jobId:string;batchId:string;uploadId:string}){
  const [report,setReport]=useState<ConsolidatedReport|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [printView,setPrintView]=useState<{report:ConsolidatedReport;preparedAt:string}|null>(null),[printing,setPrinting]=useState(false);
+ const printController=useRef<AbortController|null>(null),printingPrepared=useRef(false);
  const generation=useRef(0),controller=useRef<AbortController|null>(null);
- useLayoutEffect(()=>{generation.current++;controller.current?.abort();setReport(null);setError('');setBusy(false);
-  return()=>{generation.current++;controller.current?.abort();};},[jobId,batchId,uploadId]);
+ useLayoutEffect(()=>{generation.current++;controller.current?.abort();printController.current?.abort();setReport(null);setError('');setBusy(false);
+  return()=>{generation.current++;controller.current?.abort();printController.current?.abort();};},[jobId,batchId,uploadId]);
  useEffect(()=>{
-  const clear=()=>{generation.current++;controller.current?.abort();setReport(null);setBusy(false);};
-  const hidden=()=>{if(document.hidden)clear();};
+  const clear=()=>{generation.current++;controller.current?.abort();printController.current?.abort();setReport(null);setBusy(false);};
+  const hidden=()=>{if(document.hidden){if(!printingPrepared.current)printController.current?.abort();generation.current++;controller.current?.abort();setReport(null);setBusy(false);}};
   window.addEventListener('hashchange',clear);document.addEventListener('visibilitychange',hidden);
   const remaining=report?.interview.retention_deadline?Date.parse(report.interview.retention_deadline)-Date.now():null;
   // Retention may exceed the browser's 32-bit timeout limit; recheck at most daily.
@@ -63,6 +70,28 @@ export default function ConsolidatedAssessment({jobId,batchId,uploadId}:{jobId:s
   if(remaining!==null)expire();
   return()=>{window.removeEventListener('hashchange',clear);document.removeEventListener('visibilitychange',hidden);if(timer!==undefined)clearTimeout(timer);};
  },[report]);
+ async function printReport(){
+  if(printController.current&&!printController.current.signal.aborted)return;
+  const c=new AbortController();printController.current=c;setPrinting(true);setReport(null);setError('');
+  const timeout=setTimeout(()=>c.abort(),15000);
+  try{
+   await printAssessment(async()=>{try{return await fetchReport(jobId,batchId,uploadId,c.signal);}finally{clearTimeout(timeout);}}, {
+    mount:(fresh,preparedAt)=>{
+     // Flush before native print snapshots the DOM. Expand only the temporary copy.
+     flushSync(()=>{setReport(null);setPrintView({report:fresh,preparedAt});});
+     const root=document.getElementById('talenttrace-assessment-print')!;
+     root.querySelectorAll('details').forEach(d=>{d.open=true;});printingPrepared.current=true;
+     return()=>{root.style.setProperty('display','none','important');setPrintView(null);printingPrepared.current=false;};
+    },
+    print:()=>window.print(),
+    afterPrint:callback=>{window.addEventListener('afterprint',callback);return()=>window.removeEventListener('afterprint',callback);},
+    beforePrint:callback=>{window.addEventListener('beforeprint',callback);return()=>window.removeEventListener('beforeprint',callback);},
+    expireAfter:(ms,callback)=>{const timer=setTimeout(callback,ms);return()=>clearTimeout(timer);},
+    finished:()=>{c.abort();setPrinting(false);},
+   },c.signal);
+  }catch{setError('Printing unavailable. Reopen the report and verify your session and evidence access.');c.abort();setPrinting(false);}
+  finally{clearTimeout(timeout);}
+ }
  async function load(){
   if(controller.current&&!controller.current.signal.aborted&&busy)return;
   controller.current?.abort();const c=new AbortController();controller.current=c;
@@ -72,6 +101,6 @@ export default function ConsolidatedAssessment({jobId,batchId,uploadId}:{jobId:s
   catch{if(n===generation.current)setError('Candidate assessment unavailable. Sign in and reload the saved job.');}
   finally{clearTimeout(timeout);if(n===generation.current)setBusy(false);}
  }
- return h('div',null,h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>void load()},busy?'Loading assessment…':'View consolidated assessment'),
-  error&&h('p',{role:'alert'},error),report&&h('button',{type:'button',onClick:()=>{generation.current++;controller.current?.abort();setReport(null);setBusy(false);}},'Close assessment'),report&&h(AssessmentView,{report}));
+ return h('div',null,h('button',{type:'button',className:'button button-secondary',disabled:busy||printing,onClick:()=>void load()},busy?'Loading assessment…':'View consolidated assessment'),
+  error&&h('p',{role:'alert'},error),report&&h('button',{type:'button',onClick:()=>{generation.current++;controller.current?.abort();setReport(null);setBusy(false);}},'Close assessment'),report&&h('button',{type:'button',className:'button button-secondary',disabled:printing,onClick:()=>void printReport()},'Print / Save as PDF'),printing&&h('p',{role:'status'},'Preparing or displaying the browser print dialog…'),printing&&h('button',{type:'button',onClick:()=>{printController.current?.abort();setPrinting(false);}},'Clear prepared print copy'),report&&h('p',{className:'helper-text'},'Printing refreshes authorization and evidence. Saved copies are confidential and cannot be revoked by the application.'),report&&h(AssessmentView,{report}),printView&&createPortal(h('div',{id:'talenttrace-assessment-print',className:'assessment-print-root'},h(AssessmentView,printView)),document.body));
 }

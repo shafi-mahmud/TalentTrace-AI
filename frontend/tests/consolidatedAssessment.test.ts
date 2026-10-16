@@ -69,3 +69,28 @@ test('excluded and unscored saved candidates can open report without interview s
  criteria_revision:2,scoring_version:'f2-coverage-v1',weights:r.cv.weights,candidates:[r.cv],ranking:[]}],onSelect:()=>{}}));
  assert.match(html,/View consolidated assessment/);
 });
+
+test('print view retains complete authorized findings and paper source identities',()=>{
+ const r=complete();const html=renderToStaticMarkup(h(AssessmentView,{report:r,preparedAt:'2026-10-17T12:00:00.000Z'}));
+ assert.match(html,/Print view prepared \(UTC\): 2026-10-17/);
+ assert.match(html,/did not rerun screening or interview evaluation/);
+ assert.match(html,/copies are outside application retention and cannot be revoked/);
+ assert.match(html,/Requirement coverage and gaps/);assert.match(html,/technical_accuracy/);
+ assert.match(html,new RegExp(`source turn ${id}`));assert.match(html,/capture/);
+ assert.doesNotMatch(html,/<button|<input|<nav/);
+});
+test('print copy handles CV-only, missing F5, excluded and withdrawn evidence without fabrication',()=>{
+ for(const state of ['not_scheduled','missing_analysis','withdrawn','expired','deleted'] as const){
+  const r=fixture();r.interview.state=state;r.cv.screening_decision='excluded';r.cv.reason='not_eligible';
+  const html=renderToStaticMarkup(h(AssessmentView,{report:r,preparedAt:'2026-10-17T12:00:00.000Z'}));
+  assert.match(html,/excluded/);assert.match(html,/Recruiter review required/);
+  assert.doesNotMatch(html,/Saved interpretation|Synthetic answer|0.00 \/ 100/);
+ }
+});
+test('long synthetic reference text is preserved and escaped in printable content',()=>{
+ const r=complete(),text='Long synthetic evidence with <script> text. '.repeat(30);
+ r.interview.references=[{id:'synthetic-reference',topic:'Synthetic topic',text,provenance:'synthetic_demo'}];
+ const html=renderToStaticMarkup(h(AssessmentView,{report:r,preparedAt:'2026-10-17T12:00:00Z'}));
+ assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
+ assert.equal((html.match(/Long synthetic evidence/g)??[]).length,30);
+});

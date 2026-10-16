@@ -1,4 +1,4 @@
-# F6 Increment 1 — read-only consolidated candidate assessment
+# F6 consolidated candidate assessment — Increments 1 and 2
 
 Implemented on `feature/f6-consolidated-report`, based on verified M3
 `2967ae9ef36748d33a5b3107d0122a70d8418979`. This is **not full F6 completion**.
@@ -7,8 +7,9 @@ Implemented on `feature/f6-consolidated-report`, based on verified M3
 
 The official BID Section 5.4.1 F6 was not found in the inspected home files.
 Scope follows the owner's Increment 1 request and existing F5/closure notes.
-Printable/exportable reports, comparisons, complete evidence coverage and any
-approved overall suitability formulation remain unfinished. No numeric combined
+Increment 1 left printing/export, comparisons, complete evidence coverage and any
+approved overall suitability formulation unfinished. Increment 2 below adds native
+browser printing/Save as PDF; the other areas remain unfinished. No numeric combined
 score, candidate recommendation, new assessment, schema migration or external
 service is introduced. Reviewed M3, notifications, LinkedIn and intake are not
 merged or modified by this branch.
@@ -73,7 +74,8 @@ application identities, aborts stale requests, and never persists report text in
 browser storage. Close, context changes, workspace navigation and document hiding
 clear it. Available interview reports are cleared at the retention deadline.
 Reopening performs a fresh authenticated read. Already delivered screenshots or
-external copies cannot be retroactively revoked; this adds no export facility.
+external copies cannot be retroactively revoked. Increment 2 adds the explicitly
+controlled browser printing workflow documented below.
 
 ## Availability and privacy
 
@@ -151,8 +153,8 @@ Review the official BID F6 text, then add approved-criterion descriptions and
 explicit per-requirement missing-CV evidence rows for unscored candidates. Existing
 F2 persistence omits dimension evidence when unscored; do not fabricate that data.
 Design the smallest persisted evidence extension before claiming full coverage.
-Explicit saved model/corpus selection can follow. Export/printing and comparison
-need independent privacy/retention review, and no overall number should be added
+Explicit saved model/corpus selection can follow. Browser printing is now
+implemented in Increment 2; further export formats and comparison need review, and no overall number should be added
 without an approved formulation.
 
 ## BJIT viva questions
@@ -188,3 +190,121 @@ without an approved formulation.
 Browser walkthrough passed for the CV-only fixture, including expanded F2
 breakdown and page reference. Screenshot is ignored local evidence at
 `data/home/f6-report-verified.png`. The existing app was left running on localhost.
+
+## F6 Increment 2 — native printable report (17 October 2026)
+
+Implemented on `feature/f6-report-export` from committed Increment 1
+`1f77c3062435abab7f12bfb9c938094ab6ee6901`; parent branch is preserved.
+This is incremental F6 work, not full F6 completion. The API contract remains
+`f6-increment-1`: printing presents saved evidence without changing its meaning.
+The original BID file still was not available locally; printable/report scope
+follows the owner's explicit F6 requirement for this increment.
+
+### Workflow and actual behavior
+
+1. Sign in, open a saved candidate's consolidated assessment, and click
+   **Print / Save as PDF**. Merely opening/navigating the report never prints.
+2. The action performs a fresh, uncached authenticated GET to the existing report
+   endpoint, clearing the older on-screen evidence first. A failed/aborted/expired
+   response never opens printing. A fresh
+   withdrawn response includes only its restricted state and remaining CV evidence;
+   it does not reuse the previously displayed interview text.
+3. A temporary direct-child-of-body React portal holds only that fresh report.
+   Every `details` element in this copy is explicitly opened before `window.print()`.
+   This includes the existing F2 score disclosure, CV references, saved technical
+   references and timestamped transcript evidence. The screen's disclosure state
+   is not changed. Print styles isolate that copy and hide navigation, buttons,
+   dashboard content, other candidates and hidden workspace pages.
+4. The browser owns its native dialog: select a printer or **Save as PDF**, review
+   page size/margins/headers/footers, then print/save or cancel there. No automatic
+   file, destination, download or server-side PDF is created.
+5. `afterprint` removes the in-memory copy and listeners, including on normal dialog
+   cancellation. Context change/unmount, errors, retention expiry or a five-minute
+   maximum also clear it. If a browser omits `afterprint`, **Clear prepared print
+   copy** clears application memory; it cannot close a browser-owned dialog.
+   Reopen the report for another fresh print. Only one report may prepare printing
+   at a time, preventing duplicate print roots or a wrong-candidate snapshot.
+
+The printable content includes job title/reference/identity, application and batch
+identity, criteria revision, F2 score provenance/breakdown/source pages, authorized
+F5 rubric/coverage/strengths/follow-ups, technical references, original timestamped
+turns, availability/limitations and recruiter-review notices. Full source-turn
+identifiers accompany quotations on paper; matching IDs accompany source turns.
+A UTC **Print view prepared** timestamp records retrieval/preparation context;
+it is explicitly not an evaluation timestamp or proof that printing completed.
+
+Print CSS supplies paper margins, black text on white, readable type, wrapping
+for long UUIDs/text/URLs, headings kept with following content, normal multi-page
+flow, paragraph widow/orphan rules and repeating table headings where tables
+exist. There are no new tables or artificial score formulas. Browser engine and
+paper settings still determine exact pagination. Using the browser's general
+Print shortcut without a prepared report produces an instruction rather than
+printing the recruiter dashboard.
+
+### Privacy and implementation choice
+
+No new endpoint, inference, migration, dependency, storage or assessment mutation
+was added. Existing authorization/consent/ownership/revision/retention checks are
+reused on the fresh GET. Source evidence is validated as in Increment 1; restricted
+states contain no interview text. An additional retention check runs immediately
+before native printing. The preparation is not saved to localStorage, sessionStorage,
+IndexedDB, a Blob URL, an HTML download or a new browser window.
+
+Native print dialogs can trigger document visibility changes. Screen evidence is
+still cleared on hiding; an already prepared print copy is retained only for its
+bounded print lifecycle so the native dialog does not erase its own document.
+Hiding before preparation aborts the request. The copy is hidden synchronously
+before cleanup if its authorization context expires/changes. Server revocation
+cannot retract an already delivered browser snapshot, open print preview, PDF,
+spool file or paper copy. The report warns that copies are confidential and outside
+application retention; the recruiter controls their secure storage and disposal.
+There is no claim of revocation or physical deletion of externally saved copies.
+
+Native printing reuses the existing browser layout, fonts and printer/PDF dialog.
+It avoids a second rendering engine, extra dependencies, server-side sensitive
+files, download endpoints and additional operational/storage costs. Automated PDF
+export, encryption, signing and cross-browser identical pagination are not provided.
+
+### Increment 2 verification
+
+Executed:
+
+```bash
+cd /home/shafi/Projects/TalentTrace-AI/frontend
+pnpm test
+pnpm build
+cd /home/shafi/Projects/TalentTrace-AI/backend
+F6_HOME_PG_TEST=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  .venv/bin/python -m pytest tests/test_consolidated_assessment.py -q
+```
+
+- Frontend: **203 passed**, zero failures/skips. Nine additional tests cover fresh
+  explicit printing, no print on denied/aborted/expired reads, cleanup/cancellation
+  hooks, retention recheck, concurrent print rejection, print isolation/expansion,
+  complete F5 content/source identities, long escaped synthetic text and
+  CV-only/missing/withdrawn/expired/deleted
+  content. Existing report availability tests remain in the suite.
+- TypeScript and production Vite build passed. Existing LiveKit >500 kB chunk warning
+  remains unchanged in nature.
+- Focused backend: **22 passed**, zero failures/skips, including **17 PostgreSQL
+  cases** in rollback-only synthetic transactions. No backend implementation changed.
+  The older office-dependent gates were not run; full DB acceptance is not claimed.
+- In-app browser: synthetic report and explicit print button loaded; clicking it
+  entered the native-print lifecycle. The native preview was not accessible in the
+  UI; Escape returned the app to its normal state after the print attempt. Physical
+  printing, actual Save as PDF, printed page layout and automatic native-dialog
+  cancellation cleanup remain unverified in this embedded browser. Unit tests exercise
+  lifecycle callbacks; markup/CSS tests do not prove actual browser pagination.
+- No external AI calls, models, framework installs or database migrations.
+
+Changed files for Increment 2: `frontend/src/api/assessmentPrinting.ts`,
+`frontend/src/components/ConsolidatedAssessment.ts`, `frontend/src/index.css`,
+`frontend/tests/assessmentPrinting.test.ts`,
+`frontend/tests/consolidatedAssessment.test.ts`, and this document.
+
+Remaining F6 work includes comparison, complete persisted requirement evidence,
+explicit saved analysis-version selection, and any approved overall suitability
+formulation. Additional export formats and production privacy/disclosure acceptance
+are separate work. A small follow-up should verify this native print flow in the
+user's normal desktop browser with synthetic long multi-page evidence before
+claiming print-layout acceptance across browsers.
