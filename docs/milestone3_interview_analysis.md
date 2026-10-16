@@ -1,5 +1,9 @@
 # Milestone 3 interview analysis
 
+**Current closure:** the [controlled synthetic F4-to-F5 demonstration](milestone3_closure.md)
+passed on 16 October 2026. Earlier PARTIAL entries below are historical snapshots;
+broader acceptance limitations remain documented in the closure.
+
 ## Integration hardening update (16 October 2026)
 
 Current work is on `feature/milestone3-integration-hardening`, based on `a3b6dcd`.

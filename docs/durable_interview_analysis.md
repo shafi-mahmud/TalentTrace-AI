@@ -1,5 +1,13 @@
 # Durable synthetic interview analysis
 
+## Live verification — 16 October 2026
+
+The actual three-turn browser capture produced a completed Groq assessment. A
+normal isolated backend restart preserved its attempt, result hash and update
+timestamp. Authorized status GET returned it without inference; anonymous and
+foreign-recruiter reads were denied. See [closure evidence](milestone3_closure.md).
+Exact provider-call/repair counts and full attempt history are not retained.
+
 Implemented, opt-in: `INTERVIEW_EVALUATION_DURABLE_ENABLED=true` uses PostgreSQL
 instead of the default temporary single-worker analysis store. It still requires
 the development/synthetic-job allowlist, configured Groq model, separate external

@@ -8,6 +8,7 @@
 * **Author**: Shafi Mahmud
 
 ## Documentation Directory (/docs)
+* [Milestone 3 closure: verified demonstration and remaining gaps](docs/milestone3_closure.md)
 * [Project Naming & Positioning (P1.1)](docs/project_naming.md)
 * [Requirement Clarifications (P1.2)](docs/clarifications.md) *(In progress)*
 * [Work Breakdown Structure (P1.3)](docs/wbs.md) *(In progress)*
