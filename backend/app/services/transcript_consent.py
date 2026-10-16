@@ -1,7 +1,7 @@
 """Inactive storage-consent integration. No routes, text writer or caption hook.
 
-The lock/revocation fence is process-local, NOT durable. Do not activate transcript
-writing until transactional revocation, read suppression and deletion are built.
+PostgreSQL provides the revocation fence. Pending receipts remain process-local.
+Do not activate transcript writing before deletion and retention are implemented.
 """
 import asyncio
 from dataclasses import dataclass, field
@@ -36,6 +36,7 @@ class _Pending:
     status: str = 'awaiting_consent'
     session_may_exist: bool = False
     closure_pending: bool = False
+    withdrawal_committed: bool = False
 
 
 class TranscriptConsentCoordinator:
@@ -56,7 +57,8 @@ class TranscriptConsentCoordinator:
         return {'capture_id': entry.capture_id, 'consent_version': CONSENT_VERSION,
                 'status': entry.status, 'transcript_saved': False,
                 'transcript_writing_enabled': False,
-                'durable_revocation_enforced': False,
+                'durable_revocation_enforced': True,
+                'withdrawal_committed': entry.withdrawal_committed,
                 'session_closure_pending': entry.closure_pending,
                 'deletion_verified': False}
 
@@ -75,26 +77,35 @@ class TranscriptConsentCoordinator:
     async def decide(self, request, *, interview_id, capture_id, decision, job_id=None):
         if decision not in ('accept', 'decline', 'withdraw'):
             raise TranscriptError('invalid_storage_decision')
-        # All awaits through metadata creation are inside the same process lock.
-        # This serializes withdrawal with consent/session creation, not turn writes.
+        # This lock only protects local pending receipts. Database interview-row
+        # locks serialize privacy decisions with all persistence operations.
         async with self._lock:
+            if decision in ('decline', 'withdraw'):
+                # No local entry is required: another process or a restarted
+                # service must still be able to withdraw interview-wide consent.
+                owner = await self.authority.withdraw(request, interview_id=interview_id, job_id=job_id)
+                self.authority.revoke(interview_id)
+                entry = self._entries.get(interview_id)
+                if entry is None:
+                    # No capture identity is trusted for cleanup on this process.
+                    # Report cleanup pending; durable revocation is already done.
+                    entry = _Pending(capture_id, owner, closure_pending=True)
+                    entry.status = 'withdrawn' if decision == 'withdraw' else 'declined'
+                    entry.withdrawal_committed = True
+                    return self._view(entry)
+                entry.receipts.clear()
+                entry.closure_pending = entry.session_may_exist
+                entry.status = 'withdrawn' if decision == 'withdraw' else 'declined'
+                entry.withdrawal_committed = True
+                if entry.closure_pending:
+                    await self.persistence.finish_session(owner, entry.capture_id, completed=False)
+                    entry.session_may_exist = False
+                    entry.closure_pending = False
+                return self._view(entry)
             role, actor, owner = await self.authority.participant(request, interview_id=interview_id, job_id=job_id)
             entry = self._entries.get(interview_id)
             if entry is None or entry.capture_id != capture_id or entry.owner != owner:
                 raise TranscriptError('storage_consent_not_verified')
-            if decision in ('decline', 'withdraw'):
-                self.authority.revoke(interview_id)
-                entry.receipts.clear()
-                # Set the in-memory fence before any database cleanup attempt.
-                entry.closure_pending = entry.session_may_exist
-                entry.status = 'withdrawn' if decision == 'withdraw' else 'declined'
-                if entry.closure_pending:
-                    # No turns are written by this integration. Never call this
-                    # deletion, or mark a transcript completed/saved.
-                    await self.persistence.finish_session(owner, capture_id, completed=False)
-                    entry.session_may_exist = False
-                    entry.closure_pending = False
-                return self._view(entry)
             if entry.status in ('declined', 'withdrawn'):
                 raise TranscriptError('storage_authorization_revoked')
             # Reauthenticate every duplicate as well; reuse its original receipt

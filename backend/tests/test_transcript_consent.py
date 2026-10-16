@@ -29,6 +29,11 @@ def setup():
         return role, owner if role == 'recruiter' else actor, owner
 
     authority.participant = AsyncMock(side_effect=participant)
+    async def withdraw(request, **kwargs):
+        _, _, verified_owner = await participant(request, **kwargs)
+        authority.revoke(kwargs['interview_id'])
+        return verified_owner
+    authority.withdraw = AsyncMock(side_effect=withdraw)
     persistence = N(authority=authority, create_session=AsyncMock(), finish_session=AsyncMock(), append_final=AsyncMock())
     coordinator = TranscriptConsentCoordinator(authority, persistence)
 
@@ -72,7 +77,8 @@ def test_refusal_preserves_caption_independence_and_blocks_reacceptance(decision
         f=setup(); capture=(await f.prepare())['capture_id'];await f.decide(capture)
         view=await f.decide(capture,'candidate',decision)
         assert view['status'] in ('declined','withdrawn')
-        assert not view['deletion_verified'] and not view['durable_revocation_enforced']
+        assert not view['deletion_verified'] and view['durable_revocation_enforced']
+        assert view['withdrawal_committed']
         with pytest.raises(TranscriptError,match='storage_authorization_revoked'):
             await f.decide(capture)
         f.persistence.create_session.assert_not_awaited()

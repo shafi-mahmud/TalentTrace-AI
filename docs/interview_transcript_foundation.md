@@ -1,6 +1,134 @@
 # Interview transcript persistence — foundation and consent integration
 
-## Increment 2A: implemented internal consent integration, inactive
+## Increment 2B-1: durable revocation guard (implemented, inactive runtime)
+
+This increment is based on `bab21e8`, in the independent
+`feature/f4-transcript-privacy-guard` worktree. The sections below headed 2A and
+Increment 1 describe earlier versions; their process-only limitations are
+superseded here specifically for revocation and guarded application reads/writes.
+There is still no live transcript writer, saving API or frontend storage control.
+
+### Migration and durable state
+
+The exact `0011_application_views` migration was copied from the notification
+worktree as an ancestry dependency only. No notification service, model, route
+or UI was integrated. Its `job_profiles` foreign-key dependency already exists.
+The new linear graph is:
+
+`0010_interview_transcripts -> 0011_application_views -> 0012_transcript_privacy_guard`
+
+Revision 0012 adds only nullable, timezone-aware
+`interview_schedules.transcript_storage_revoked_at`. NULL means no recorded
+withdrawal, never affirmative authorization. A non-NULL timestamp is permanent
+through normal application operations and applies to every capture for that
+interview, even if withdrawal happened before a capture existed. No index is
+needed beyond the existing interview primary key. The marker is not deleted
+when a capture is cleaned up or eventually physically deleted.
+
+The copied 0011 has the same revision, filename and content as the existing
+notification migration. Later integration must coalesce that identical migration,
+not generate another 0011, rewrite its parent, or recreate `application_views`.
+This worktree has one Alembic head. No branch merge was performed.
+
+Only disposable test databases receive these migrations in this increment.
+Downgrading 0012 removes withdrawal history and is unsafe for an activated storage
+system without a separately approved data/privacy recovery plan; test rollback
+is not permission to downgrade a demo or production database.
+
+### Consent and withdrawal flow
+
+The existing recruiter session/owned-job checks or independently claimed candidate
+invitation session, mutation protection, current criteria and join window are
+reused inside `StorageConsentAuthority._participant`. Approved wording and HMAC
+receipt checks are unchanged. Pending receipts, HMAC signing keys and capture
+negotiation remain process-local; this increment does not implement cross-process
+sharing of pending consent or make receipts survive restart. Positive session
+consent metadata is durable as before. Every new authorization operation checks
+the durable marker; NULL alone never creates a session.
+
+`StorageConsentAuthority.withdraw` authenticates the actual participant, locks and
+refreshes the interview row, writes the marker only if NULL and commits it in its
+own bounded transaction. Duplicate withdrawals retain the original timestamp.
+Withdrawal does not require a local coordinator entry, capture receipt or a known
+capture ID: it revokes the authenticated interview, not a client-selected capture.
+The coordinator commits this marker before clearing receipts or attempting
+interrupted session metadata cleanup. Cleanup failures cannot roll it back or
+reset it. A fresh process observes the same marker. The local revoked-ID set is
+only a fast-rejection optimization, never the durable source of truth.
+
+The coordinator reports `withdrawal_committed` only after commit acknowledgement.
+If acknowledgement is lost, the transaction error remains explicitly uncertain;
+no cleanup or automatic retry is issued. Reconcile the database first. A fresh
+coordinator with no local capture reports metadata cleanup pending rather than
+trusting a supplied capture ID. `deletion_verified` remains false, including when
+metadata closure succeeds. Metadata closure is not physical deletion.
+
+### Locking and application access protection
+
+All transcript service operations acquire the owned interview row lock before
+capture row locks and hold it until transaction completion. Capture operations
+first perform a nonlocking, owner-scoped parent identity lookup, then lock and
+refresh the interview and finally lock/refresh the capture. Existing participant
+authentication takes its job lock before the interview lock; persistence does
+not acquire a job lock after taking an interview lock. This avoids reversing
+the existing authentication lock order. Authorization checks after lock waits
+use refreshed ORM state rather than cached NULL markers.
+
+The durable marker is checked before:
+
+- New or repeated session creation.
+- New final-turn insertion and duplicate-event reconciliation (including returning
+  an already saved identical event).
+- Bounded transcript retrieval.
+- Completed/saved session finalization.
+
+Interrupted metadata cleanup is allowed for the owning recruiter-scoped internal
+service after withdrawal. It cannot insert turns, return their text, clear the
+marker or declare deletion complete. No public endpoint was introduced.
+
+Race semantics are deliberate: a write which obtains the interview lock first
+can commit before withdrawal. Withdrawal then commits and hides that stored text.
+If withdrawal obtains the lock first, the write waits, observes the non-NULL marker
+and fails. Thus no transcript service write can commit after an already committed
+withdrawal. Reads serialize on the same row: new reads after withdrawal fail.
+An authorized read that precedes withdrawal may already have delivered text;
+previously returned objects, copies or text shown to a user cannot be recalled.
+Future APIs/evaluation must use these guarded services and must not cache text
+across revocation. Direct database access is outside the application guard.
+
+The existing five-second transaction bound, three-second statement timeout,
+one-second lock timeout, ownership/consent checks and sanitized errors remain.
+No automatic retry, transcript logging or external provider call is added.
+
+### Verification and unfinished safeguards
+
+Disposable PostgreSQL tests cover independent authorities/services and connection
+pools, a new Python process with no inherited consent RAM, withdrawal before any
+capture, duplicate withdrawal, rejected reads/new writes/duplicate-event reads,
+session creation after withdrawal, both possible write/withdrawal lock orders,
+failed metadata cleanup, explicit cleanup retry and unrelated-interview isolation.
+Migration tests exercise upgrade/downgrade/re-upgrade on a disposable schema and
+verify a single linear head. Existing consent and graceful-caption regressions
+are included. No real candidate data or live recognition is used.
+
+Verified on 16 October 2026: the combined backend regression run passed 120
+tests; one subsequently added unauthorized-withdrawal PostgreSQL test also passed
+(121 tests across the two runs, none skipped). The test readiness probe now waits
+for PostgreSQL's final TCP listener instead of its temporary initialization
+server. Disposable containers were removed afterward. Python compilation and
+`git diff --check` passed. No frontend files changed, so TypeScript/build checks
+were not required for this backend-only increment.
+
+**Still not implemented:** verified physical deletion, deletion retry/reconciliation
+workflow, maximum 30-day retention enforcement, authorization for withdrawal after
+the existing join window closes, cross-process pending-consent negotiation,
+post-interview finalization policy and live transcript-writing integration.
+Existing join-window checks were not bypassed. Deletion and retention must be
+finished before storage activation. Database marker enforcement here does not
+claim a completed transcript, deletion or production readiness. No demo migration,
+LiveKit/Whisper/caption change or runtime activation occurred.
+
+## Historical Increment 2A: internal consent integration at bab21e8
 
 Based on graceful-finalization commit `7a4fd57`, in the independent
 `feature/f4-transcript-consent` worktree. No original F4 runtime or database

@@ -94,6 +94,8 @@ class InterviewSchedule(Base):
     timezone: Mapped[str] = mapped_column(String(64))
     duration_minutes: Mapped[int] = mapped_column()
     unscored_confirmed: Mapped[bool] = mapped_column()
+    # NULL is absence of withdrawal, never positive storage authorization.
+    transcript_storage_revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Immutable selection evidence survives replacement of F2 score rows on rerun.
     screening_snapshot: Mapped[dict] = mapped_column(JSONB)
 

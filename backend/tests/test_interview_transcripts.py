@@ -67,7 +67,7 @@ def pg():
         sql(output.getvalue())
     try:
         for _ in range(60):
-            ready=subprocess.run(['docker','exec',container,'pg_isready','-U','transcript_test'],capture_output=True)
+            ready=subprocess.run(['docker','exec',container,'pg_isready','-h','127.0.0.1','-U','transcript_test','-d','transcript_test'],capture_output=True)
             if ready.returncode==0:break
             time.sleep(.25)
         else:pytest.fail('Disposable PostgreSQL not ready')
@@ -77,6 +77,10 @@ def pg():
         migration('0009_bulk_scheduling:0010_interview_transcripts')
         migration('0010_interview_transcripts:0009_bulk_scheduling',down=True)
         migration('0009_bulk_scheduling:0010_interview_transcripts')
+        migration('0010_interview_transcripts:0012_transcript_privacy_guard')
+        migration('0012_transcript_privacy_guard:0011_application_views',down=True)
+        migration('0011_application_views:0012_transcript_privacy_guard')
+        assert '1' in sql("SELECT count(*) FROM information_schema.columns WHERE table_name='interview_schedules' AND column_name='transcript_storage_revoked_at' AND data_type='timestamp with time zone';")
         assert '1' in sql(f"SELECT count(*) FROM recruiters WHERE id='{marker}';")
         yield URL.create('postgresql+asyncpg',username='transcript_test',password=password,
             host='127.0.0.1',port=54402,database='transcript_test')
@@ -341,4 +345,221 @@ def test_pg_consent_participants_cannot_impersonate_or_bypass_window(pg):
             row.scheduled_at=datetime.now(timezone.utc)+timedelta(hours=2)
         with pytest.raises(TranscriptError):
             await f.authority.participant(f.request(True),interview_id=f.interview)
+    run(pg,scenario)
+
+
+def test_pg_durable_revocation_fresh_services_duplicate_events_and_isolation(pg):
+    async def scenario(f):
+        other=await fixture(pg)
+        # Distinct engine/pool and fresh authority: no shared consent/revocation RAM.
+        engine=create_async_engine(pg,echo=False,hide_parameters=True)
+        factory=async_sessionmaker(engine,expire_on_commit=False)
+        authority=StorageConsentAuthority(factory,version=f.authority.version,clock=lambda:f.now[0])
+        service=TranscriptPersistenceService(factory,authority,clock=lambda:f.now[0])
+        try:
+            await start(f);f.now[0]+=timedelta(seconds=10)
+            value=event(f.capture);await f.service.append_final(f.owner,value)
+            assert len(await service.list_turns(f.owner,f.interview))==1
+            assert await authority.withdraw(f.request(True),interview_id=f.interview)==f.owner
+            async with factory() as db:
+                stamp=(await db.get(InterviewSchedule,f.interview)).transcript_storage_revoked_at
+                assert stamp is not None
+                # Physical text remains, but application access is fenced.
+                assert await db.scalar(select(func.count()).select_from(Turn).where(Turn.session_id==f.capture))==1
+            await authority.withdraw(f.request(),interview_id=f.interview,job_id=f.job)
+            async with factory() as db:
+                assert (await db.get(InterviewSchedule,f.interview)).transcript_storage_revoked_at==stamp
+            for operation in [service.list_turns(f.owner,f.interview),
+                    f.service.append_final(f.owner,value), # Existing event must not leak on replay.
+                    service.append_final(f.owner,event(f.capture,sequence=2)),
+                    f.service.create_session(f.owner,f.interview,f.capture,f.recruiter,f.candidate),
+                    service.finish_session(f.owner,f.capture,completed=True),
+                    f.authority.accept(f.request(),capture_id=uuid4(),interview_id=f.interview,job_id=f.job)]:
+                with pytest.raises(TranscriptError,match='storage_authorization_revoked'):await operation
+            await start(other)
+            other.now[0]+=timedelta(seconds=10)
+            await other.service.append_final(other.owner,event(other.capture))
+            assert len(await other.service.list_turns(other.owner,other.interview))==1
+        finally:
+            await engine.dispose();await other.engine.dispose()
+    run(pg,scenario)
+
+
+def test_pg_revocation_survives_new_python_process(pg):
+    async def scenario(f):
+        import sys
+        await start(f);f.now[0]+=timedelta(seconds=10)
+        await f.service.append_final(f.owner,event(f.capture))
+        await f.authority.withdraw(f.request(True),interview_id=f.interview)
+        child_env=os.environ.copy()
+        child_env.update(TEST_PRIVACY_URL=pg.render_as_string(hide_password=False),
+            TEST_PRIVACY_OWNER=str(f.owner),TEST_PRIVACY_INTERVIEW=str(f.interview),TEST_PRIVACY_CAPTURE=str(f.capture))
+        code='''
+import asyncio, json, os
+from uuid import UUID, uuid4
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from app.services.interview_transcripts import StorageConsentAuthority, TranscriptPersistenceService, TranscriptError
+from app.schemas.interview_transcript import FinalTranscriptEvent
+async def main():
+    engine=create_async_engine(os.environ['TEST_PRIVACY_URL'],hide_parameters=True)
+    factory=async_sessionmaker(engine,expire_on_commit=False)
+    authority=StorageConsentAuthority(factory,version='synthetic-storage-v1')
+    service=TranscriptPersistenceService(factory,authority)
+    owner=UUID(os.environ['TEST_PRIVACY_OWNER']);interview=UUID(os.environ['TEST_PRIVACY_INTERVIEW'])
+    event=FinalTranscriptEvent(id=uuid4(),session_id=UUID(os.environ['TEST_PRIVACY_CAPTURE']),sequence=2,
+        role='candidate',final=True,text='Synthetic restart test.',start_ms=0,end_ms=1)
+    codes=[]
+    try:
+        for operation in (service.list_turns(owner,interview),service.append_final(owner,event)):
+            try: await operation;codes.append('unexpected_access')
+            except TranscriptError as error: codes.append(error.code)
+        print(json.dumps(codes))
+    finally: await engine.dispose()
+asyncio.run(main())
+'''
+        completed=await asyncio.to_thread(subprocess.run,[sys.executable,'-c',code],
+            env=child_env,text=True,capture_output=True,timeout=45)
+        assert completed.returncode==0,'Isolated privacy subprocess failed'
+        assert json.loads(completed.stdout)==['storage_authorization_revoked']*2
+    run(pg,scenario)
+
+
+@pytest.mark.parametrize('winner',['write','withdraw'])
+def test_pg_withdrawal_and_inflight_write_serialization(pg,winner):
+    async def scenario(f):
+        await start(f);f.now[0]+=timedelta(seconds=10)
+        authority=StorageConsentAuthority(f.factory,version=f.authority.version,clock=lambda:f.now[0])
+        entered,release=asyncio.Event(),asyncio.Event()
+        order=[]
+        if winner=='write':
+            original=f.service._owned
+            async def paused(*args,**kwargs):
+                result=await original(*args,**kwargs)
+                if not kwargs.get('current'):
+                    entered.set();await release.wait()
+                return result
+            f.service._owned=paused
+        else:
+            original=authority._participant
+            async def paused(*args,**kwargs):
+                result=await original(*args,**kwargs)
+                entered.set();await release.wait();return result
+            authority._participant=paused
+        async def write():
+            try:
+                await f.service.append_final(f.owner,event(f.capture))
+                order.append('write_committed')
+            except TranscriptError as error:
+                assert error.code=='storage_authorization_revoked';order.append('write_denied')
+        async def withdraw():
+            await authority.withdraw(f.request(True),interview_id=f.interview)
+            order.append('withdraw_committed')
+        first=asyncio.create_task(write() if winner=='write' else withdraw())
+        await asyncio.wait_for(entered.wait(),2)
+        second=asyncio.create_task(withdraw() if winner=='write' else write())
+        await asyncio.sleep(.1);assert not second.done()
+        release.set();await asyncio.gather(first,second)
+        assert order==(['write_committed','withdraw_committed'] if winner=='write'
+            else ['withdraw_committed','write_denied'])
+        async with f.factory() as db:
+            assert await db.scalar(select(func.count()).select_from(Turn).where(Turn.session_id==f.capture))==(1 if winner=='write' else 0)
+        with pytest.raises(TranscriptError,match='storage_authorization_revoked'):
+            await f.service.append_final(f.owner,event(f.capture,sequence=2))
+    run(pg,scenario)
+
+
+def test_pg_revocation_without_capture_and_failed_cleanup(pg):
+    from app.services.transcript_consent import TranscriptConsentCoordinator, CONSENT_VERSION
+    async def scenario(f):
+        authority=StorageConsentAuthority(f.factory,version=CONSENT_VERSION,clock=lambda:f.now[0])
+        service=TranscriptPersistenceService(f.factory,authority,clock=lambda:f.now[0])
+        coordinator=TranscriptConsentCoordinator(authority,service)
+        # Fresh coordinator has no local entry; authenticated withdrawal still commits.
+        view=await coordinator.decide(f.request(True),interview_id=f.interview,
+            capture_id=uuid4(),decision='withdraw')
+        assert view['withdrawal_committed'] and view['session_closure_pending']
+        assert not view['deletion_verified']
+        # A failed session cleanup cannot remove that independent transaction.
+        with pytest.raises(TranscriptError):await service.finish_session(f.owner,uuid4(),completed=False)
+        async with f.factory() as db:
+            assert (await db.get(InterviewSchedule,f.interview)).transcript_storage_revoked_at is not None
+        fresh=StorageConsentAuthority(f.factory,version=CONSENT_VERSION)
+        with pytest.raises(TranscriptError,match='storage_authorization_revoked'):
+            await fresh.participant(f.request(True),interview_id=f.interview)
+        with pytest.raises(TranscriptError,match='storage_authorization_revoked'):
+            await coordinator.prepare(f.request(True),interview_id=f.interview)
+    run(pg,scenario)
+
+
+def test_pg_coordinator_cleanup_failure_cannot_undo_committed_withdrawal(pg):
+    from unittest.mock import AsyncMock
+    from app.services.transcript_consent import TranscriptConsentCoordinator, CONSENT_VERSION, _Pending
+    async def scenario(f):
+        await start(f)
+        f.authority.version=CONSENT_VERSION
+        coordinator=TranscriptConsentCoordinator(f.authority,f.service)
+        coordinator._entries[f.interview]=_Pending(f.capture,f.owner,
+            status='authorized_session_no_transcript',session_may_exist=True)
+        original=f.service.finish_session
+        f.service.finish_session=AsyncMock(side_effect=TranscriptError('transcript_storage_unavailable'))
+        with pytest.raises(TranscriptError):
+            await coordinator.decide(f.request(True),interview_id=f.interview,
+                capture_id=f.capture,decision='withdraw')
+        assert coordinator._entries[f.interview].withdrawal_committed
+        async with f.factory() as db:
+            assert (await db.get(InterviewSchedule,f.interview)).transcript_storage_revoked_at is not None
+            assert (await db.get(Capture,f.capture)).status=='active'  # Cleanup really did not happen.
+        independent=TranscriptPersistenceService(f.factory,StorageConsentAuthority(f.factory,version=CONSENT_VERSION))
+        with pytest.raises(TranscriptError,match='storage_authorization_revoked'):
+            await independent.list_turns(f.owner,f.interview)
+        f.service.finish_session=original
+        assert not (await coordinator.decide(f.request(True),interview_id=f.interview,
+            capture_id=f.capture,decision='withdraw'))['session_closure_pending']
+    run(pg,scenario)
+
+
+def test_privacy_migration_has_one_linear_head():
+    from alembic.script import ScriptDirectory
+    cfg=Config(str(Path(__file__).resolve().parents[1]/'alembic.ini'))
+    scripts=ScriptDirectory.from_config(cfg)
+    assert scripts.get_heads()==['0012_transcript_privacy_guard']
+    assert scripts.get_revision('0012_transcript_privacy_guard').down_revision=='0011_application_views'
+    assert scripts.get_revision('0011_application_views').down_revision=='0010_interview_transcripts'
+
+
+def test_pg_withdrawal_commit_acknowledgement_loss_keeps_durable_fence(pg):
+    async def scenario(f):
+        from sqlalchemy import event as sa_event
+        from sqlalchemy.orm import Session
+        from sqlalchemy.exc import OperationalError
+        await start(f)
+        def lost_ack(db):raise OperationalError('synthetic withdrawal acknowledgement',{},Exception('unavailable'))
+        sa_event.listen(Session,'after_commit',lost_ack)
+        try:
+            with pytest.raises(TranscriptError) as error:
+                await f.authority.withdraw(f.request(True),interview_id=f.interview)
+            assert error.value.outcome_uncertain
+        finally:sa_event.remove(Session,'after_commit',lost_ack)
+        # Failure to receive success cannot undo the transaction PostgreSQL committed.
+        fresh=TranscriptPersistenceService(f.factory,StorageConsentAuthority(f.factory,version=f.authority.version))
+        with pytest.raises(TranscriptError,match='storage_authorization_revoked'):
+            await fresh.list_turns(f.owner,f.interview)
+        assert await f.authority.withdraw(f.request(True),interview_id=f.interview)==f.owner
+    run(pg,scenario)
+
+
+def test_pg_unauthorized_withdrawal_cannot_set_marker(pg):
+    async def scenario(f):
+        for request,interview,job in [(f.request(True),f.interview,f.job),
+                (f.request(),f.interview,None),(f.request(True),uuid4(),None),
+                (f.request(),f.interview,uuid4())]:
+            with pytest.raises(TranscriptError,match='storage_consent_not_verified'):
+                await f.authority.withdraw(request,interview_id=interview,job_id=job)
+        original=f.request()
+        no_mutation=Request({**original.scope,'headers':[(k,v) for k,v in original.scope['headers']
+            if k!=b'x-talenttrace-request']})
+        with pytest.raises(TranscriptError,match='storage_consent_not_verified'):
+            await f.authority.withdraw(no_mutation,interview_id=f.interview,job_id=f.job)
+        async with f.factory() as db:
+            assert (await db.get(InterviewSchedule,f.interview)).transcript_storage_revoked_at is None
     run(pg,scenario)

@@ -87,31 +87,65 @@ class StorageConsentAuthority:
         return _StorageConsent(capture_id, interview_id, role, actor, accepted, self.version,
             self._signature(capture_id, interview_id, role, actor, accepted, self.version))
 
-    async def participant(self, request, *, interview_id, job_id=None):
-        """Authenticate an explicit action; never infer storage agreement from login."""
+    async def _participant(self, db, request, *, interview_id, job_id=None):
+        """Existing authentication and join-window checks in caller transaction."""
         if request.method != 'POST' or not isinstance(interview_id, UUID):
             raise TranscriptError('storage_consent_not_verified')
+        if job_id is not None:
+            user = await current_recruiter(request, db)
+            interview = await owned_schedule(db, user, job_id, interview_id)
+            role, actor = 'recruiter', user.id
+        else:
+            await protect_mutation(request)
+            invitation, interview = await candidate_session(request, db)
+            if interview.id != interview_id:
+                raise TranscriptError('storage_consent_not_verified')
+            role, actor = 'candidate', invitation.id
+        join_window(interview)
+        # Authentication takes existing job locks first; then the shared privacy
+        # lock. Refresh ORM state after waiting, never trust a cached NULL marker.
+        interview = await db.scalar(select(InterviewSchedule).where(
+            InterviewSchedule.id == interview_id).with_for_update()
+            .execution_options(populate_existing=True))
+        return role, actor, interview
+
+    async def participant(self, request, *, interview_id, job_id=None):
+        """Authenticated storage action; NULL withdrawal is NOT consent."""
         try:
             async with transaction(self.factory) as db:
-                if job_id is not None:
-                    user = await current_recruiter(request, db)
-                    interview = await owned_schedule(db, user, job_id, interview_id)
-                    role, actor = 'recruiter', user.id
-                else:
-                    await protect_mutation(request)
-                    invitation, interview = await candidate_session(request, db)
-                    if interview.id != interview_id:
-                        raise TranscriptError('storage_consent_not_verified')
-                    role, actor = 'candidate', invitation.id
-                join_window(interview)
-            return role, actor, interview.recruiter_id
+                role, actor, interview = await self._participant(db, request,
+                    interview_id=interview_id, job_id=job_id)
+                if interview.transcript_storage_revoked_at is not None:
+                    raise TranscriptError('storage_authorization_revoked')
+                owner = interview.recruiter_id
+            return role, actor, owner
+        except (HTTPException, ValueError) as error:
+            if isinstance(error, TranscriptError):
+                raise
+            raise TranscriptError('storage_consent_not_verified') from None
+
+    async def withdraw(self, request, *, interview_id, job_id=None):
+        """Commit interview-wide withdrawal BEFORE any optional cleanup.
+
+        Does not need an in-memory capture or prior receipt. Duplicate withdrawal
+        retains the original timestamp; no normal operation resets this column.
+        """
+        try:
+            async with transaction(self.factory) as db:
+                _, _, interview = await self._participant(db, request,
+                    interview_id=interview_id, job_id=job_id)
+                if interview.transcript_storage_revoked_at is None:
+                    interview.transcript_storage_revoked_at = self.clock()
+                owner = interview.recruiter_id
+            self.revoke(interview_id)  # Optimization only; database is authoritative.
+            return owner
         except (HTTPException, ValueError) as error:
             if isinstance(error, TranscriptError):
                 raise
             raise TranscriptError('storage_consent_not_verified') from None
 
     def revoke(self, interview_id):
-        # Internal bounded coordinator only. Not durable or a cross-worker barrier.
+        # Process-local fast rejection only. Durable decisions are in PostgreSQL.
         self._revoked_interviews.add(interview_id)
 
     def verify(self, receipt, *, capture_id, interview_id, role):
@@ -133,7 +167,7 @@ class TranscriptPersistenceService:
     def __init__(self, factory, consent_authority, *, clock=utc_now):
         self.factory, self.authority, self.clock = factory, consent_authority, clock
 
-    async def _owned(self, db, owner, interview_id, *, current=False, lock=False):
+    async def _owned(self, db, owner, interview_id, *, current=False, lock=True, storage=True):
         query = select(InterviewSchedule, JobProfile).join(JobProfile,
             JobProfile.id == InterviewSchedule.job_id).join(Recruiter,
             Recruiter.id == InterviewSchedule.recruiter_id).where(
@@ -141,10 +175,12 @@ class TranscriptPersistenceService:
             JobProfile.recruiter_id == owner, Recruiter.active.is_(True))
         if lock:
             query = query.with_for_update(of=InterviewSchedule)
-        pair = (await db.execute(query)).first()
+        pair = (await db.execute(query.execution_options(populate_existing=True))).first()
         if pair is None:
             raise TranscriptError('owned_interview_not_found')
         interview, job = pair
+        if storage and interview.transcript_storage_revoked_at is not None:
+            raise TranscriptError('storage_authorization_revoked')
         if current:
             if job.confirmed_snapshot is None or job.revision != interview.criteria_revision:
                 raise TranscriptError('interview_revision_changed')
@@ -185,18 +221,28 @@ class TranscriptPersistenceService:
             db.add(row)
         return row
 
+    async def _capture(self, db, owner, capture_id, *, storage=True):
+        interview_id = await db.scalar(select(InterviewTranscriptSession.interview_id)
+            .join(InterviewSchedule).where(InterviewTranscriptSession.id == capture_id,
+                InterviewSchedule.recruiter_id == owner))
+        if interview_id is None:
+            raise TranscriptError('capture_not_found')
+        await self._owned(db, owner, interview_id, storage=storage)
+        capture = await db.scalar(select(InterviewTranscriptSession).where(
+            InterviewTranscriptSession.id == capture_id,
+            InterviewTranscriptSession.interview_id == interview_id)
+            .with_for_update().execution_options(populate_existing=True))
+        if capture is None:
+            raise TranscriptError('capture_not_found')
+        return capture
+
     async def append_final(self, owner, event):
         if type(event) is not FinalTranscriptEvent:
             raise TranscriptError('invalid_final_event')
         # Revalidate even an object constructed using Pydantic's unchecked constructor.
         event = FinalTranscriptEvent.model_validate(event.model_dump())
         async with transaction(self.factory) as db:
-            capture = await db.scalar(select(InterviewTranscriptSession).join(InterviewSchedule).where(
-                InterviewTranscriptSession.id == event.session_id, InterviewSchedule.recruiter_id == owner)
-                .with_for_update(of=InterviewTranscriptSession))
-            if capture is None:
-                raise TranscriptError('capture_not_found')
-            await self._owned(db, owner, capture.interview_id)
+            capture = await self._capture(db, owner, event.session_id)
             existing = (await db.scalars(select(InterviewTranscriptTurn).where(or_(
                 InterviewTranscriptTurn.id == event.id,
                 (InterviewTranscriptTurn.session_id == event.session_id) & (InterviewTranscriptTurn.sequence == event.sequence))))).all()
@@ -222,12 +268,9 @@ class TranscriptPersistenceService:
         if type(completed) is not bool or type(persistence_failed) is not bool:
             raise TranscriptError('invalid_session_outcome')
         async with transaction(self.factory) as db:
-            capture = await db.scalar(select(InterviewTranscriptSession).join(InterviewSchedule).where(
-                InterviewTranscriptSession.id == capture_id, InterviewSchedule.recruiter_id == owner)
-                .with_for_update(of=InterviewTranscriptSession))
-            if capture is None:
-                raise TranscriptError('capture_not_found')
-            await self._owned(db, owner, capture.interview_id)
+            # Interrupted metadata cleanup is allowed after revocation, but
+            # completed/saved finalization must obey the same durable fence.
+            capture = await self._capture(db, owner, capture_id, storage=completed)
             count = await db.scalar(select(func.count()).select_from(InterviewTranscriptTurn).where(
                 InterviewTranscriptTurn.session_id == capture_id))
             outcome = 'saved' if completed and not persistence_failed else ('partial' if count else 'failed')
