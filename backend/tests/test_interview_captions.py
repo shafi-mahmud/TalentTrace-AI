@@ -449,3 +449,36 @@ def test_worker_launch_uses_backend_root_even_when_server_cwd_differs(monkeypatc
         monkeypatch.setattr(asyncio,'create_subprocess_exec',spawn)
         await worker.start();await worker.close()
     asyncio.run(scenario())
+
+def test_real_caption_route_starts_two_local_workers(monkeypatch):
+    import os
+    from pathlib import Path
+    model=os.environ.get('TRANSCRIPT_REAL_WHISPER_MODEL')
+    if not model:pytest.skip('Explicit local model required; no downloads')
+    assert Path(model,'model.bin').is_file()
+    key=uuid4();expiry=datetime.now(timezone.utc)+timedelta(minutes=5)
+    async def authorized(socket,job_id=None,interview_id=None):
+        return key,('recruiter' if job_id is not None else 'candidate'),key,expiry
+    monkeypatch.setattr(route,'authorize',authorized)
+    monkeypatch.setattr(route,'settings',route.settings.model_copy(update={
+        'local_caption_model_path':Path(model),'livekit_synthetic_demo_enabled':True,
+        'transcript_storage_enabled':False}))
+    with TestClient(app) as client:
+        with client.websocket_connect(f'/api/v1/jobs/{uuid4()}/interviews/{key}/captions',headers={'origin':'http://localhost:5173'}) as recruiter:
+            assert recruiter.receive_json()['kind']=='waiting'
+            recruiter.send_text('consent')
+            assert recruiter.receive_json()['kind']=='waiting'
+            assert not route.sessions[key].providers
+            with client.websocket_connect('/api/v1/interview-access/captions',headers={'origin':'http://localhost:5173'}) as candidate:
+                assert candidate.receive_json()['kind']=='waiting'
+                candidate.send_text('consent')
+                assert recruiter.receive_json()['kind']=='active'
+                assert candidate.receive_json()['kind']=='active'
+                assert len(route.sessions[key].providers)==2
+                assert all(p.process.returncode is None for p in route.sessions[key].providers.values())
+                recruiter.send_text('stop')
+                assert recruiter.receive_json()['kind']=='stopped'
+                assert candidate.receive_json()['kind']=='stopped'
+                with pytest.raises(WebSocketDisconnect):recruiter.receive_json()
+                with pytest.raises(WebSocketDisconnect):candidate.receive_json()
+    assert not route.sessions

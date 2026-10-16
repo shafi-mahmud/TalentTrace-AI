@@ -431,3 +431,38 @@ before a further browser activation. Do not create another interview or delete
 pending evidence merely to hide this state. A final browser activation remains
 necessary to verify client worklet initialization; it is not needed to reproduce
 or validate the confirmed subprocess-import fix. Overall milestone PARTIAL.
+
+## Coordinated restart after f284ffe
+
+Archived the complete disposable database before restart and verified its catalog.
+Read-only status already reported the empty pre-restart capture interrupted/failed
+through normal stale cleanup, with no withdrawal or deletion. Capture identity,
+consent timestamps/version and older evidence remain stored; nothing was reset.
+
+Restarted only isolated backend 8024 with its working directory set to backend;
+corrected LocalWhisper also pins worker cwd independently. Database 54403,
+frontend 5190 and LiveKit were preserved. Authenticated login/storage GET succeeded
+after restart. LiveKit server was reachable and reported one participant at the
+check; two current connections are not claimed. External inference remains
+explicitly blocked in this rehearsal launcher; Gmail remains disabled.
+
+Durable consent timestamps/version are historical evidence, not reconstructible
+signed receipts. Signing secret, receipts, coordinator association and temporary
+caption approvals were memory-only. Both participants must therefore accept a
+fresh normal storage handshake in this SAME interview; do not fabricate receipts,
+clear revocation, rebook or reclaim the invitation. Existing participant-session
+cookies continue to authorize normal access subject to their expiry/window.
+
+47 caption/finalization tests passed with no skips. New opt-in real-model route
+test uses the actual ASGI caption endpoints and two actual local Faster-Whisper
+subprocesses, verifies no worker before both consents, active event on both
+sockets and orderly shutdown without audio. Test participant authorization is
+synthetic/mocked; real recruiter login was checked separately against the running
+restarted backend. First test iteration raced asynchronous cleanup; final test
+waits for both stopped messages and socket closes before asserting cleanup.
+No new transcript, interview, media playback or provider request was made.
+
+Browser resumption is limited to refreshing existing tabs to clear stale in-memory
+UI, rejoining the SAME interview in generated mode, and both participants accepting
+fresh storage then caption consent. Saved source and prior failed captures must
+remain untouched. Overall PARTIAL pending actual corrected browser capture.
