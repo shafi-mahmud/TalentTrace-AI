@@ -294,3 +294,51 @@ def test_pg_database_requires_both_consents_and_consistent_lifecycle(pg):
                 async with f.factory.begin() as db:db.add(Capture(**dict(base,**patch)))
         assert await start(f)
     run(pg,scenario)
+
+
+def test_pg_consent_coordinator_creates_metadata_only_and_withdraws(pg):
+    from app.services.transcript_consent import TranscriptConsentCoordinator, CONSENT_VERSION
+    async def scenario(f):
+        authority=StorageConsentAuthority(f.factory,version=CONSENT_VERSION,clock=lambda:f.now[0])
+        service=TranscriptPersistenceService(f.factory,authority,clock=lambda:f.now[0])
+        coordinator=TranscriptConsentCoordinator(authority,service)
+        def request(candidate=False):
+            original=f.request(candidate)
+            headers=[(k,v) for k,v in original.scope['headers'] if k!=b'x-talenttrace-storage-consent']
+            return Request({**original.scope,'headers':headers+[(b'x-talenttrace-storage-consent',CONSENT_VERSION.encode())]})
+        capture=(await coordinator.prepare(request(),interview_id=f.interview,job_id=f.job))['capture_id']
+        await coordinator.decide(request(),interview_id=f.interview,job_id=f.job,capture_id=capture,decision='accept')
+        async with f.factory() as db:assert await db.get(Capture,capture) is None
+        result=await coordinator.decide(request(True),interview_id=f.interview,capture_id=capture,decision='accept')
+        assert result['status']=='authorized_session_no_transcript' and not result['transcript_saved']
+        await coordinator.decide(request(True),interview_id=f.interview,capture_id=capture,decision='accept')
+        async with f.factory() as db:
+            row=await db.get(Capture,capture)
+            assert row.consent_version==CONSENT_VERSION and row.persistence_outcome=='pending'
+            assert await db.scalar(select(func.count()).select_from(Capture).where(Capture.id==capture))==1
+            assert await db.scalar(select(func.count()).select_from(Turn).where(Turn.session_id==capture))==0
+        await coordinator.decide(request(True),interview_id=f.interview,capture_id=capture,decision='withdraw')
+        async with f.factory() as db:
+            row=await db.get(Capture,capture)
+            assert row.status=='interrupted' and row.persistence_outcome=='failed'
+        with pytest.raises(TranscriptError,match='storage_authorization_revoked'):
+            await coordinator.decide(request(),interview_id=f.interview,job_id=f.job,capture_id=capture,decision='accept')
+    run(pg,scenario)
+
+
+def test_pg_consent_participants_cannot_impersonate_or_bypass_window(pg):
+    async def scenario(f):
+        # Same authority helper used by coordinator prepare/accept/withdraw.
+        for request,interview,job in [(f.request(True),f.interview,f.job),
+                (f.request(),f.interview,None),(f.request(True),uuid4(),None),
+                (f.request(),f.interview,uuid4())]:
+            with pytest.raises(TranscriptError):
+                await f.authority.participant(request,interview_id=interview,job_id=job)
+        assert (await f.authority.participant(f.request(),interview_id=f.interview,job_id=f.job))[0]=='recruiter'
+        assert (await f.authority.participant(f.request(True),interview_id=f.interview))[0]=='candidate'
+        async with f.factory.begin() as db:
+            row=await db.get(InterviewSchedule,f.interview)
+            row.scheduled_at=datetime.now(timezone.utc)+timedelta(hours=2)
+        with pytest.raises(TranscriptError):
+            await f.authority.participant(f.request(True),interview_id=f.interview)
+    run(pg,scenario)

@@ -61,7 +61,7 @@ class _StorageConsent:
 class StorageConsentAuthority:
     """Only an authenticated participant's explicit storage action issues a receipt.
 
-    No live route calls this class yet. The future consent route must send the
+    No live route calls this class yet. The consent coordinator requires the
     version header only after separate storage disclosure/acceptance. Ordinary
     login, live-caption consent, booleans and serialized receipts are insufficient.
     """
@@ -70,6 +70,7 @@ class StorageConsentAuthority:
             raise TranscriptError('invalid_consent_version')
         self.factory, self.version, self.clock = factory, version, clock
         self._key = secrets.token_bytes(32)
+        self._revoked_interviews = set()
 
     def _signature(self, capture, interview, role, actor, accepted, version):
         message = '|'.join(map(str, (capture, interview, role, actor, accepted.isoformat(), version)))
@@ -78,6 +79,17 @@ class StorageConsentAuthority:
     async def accept(self, request, *, capture_id, interview_id, job_id=None):
         if (request.method != 'POST' or request.headers.get('x-talenttrace-storage-consent') != self.version
                 or not isinstance(capture_id, UUID) or not isinstance(interview_id, UUID)):
+            raise TranscriptError('storage_consent_not_verified')
+        role, actor, _ = await self.participant(request, interview_id=interview_id, job_id=job_id)
+        if interview_id in self._revoked_interviews:
+            raise TranscriptError('storage_authorization_revoked')
+        accepted = self.clock().astimezone(timezone.utc)
+        return _StorageConsent(capture_id, interview_id, role, actor, accepted, self.version,
+            self._signature(capture_id, interview_id, role, actor, accepted, self.version))
+
+    async def participant(self, request, *, interview_id, job_id=None):
+        """Authenticate an explicit action; never infer storage agreement from login."""
+        if request.method != 'POST' or not isinstance(interview_id, UUID):
             raise TranscriptError('storage_consent_not_verified')
         try:
             async with transaction(self.factory) as db:
@@ -92,15 +104,19 @@ class StorageConsentAuthority:
                         raise TranscriptError('storage_consent_not_verified')
                     role, actor = 'candidate', invitation.id
                 join_window(interview)
-            accepted = self.clock().astimezone(timezone.utc)
-            return _StorageConsent(capture_id, interview_id, role, actor, accepted, self.version,
-                self._signature(capture_id, interview_id, role, actor, accepted, self.version))
+            return role, actor, interview.recruiter_id
         except (HTTPException, ValueError) as error:
             if isinstance(error, TranscriptError):
                 raise
             raise TranscriptError('storage_consent_not_verified') from None
 
+    def revoke(self, interview_id):
+        # Internal bounded coordinator only. Not durable or a cross-worker barrier.
+        self._revoked_interviews.add(interview_id)
+
     def verify(self, receipt, *, capture_id, interview_id, role):
+        if interview_id in self._revoked_interviews:
+            raise TranscriptError('storage_authorization_revoked')
         if type(receipt) is not _StorageConsent:
             raise TranscriptError('storage_consent_not_verified')
         expected = self._signature(receipt.capture_id, receipt.interview_id, receipt.role,
