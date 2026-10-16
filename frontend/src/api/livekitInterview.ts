@@ -2,6 +2,10 @@ import { authenticatedFetch } from "./session.ts";
 
 export interface InterviewAccess { server_url:string; token:string; expires_in:number; }
 export class InterviewAccessError extends Error {}
+export function supportedLiveKitURL(url:string,development=false,pageHost=''):boolean {
+  return /^wss:\/\/[a-z0-9-]+\.livekit\.cloud\/?$/.test(url)
+    || (development && pageHost==='127.0.0.1' && url==='ws://127.0.0.1:7880');
+}
 const base=(import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 export function takeInvitation(location:Location, history:History):string|null {
   const token=new URLSearchParams(location.hash.slice(1)).get("invite");
@@ -27,7 +31,7 @@ async function requestAccess(url:string):Promise<InterviewAccess> {
   if(!value || typeof value!=="object") throw new InterviewAccessError("Interview access could not be validated.");
   const v=value as InterviewAccess;
   if(Object.keys(v).length!==3 || !Number.isInteger(v.expires_in) || v.expires_in<1 || v.expires_in>300 || typeof v.token!=="string" || v.token.length<32 || v.token.length>8192
-    || !/^wss:\/\/[a-z0-9-]+\.livekit\.cloud\/?$/.test(v.server_url)) throw new InterviewAccessError("Interview access could not be validated.");
+    || !supportedLiveKitURL(v.server_url,import.meta.env?.DEV,globalThis.location?.hostname)) throw new InterviewAccessError("Interview access could not be validated.");
   return v;
 }
 

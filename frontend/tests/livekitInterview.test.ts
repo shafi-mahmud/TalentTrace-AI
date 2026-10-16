@@ -2,10 +2,17 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import {interviewAccess} from "../src/api/livekitInterview.ts";
+import {interviewAccess,supportedLiveKitURL} from "../src/api/livekitInterview.ts";
 import {SavedInterviews} from "../src/components/InterviewScheduling.ts";
 import type {Interview} from "../src/api/interviews.ts";
 const id="12345678-1234-4234-8234-123456789abc";
+test('local LiveKit requires development build and loopback page',()=>{
+  assert.equal(supportedLiveKitURL('ws://127.0.0.1:7880',true,'127.0.0.1'),true);
+  assert.equal(supportedLiveKitURL('ws://127.0.0.1:7880',false,'127.0.0.1'),false);
+  assert.equal(supportedLiveKitURL('ws://127.0.0.1:7880',true,'example.test'),false);
+  for(const url of ['ws://localhost:7880','ws://192.168.1.2:7880','ws://127.0.0.1:7881','ws://127.0.0.1:7880/?token=x'])
+    assert.equal(supportedLiveKitURL(url,true,'127.0.0.1'),false);
+});
 const interview:Interview={id,job_id:id,job_reference:"TT-JOB-1234567812344234",batch_id:id,upload_id:id,criteria_revision:2,
   scoring_version:"f2-coverage-v1",scheduled_at:"2026-11-20T09:00:00Z",timezone:"UTC",duration_minutes:30,unscored_confirmed:false,status:"scheduled"};
 test("only current saved interview exposes recruiter synthetic proof action",()=>{

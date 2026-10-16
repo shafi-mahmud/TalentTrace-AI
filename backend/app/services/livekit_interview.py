@@ -21,8 +21,11 @@ def livekit_configuration():
         raise LiveKitUnavailable()
     url = settings.livekit_url.get_secret_value()
     parsed = urlsplit(url)
-    if (parsed.scheme != "wss" or not parsed.hostname or not parsed.hostname.endswith(".livekit.cloud")
-        or parsed.username or parsed.password or parsed.port not in {None, 443}
+    local = (settings.livekit_local_development_enabled and parsed.scheme == 'ws'
+        and parsed.hostname == '127.0.0.1' and parsed.port == 7880)
+    if (not local and (parsed.scheme != "wss" or not parsed.hostname or not parsed.hostname.endswith(".livekit.cloud")
+        or parsed.port not in {None, 443})
+        or parsed.username or parsed.password
         or parsed.path not in {"", "/"} or parsed.query or parsed.fragment):
         raise LiveKitUnavailable()
     key = settings.livekit_api_key.get_secret_value()
@@ -72,6 +75,6 @@ async def revoke_candidate_access(interview_id, invitation_id):
     import time
     url, key, secret = livekit_configuration()
     room, identity = room_identity(interview_id, invitation_id, "candidate")
-    async with api.LiveKitAPI(url=url.replace("wss://", "https://", 1), api_key=key, api_secret=secret) as client:
+    async with api.LiveKitAPI(url=url.replace("wss://", "https://", 1).replace('ws://','http://',1), api_key=key, api_secret=secret) as client:
         await client.room.remove_participant(api.RoomParticipantIdentity(
             room=room, identity=identity, revoke_token_ts=int(time.time()) + 1))

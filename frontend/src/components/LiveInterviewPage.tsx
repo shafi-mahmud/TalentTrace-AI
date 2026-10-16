@@ -20,6 +20,12 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   const [peers,setPeers]=useState(0);const [audioBlocked,setAudioBlocked]=useState(false);
   const [remoteMuted,setRemoteMuted]=useState(false);const [remoteCameraOff,setRemoteCameraOff]=useState(false);
   const [storageAvailable,setStorageAvailable]=useState(false);
+  const [syntheticSpeech,setSyntheticSpeech]=useState<AudioBuffer|undefined>();
+  async function loadSynthetic(file?:File){if(!file)return;
+    if(!/\.wav$/i.test(file.name)||file.size>2000000){setError('Choose a short generated synthetic WAV only.');return;}
+    const decoder=new AudioContext();try{const buffer=await decoder.decodeAudioData(await file.arrayBuffer());
+      if(buffer.duration>30)throw Error();setSyntheticSpeech(buffer);
+    }catch{setError('Synthetic WAV could not be decoded.');}finally{void decoder.close();}}
   const local=useRef<HTMLDivElement>(null);const remote=useRef<HTMLDivElement>(null);
   const room=useRef<Room|null>(null);const generation=useRef(0);
   const captionFinalizer=useRef<(()=>Promise<void>)|null>(null);
@@ -65,7 +71,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
       .on(RoomEvent.AudioPlaybackStatusChanged,()=>{if(current===generation.current)setAudioBlocked(!active.canPlaybackAudio);})
       .on(RoomEvent.Disconnected,()=>{if(room.current===active){room.current=null;generation.current++;stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Disconnected");setError("Interview connection ended. Check the network before joining again.");}});
     try {
-      const generated=synthetic?syntheticInterviewMedia(candidate?"b":"a"):null;media.current=generated;
+      const generated=synthetic?syntheticInterviewMedia(candidate?"b":"a",syntheticSpeech):null;media.current=generated;
       let access=candidate?await candidateAccess():await interviewAccess(jobId!,interview!.id);
       if(current!==generation.current)return;
       await active.connect(access.server_url,access.token);access={server_url:"",token:"",expires_in:300};
@@ -106,6 +112,9 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
     <TranscriptPanel key={`${candidate?'candidate':jobId}:${interview?.id??'current'}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined} onAvailability={setStorageAvailable}/>
+    {import.meta.env.DEV&&synthetic&&<section aria-label="Synthetic speech rehearsal"><p>Development-only generated speech; no physical microphone. Select before joining; play only after both caption consents. WAV stays in browser memory.</p>
+      <label>Generated synthetic speech WAV<input type="file" accept=".wav" disabled={joined} onChange={e=>void loadSynthetic(e.target.files?.[0])}/></label>
+      <button disabled={!joined||!syntheticSpeech} onClick={()=>media.current?.play()}>Play generated synthetic speech</button></section>}
     {!candidate && jobId && interview && <InterviewAnalysis key={`analysis:${interview.id}`} jobId={jobId} interviewId={interview.id} revision={interview.criteria_revision}/>}
     <InterviewCaptions onFinalizing={active=>{captionDraining.current=active;}} storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>

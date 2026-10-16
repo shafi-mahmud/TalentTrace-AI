@@ -18,6 +18,14 @@ def configuration(**changes):
         "livekit_api_secret":"s"*64,"livekit_synthetic_demo_enabled":True,**changes})
 
 
+def test_explicit_local_development_only_loopback(monkeypatch):
+    monkeypatch.setattr(service,'settings',configuration(livekit_local_development_enabled=True,livekit_url='ws://127.0.0.1:7880'))
+    assert service.issue_interview_token(uuid4(),uuid4(),'recruiter')['server_url']=='ws://127.0.0.1:7880'
+    for url in ['ws://localhost:7880','ws://192.168.1.2:7880','ws://127.0.0.1:9000','ws://127.0.0.1:7880/?token=x']:
+        monkeypatch.setattr(service,'settings',configuration(livekit_local_development_enabled=True,livekit_url=url))
+        with pytest.raises(service.LiveKitUnavailable):service.livekit_configuration()
+
+
 def test_real_sdk_grants_ttl_and_opaque_two_slots(monkeypatch):
     monkeypatch.setattr(service,"settings",configuration())
     interview,owner=uuid4(),uuid4()

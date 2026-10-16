@@ -14,7 +14,7 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     on(){return this;}async connect(){joined++;}async disconnect(){disconnected++;}
   }
   function Panel(){return null;}
-  const source=ts.transpileModule(readFileSync(new URL("../src/components/LiveInterviewPage.tsx",import.meta.url),"utf8"),
+  const source=ts.transpileModule(readFileSync(new URL("../src/components/LiveInterviewPage.tsx",import.meta.url),"utf8").replace('import.meta.env.DEV','false'),
     {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   const require=createRequire(import.meta.url),exports:any={};
   runInNewContext(source,{exports,require:(name:string)=>{

@@ -1,5 +1,34 @@
 # Milestone 3 interview analysis
 
+## Integration hardening update (16 October 2026)
+
+Current work is on `feature/milestone3-integration-hardening`, based on `a3b6dcd`.
+The earlier sprint observations below are historical, not claims of a newly
+completed live interview. See [local live rehearsal](milestone3_local_live_rehearsal.md),
+[curated references](technical_reference_grounding.md) and
+[durable analysis](durable_interview_analysis.md) for the new implementation.
+Current migration head is `0014_interview_analysis`, tested only on disposable
+PostgreSQL. Existing demo databases remain unchanged.
+
+The graph now defaults to attributed official-document summaries. Analysis can
+opt into PostgreSQL identities, leased attempts and privacy-bound results.
+Exact connectivity checks are excluded from technical Q&A; interrupted answers
+remain uncertain. Source arrival order is normalized by capture/sequence before
+pairing/fingerprinting, without rewriting text or IDs. Semantic requirement
+coverage remains conservative: paraphrases without literal evidence are labelled
+unassessed, not proof of missing skill. No automatic hiring decisions are added.
+
+Latest checks: 156 focused F4/F5/real-PostgreSQL tests passed before additional
+recovery cases; six expanded durable PostgreSQL scenarios then passed, including
+an independent interpreter and cleanup failure. Broad backend regression passed
+1,301 tests with 72 optional skips after preparing the worktree-local MCP runtime.
+Later source-order/Q&A regressions passed 52 with six PostgreSQL gates off in
+that focused command. Frontend: 184 tests, TypeScript and production build passed.
+The existing >500-kB LiveKit chunk warning remains. No new live provider request
+has run at this checkpoint. Full browser capture-to-evaluation remains unverified.
+
+## Earlier milestone baseline
+
 Implemented on `feature/milestone3-interview-evaluation`, based on `9c6b255`.
 Existing F4/demo/intake worktrees and their databases are not activated or changed.
 
