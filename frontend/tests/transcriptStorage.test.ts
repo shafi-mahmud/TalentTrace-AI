@@ -4,8 +4,18 @@ import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {SavedInterviews} from '../src/components/InterviewScheduling.ts';
 import {storageConfig,prepareStorage,storageDecision,privacyStatus,withdrawStorage,reviewTranscript,isTranscriptReview} from '../src/api/transcripts.ts';
 const id='11111111-1111-4111-8111-111111111111';
+
+test('historical interviews retain transcript/privacy navigation without implying current join authorization',()=>{
+  const html=renderToStaticMarkup(createElement(SavedInterviews,{rows:[{id,job_id:id,job_reference:'TT-JOB-AAAAAAAAAAAAAAAA',batch_id:id,upload_id:id,
+    criteria_revision:2,scoring_version:'f2-coverage-v1',scheduled_at:'2026-10-01T00:00:00Z',timezone:'Asia/Dhaka',duration_minutes:60,unscored_confirmed:false,status:'scheduled'}],
+    criteriaRevision:3,onOpenInterview:()=>{throw Error('Rendering must not navigate');}}));
+  assert.match(html,/Review transcript \/ privacy/);assert.doesNotMatch(html,/Open interview/);
+});
 
 test('separate consent/withdrawal requests are explicit, protected and never retried',async t=>{
   const original=globalThis.fetch; t.after(()=>{globalThis.fetch=original;});const calls:any[]=[];

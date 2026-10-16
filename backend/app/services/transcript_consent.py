@@ -7,7 +7,8 @@ import asyncio
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
-from app.services.interview_transcripts import TranscriptError
+from app.services.interview_transcripts import TranscriptError, transaction
+from app.db.models.interview_transcript import InterviewTranscriptSession
 
 
 CONSENT_VERSION = 'optional-transcript-storage-v1'
@@ -71,6 +72,16 @@ class TranscriptConsentCoordinator:
                 if len(self._entries) >= 100:
                     raise TranscriptError('storage_consent_capacity_unavailable')
                 entry = self._entries[interview_id] = _Pending(uuid4(), owner)
+            if self.enabled and not entry.session_may_exist and entry.receipts and any(
+                    (self.authority.clock()-receipt.accepted_at).total_seconds()>300 for receipt in entry.receipts.values()):
+                # Explicitly reviewing again starts a fresh two-party handshake,
+                # never silently renew an expired acceptance during decide().
+                entry = self._entries[interview_id] = _Pending(uuid4(),owner)
+            if self.enabled and entry.status not in ('withdrawn','declined') and entry.session_may_exist:
+                async with transaction(self.persistence.factory) as db:
+                    capture = await db.get(InterviewTranscriptSession,entry.capture_id)
+                    if capture is None or capture.status != 'active':
+                        entry = self._entries[interview_id] = _Pending(uuid4(),owner)
             if entry.owner != owner:
                 raise TranscriptError('storage_consent_not_verified')
             return {**self._view(entry), 'wording': CONSENT_WORDING}

@@ -34,7 +34,7 @@ export function SavedInterviews({rows,criteriaRevision,onOpenInterview}: {rows:I
     `Scheduled · ${new Intl.DateTimeFormat("en",{dateStyle:"medium",timeStyle:"short",timeZone:row.timezone}).format(new Date(row.scheduled_at))} (${row.timezone}) · ${row.duration_minutes} minutes`,
     h("p",{className:"helper-text"},`Candidate ${row.upload_id.slice(0,8)} · criteria revision ${row.criteria_revision}${row.criteria_revision!==criteriaRevision?" (historical)":""}${row.unscored_confirmed?" · Unscored selection confirmed":""}`),
     h("details",{className:"supporting-details"},h("summary",null,"Booking details"),h("p",null,`UTC: ${new Date(row.scheduled_at).toISOString()}`),h("p",null,`Candidate ${row.upload_id} · Candidate invitation managed on interview page`)),
-    onOpenInterview && row.criteria_revision===criteriaRevision && h("button",{type:"button",className:"button button-secondary",onClick:()=>onOpenInterview(row)},"Open interview")))),
+    onOpenInterview && h("button",{type:"button",className:"button button-secondary",onClick:()=>onOpenInterview(row)},row.criteria_revision===criteriaRevision?"Open interview":"Review transcript / privacy")))),
     !rows.length && h("p",null,"No saved interviews loaded."));
 }
 

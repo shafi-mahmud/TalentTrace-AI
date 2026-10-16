@@ -9,6 +9,7 @@ from app.core.auth import token_hash
 from app.db.models.recruiter import InterviewInvitation
 from app.services.transcript_runtime import runtime
 from app.services.caption_transcript import CaptionTranscript
+from app.services.interview_transcripts import transaction
 
 from fastapi import APIRouter, WebSocket
 from starlette.requests import Request
@@ -57,7 +58,7 @@ async def authorize_finalizing(socket, association, storage):
     if (storage.grace_until is None or now >= storage.grace_until
             or now >= expires + timedelta(seconds=35)):
         raise ValueError('Finalization access ended')
-    async with session_factory()() as db:
+    async with transaction(session_factory()) as db:
         interview = await storage.runtime.storage._owned(db, storage.owner, key)
         if role == 'recruiter':
             user = await current_recruiter(Request({**socket.scope,'type':'http','method':'GET'}),db)

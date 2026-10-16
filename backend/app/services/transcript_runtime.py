@@ -24,6 +24,7 @@ def runtime():
 async def maintenance_loop():
     while True:
         try:
+            await runtime().privacy.interrupt_stale()
             result = await runtime().privacy.sweep()
             maintenance_status.update(state='running', **result)
         except Exception:

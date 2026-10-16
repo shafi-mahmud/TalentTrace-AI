@@ -2,9 +2,10 @@ import {useEffect,useRef,useState} from "react";
 import {captionUrl,isCaption,isFinalization} from "../api/captions";
 import type {Caption} from "../api/captions";
 
-export default function InterviewCaptions({connected,candidate,jobId,interviewId,microphone,microphoneMuted=false,finalizerRef,storageAvailable=false}:{
+export default function InterviewCaptions({connected,candidate,jobId,interviewId,microphone,microphoneMuted=false,finalizerRef,storageAvailable=false,onFinalizing}:{
   connected:boolean;candidate:boolean;jobId?:string;interviewId?:string;microphone:()=>MediaStreamTrack|null;microphoneMuted?:boolean;
   storageAvailable?:boolean;
+  onFinalizing?:(active:boolean)=>void;
   finalizerRef?:{current:(()=>Promise<void>)|null};
 }) {
   const [agreed,setAgreed]=useState(false);const [state,setState]=useState("Off");const [rows,setRows]=useState<Caption[]>([]);
@@ -35,7 +36,7 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
     closeAudio();
     const old=socket.current;socket.current=null;
     try{if(old?.readyState===WebSocket.OPEN)old.send("stop");}catch{/* Connection already lost. */}old?.close();
-    finishing.current=false;finishResolve.current?.();finishResolve.current=null;finishPromise.current=null;
+    finishing.current=false;onFinalizing?.(false);finishResolve.current?.();finishResolve.current=null;finishPromise.current=null;
     setAgreed(false);setRows([]);setState("Captions stopped. Microphone/video may remain active for the interview.");
   }
   useEffect(()=>()=>{stop();},[connected,candidate,jobId,interviewId]);
@@ -62,7 +63,7 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
   }
   function freeze(ws:WebSocket) {
     if(finishing.current)return;
-    finishing.current=true;setState("Finishing accepted audio…");
+    finishing.current=true;onFinalizing?.(true);setState("Finishing accepted audio…");
     if(!finishTimer.current)finishTimer.current=setTimeout(()=>{stop();setState("Finalization unconfirmed — no automatic retry.");},40000);
     if(workletRef.current){
       flushTimer.current=setTimeout(()=>{stop();setState("Audio flush failed — finalization incomplete.");},2000);

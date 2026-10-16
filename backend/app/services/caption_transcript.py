@@ -31,8 +31,9 @@ class CaptionTranscript:
             async with transaction(self.runtime.storage.factory) as db:
                 await self.runtime.storage._owned(db, entry.owner, self.interview_id, current=True)
                 capture = await db.get(InterviewTranscriptSession, entry.capture_id)
-                if capture is None or capture.status != 'active':
+                if capture is None or capture.status != 'active' or (capture.capture_summary or {}).get('recognition_started_at'):
                     return
+                capture.capture_summary = {'recognition_started_at':self.runtime.storage.clock().isoformat()}
                 self.capture, self.owner, self.started_at = capture.id, entry.owner, capture.started_at
                 self.offset_ms = max(0, int((self.runtime.storage.clock()-capture.started_at).total_seconds()*1000))
         except TranscriptError:

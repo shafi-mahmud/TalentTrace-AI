@@ -766,3 +766,180 @@ def test_pg_authenticated_consent_api_review_and_after_window_withdrawal(pg,monk
             assert response.status_code==409 and response.json()['detail']['code']=='storage_authorization_revoked'
             assert (await client.get('/api/v1/interview-transcripts/privacy/status')).json()['deletion_verified']
     run(pg,scenario)
+
+
+def test_pg_two_authenticated_websockets_consent_to_saved_review_to_deletion(pg,monkeypatch):
+    from fastapi.testclient import TestClient
+    from sqlalchemy.pool import NullPool
+    from app.main import app
+    from app.api.routers import transcript_storage as api, interview_captions as captions
+    from app.services import transcript_runtime
+    from app.services.transcript_consent import TranscriptConsentCoordinator, CONSENT_VERSION
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    async def scenario(f):
+        # No connection is shared across the test HTTP/WebSocket event loops.
+        engine=create_async_engine(pg,hide_parameters=True,poolclass=NullPool)
+        factory=async_sessionmaker(engine,expire_on_commit=False)
+        authority=StorageConsentAuthority(factory,version=CONSENT_VERSION,clock=lambda:f.now[0])
+        storage=TranscriptPersistenceService(factory,authority,clock=lambda:f.now[0])
+        rt=N(authority=authority,storage=storage,privacy=TranscriptPrivacyService(storage),
+            coordinator=TranscriptConsentCoordinator(authority,storage,enabled=True))
+        for module in (api,captions,transcript_runtime):monkeypatch.setattr(module,'runtime',lambda:rt)
+        monkeypatch.setattr(captions,'session_factory',lambda:factory)
+        monkeypatch.setattr(api.settings,'transcript_storage_enabled',True)
+        monkeypatch.setattr(api.settings,'livekit_synthetic_demo_enabled',True)
+        monkeypatch.setattr(api.settings,'environment','development')
+        monkeypatch.setattr(api.settings,'local_caption_model_path',Path('synthetic-model-not-loaded'))
+        class Worker:
+            def __init__(self,*args):pass
+            async def start(self):pass
+            async def close(self):pass
+            async def transcribe(self,pcm):
+                f.now[0]+=timedelta(seconds=1)
+                return 'Synthetic microphone speech.'
+        monkeypatch.setattr(captions,'LocalWhisper',Worker)
+        def headers(candidate=False):return {k.decode():v.decode() for k,v in f.request(candidate).scope['headers']}
+        def rehearsal():
+            with TestClient(app) as client:
+                base=f'/api/v1/jobs/{f.job}/interviews/{f.interview}'
+                candidate='/api/v1/interview-access/transcript-storage'
+                first=client.post(base+'/transcript-storage/prepare',json={},headers=headers())
+                second=client.post(candidate+'/prepare',json={},headers=headers(True))
+                assert first.status_code==second.status_code==200
+                capture=first.json()['capture_id'];assert capture==second.json()['capture_id']
+                for path,role in [(base+'/transcript-storage/decision',False),(candidate+'/decision',True)]:
+                    h=headers(role);h['x-talenttrace-storage-consent']=CONSENT_VERSION
+                    assert client.post(path,json={'capture_id':capture,'decision':'accept'},headers=h).status_code==200
+                rh=headers();ch=headers(True)
+                rh['origin']=ch['origin']=api.settings.cors_origins[0]
+                with client.websocket_connect(base+'/captions',headers=rh) as recruiter, client.websocket_connect('/api/v1/interview-access/captions',headers=ch) as candidate_socket:
+                    assert recruiter.receive_json()['kind']=='waiting'
+                    assert candidate_socket.receive_json()['kind']=='waiting'
+                    recruiter.send_text('consent');candidate_socket.send_text('consent')
+                    def until(socket,kind):
+                        for _ in range(20):
+                            value=socket.receive_json()
+                            if value['kind']==kind:return value
+                        raise AssertionError('Expected bounded protocol event missing')
+                    until(recruiter,'active');until(candidate_socket,'active')
+                    candidate_socket.send_bytes(bytes(3200))
+                    # Wait until dispatch accepted this synthetic frame before ending.
+                    for _ in range(100):
+                        if captions.sessions[f.interview].frames['candidate']==1:break
+                        time.sleep(.01)
+                    recruiter.send_text('finish')
+                    until(recruiter,'finishing');until(candidate_socket,'finishing')
+                    recruiter.send_json({'kind':'end','frames':0,'samples':0,'captured_samples':0})
+                    candidate_socket.send_json({'kind':'end','frames':1,'samples':1600,'captured_samples':1600})
+                    assert until(recruiter,'storage')['status']=='saved'
+                    until(recruiter,'stopped');until(candidate_socket,'stopped')
+                review=client.get(base+'/transcript',headers=headers())
+                assert review.status_code==200 and len(review.json()['turns'])==1
+                assert review.json()['turns'][0]['role']=='candidate'
+                assert review.json()['captures'][0]['status']=='completed'
+                result=client.post('/api/v1/interview-transcripts/privacy/withdraw',json={},headers={'x-talenttrace-request':'1'})
+                assert result.status_code==200 and result.json()['deletion_verified']
+                assert client.get(base+'/transcript',headers=headers()).status_code==409
+        try:await asyncio.to_thread(rehearsal)
+        finally:
+            captions.sessions.clear()
+            await engine.dispose()
+    run(pg,scenario)
+
+
+def test_pg_restart_reconciliation_never_claims_recovered_audio_and_inactive_cleanup(pg):
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    async def scenario(f):
+        privacy=TranscriptPrivacyService(f.service)
+        await start(f);f.now[0]+=timedelta(seconds=10)
+        await f.service.append_final(f.owner,event(f.capture))
+        f.now[0]+=timedelta(minutes=11)
+        await privacy.interrupt_stale()
+        async with f.factory() as db:
+            capture=await db.get(Capture,f.capture)
+            assert capture.status=='interrupted' and capture.persistence_outcome=='partial'
+            assert capture.capture_summary is None
+        async with f.factory.begin() as db:
+            user=await db.get(Recruiter,f.owner);user.active=False
+        f.now[0]+=timedelta(days=31)
+        result=await privacy.sweep()
+        assert result['failed']==0
+        async with f.factory() as db:
+            assert await db.get(Capture,f.capture) is None
+            assert (await db.get(InterviewSchedule,f.interview)).transcript_deletion_status=='deleted'
+    run(pg,scenario)
+
+
+def test_pg_storage_withdrawal_keeps_temporary_caption_stream_usable(pg):
+    from app.services.caption_transcript import CaptionTranscript
+    from app.services.interview_captions import CaptionSession
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    async def scenario(f):
+        await start(f)
+        rt=N(storage=f.service,coordinator=N(_entries={f.interview:N(status='authorized_session_no_transcript',owner=f.owner,capture_id=f.capture)}))
+        class Worker:
+            async def start(self):pass
+            async def close(self):pass
+            async def transcribe(self,pcm):return 'Temporary synthetic speech.'
+        messages=[]
+        async def send(value):messages.append(value)
+        session=CaptionSession(Worker,storage=CaptionTranscript(rt,f.interview))
+        for role in ('recruiter','candidate'):await session.connect(role,send)
+        await session.approve('recruiter');await session.approve('candidate')
+        assert (await TranscriptPrivacyService(f.service).withdraw(f.request(True),f.interview))['deletion_verified']
+        for _ in range(40):await session.audio('candidate',bytes(3200))
+        assert not session.stopped and any(m['kind']=='caption' for m in messages)
+        await session.stop()
+        async with f.factory() as db:
+            assert await db.get(Capture,f.capture) is None
+    run(pg,scenario)
+
+
+def test_pg_failed_cleanup_does_not_starve_later_interviews(pg):
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    from unittest.mock import AsyncMock
+    async def scenario(f):
+        other=await fixture(pg)
+        try:
+            await f.authority.withdraw(f.request(True),interview_id=f.interview)
+            await other.authority.withdraw(other.request(True),interview_id=other.interview)
+            privacy=TranscriptPrivacyService(f.service)
+            privacy.delete_revoked=AsyncMock(side_effect=TranscriptError('transcript_storage_unavailable'))
+            assert (await privacy.sweep(limit=1))['failed']==1
+            first=privacy.delete_revoked.call_args.args[1]
+            assert (await privacy.sweep(limit=1))['failed']==1
+            second=privacy.delete_revoked.call_args.args[1]
+            assert first!=second  # Bounded scan advances despite the earlier failure.
+        finally:await other.engine.dispose()
+    run(pg,scenario)
+
+
+def test_pg_candidate_deletion_right_survives_owner_account_deactivation(pg):
+    from app.services.transcript_privacy import TranscriptPrivacyService, PRIVACY_COOKIE
+    async def scenario(f):
+        await start(f)
+        privacy=TranscriptPrivacyService(f.service)
+        raw,_=await privacy.issue_candidate_access(f.request(True),f.interview)
+        request=Request({'type':'http','method':'POST','headers':[
+            (b'x-talenttrace-request',b'1'),(b'cookie',(PRIVACY_COOKIE+'='+raw).encode())]})
+        async with f.factory.begin() as db:
+            user=await db.get(Recruiter,f.owner);user.active=False
+        assert (await privacy.withdraw(request,f.interview))['deletion_verified']
+    run(pg,scenario)
+
+
+def test_pg_stale_recovery_uses_recognition_start_not_delayed_consent_time(pg):
+    from app.services.caption_transcript import CaptionTranscript
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    async def scenario(f):
+        await start(f);f.now[0]+=timedelta(minutes=9)
+        rt=N(storage=f.service,coordinator=N(_entries={f.interview:N(status='authorized_session_no_transcript',owner=f.owner,capture_id=f.capture)}))
+        adapter=CaptionTranscript(rt,f.interview);await adapter.start()
+        assert adapter.capture==f.capture
+        f.now[0]+=timedelta(minutes=2)
+        privacy=TranscriptPrivacyService(f.service);await privacy.interrupt_stale()
+        async with f.factory() as db:assert (await db.get(Capture,f.capture)).status=='active'
+        f.now[0]+=timedelta(minutes=9)
+        await privacy.interrupt_stale()
+        async with f.factory() as db:assert (await db.get(Capture,f.capture)).status=='interrupted'
+    run(pg,scenario)

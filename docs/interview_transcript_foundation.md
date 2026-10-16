@@ -1,5 +1,11 @@
 # Interview transcript persistence — foundation and consent integration
 
+The later `feature/f4-transcript-storage-integration` branch completes opt-in
+privacy, trusted final-turn storage and UI integration. See
+[the integration guide](f4_transcript_integration.md) for current contracts,
+activation requirements and verification. The increment sections below record
+the earlier foundation and privacy-guard milestones, not live demo activation.
+
 ## Increment 2B-1: durable revocation guard (implemented, inactive runtime)
 
 This increment is based on `bab21e8`, in the independent

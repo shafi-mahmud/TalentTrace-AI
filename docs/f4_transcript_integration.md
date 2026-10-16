@@ -147,3 +147,124 @@ No cross-worker audio recovery or shared pending HMAC receipts are claimed.
 Phase C frontend validation: 176 tests, TypeScript and production build passed.
 The existing LiveKit bundle-size warning remains nonblocking. No interview was
 booked, model invoked or production/development demo process restarted.
+
+## Recovery, boundaries and verified rehearsal
+
+The single caption worker and both API roles were exercised against disposable
+PostgreSQL through the actual authenticated HTTP and two caption WebSockets.
+Both participants explicitly accepted, a mocked local worker processed synthetic
+PCM, normal finish flushed the residual chunk, the committed turn was retrieved
+by its owning recruiter, and candidate withdrawal caused read denial and verified
+physical text/session deletion. This is an automated synthetic integration test,
+not a physical-device/browser or real Whisper accuracy verification of this branch.
+
+Persisted recognition-start metadata distinguishes late caption starts from
+abandoned consent. The enabled maintenance task marks an active capture stale
+after ten minutes without a supported continuing capture (the maximum capture
+is 300 seconds plus bounded finalization). It becomes interrupted/partial or
+failed; unknown sample completeness is never reconstructed. A fresh explicitly
+reviewed handshake can create a new capture after closure. Expired pending
+receipts can be replaced only by explicit fresh review, with a new capture UUID
+and both participants' new acceptance; decide does not silently renew receipts.
+No RAM audio is recovered after restart. Pending negotiation still requires the
+same backend worker; privacy checks remain durable across processes.
+
+Cleanup scans use a bounded, rotating in-memory cursor so persistent failures
+cannot monopolize the first page. Restart resets only that scan position, never
+privacy authorization; the scanner wraps and retries durable pending/failed rows.
+Inactive recruiter accounts do not prevent automatic deletion or a previously
+authenticated candidate's privacy-cookie deletion request. Candidate credentials
+remain limited to privacy status/deletion and never permit transcript reads.
+
+Normal end sends the separate storage acknowledgement before `stopped`. The UI
+waits rather than interrupting an already authorized bounded drain when the join
+window expires. Network failure, capture failure or consent withdrawal still
+abort caption audio immediately. Storage-only withdrawal leaves temporary captions
+usable. Saved timestamps are chunk estimates relative to capture authorization,
+which may precede microphone start; they are not word-level or interview-start
+alignment. Delivered text cannot be recalled; displayed review is cleared on the
+next privacy status check if another participant withdraws.
+
+Known deployment limits: one single-room caption worker; at most 100 in-memory
+pending interview entries per process, bounded audio buffers, 120-second normal
+caption cap (up to 300 in the existing isolated test mode), 35-second server drain,
+40-second browser wait, and no durable audio/text retry queue. Cleanup must remain
+enabled/running after activation until all outstanding records have been deleted.
+If storage/cleanup is unavailable, synchronous privacy checks fail closed and
+deletion is not reported complete. Retention access denial is immediate even while
+physical deletion is waiting for a healthy database/worker. Backups, exported
+copies and previously delivered text are outside this application's verified
+row-deletion claim and need deployment-specific handling before production use.
+No production activation, new disclosure to AI providers or F5 evaluation occurs.
+
+## Safe reproduction
+
+For the automated test, in this worktree's `backend` directory, use the existing
+Python environment with pinned project dependencies and Docker:
+
+```powershell
+$env:TRANSCRIPT_PG_TEST = '1'
+python -m pytest tests/test_interview_transcripts.py::test_pg_two_authenticated_websockets_consent_to_saved_review_to_deletion -q
+```
+
+The fixture asserts loopback port 54402 and the disposable `transcript_test`
+database; it creates/removes its own container and never migrates ports 54378 or
+54379. Other transcript/retention tests use the same explicit convention. The
+legacy mocked MCP tests need a local ignored MCP Python executable; this session
+created an interpreter-only `.venv` in this worktree, without publishing, network
+installation or changes to the preserved original MCP edit.
+
+For a later manual check, first obtain separate approval for any demo database
+activation. Prefer a new isolated synthetic database and private configuration.
+Verify identity/backup, then explicitly upgrade that target to
+`0013_transcript_lifecycle`. Keep `INTERVIEW_EMAIL_ENABLED=false`. Configure
+`TRANSCRIPT_STORAGE_ENABLED=true`, existing tiny.en/LiveKit settings and exact
+frontend origin; use unused loopback ports. Existing Vite defaults proxy `/api`
+to localhost:8000; either use a dedicated backend there after checking availability
+or set `VITE_API_BASE_URL` to the selected backend and allow that exact frontend
+origin. Preserve other running services.
+
+In the browser, open the synthetic saved interview. Both participants join using
+their own existing authorization, review the storage disclosure and independently
+accept before starting caption capture. Both then consent separately to captions.
+Speak synthetic text, choose normal finish/Leave, and check the storage outcome.
+The recruiter loads the saved transcript from that interview's optional panel;
+historical criteria revisions retain a separate transcript/privacy navigation
+action. The candidate uses `/transcript-privacy` in the same browser to withdraw
+later. Verify deleted status and denied recruiter retrieval. Never interpret an
+unconfirmed/incomplete outcome as a complete interview transcript.
+
+## Changed-file inventory relative to 2a4a15b
+
+Final verification on 16 October 2026: full backend suite 1,278 passed and 12
+skipped; final affected transcript/privacy/caption/access/LiveKit suite 135 passed
+after the last recovery/privacy changes. Frontend 177 passed, none skipped;
+TypeScript, production build, Python compilation and diff checks passed. The
+full backend's initial three MCP publication-test failures were resolved by
+provisioning only its ignored local interpreter prerequisite, not by changing
+publishing code or weakening tests. Optional unrelated environment-gated checks
+remain skipped. No real publication/email/cloud operation was performed.
+
+- Configuration/runtime: `.env.example`, `backend/app/core/config.py`,
+  `backend/app/main.py`, `backend/app/services/transcript_runtime.py`.
+- Schema/models: `backend/alembic/versions/0013_transcript_lifecycle.py`,
+  `backend/app/db/models/recruiter.py`, `backend/app/db/models/interview_transcript.py`,
+  `backend/app/schemas/interview_transcript.py`.
+- HTTP/WebSocket: `backend/app/api/router.py`,
+  `backend/app/api/routers/transcript_storage.py`,
+  `backend/app/api/routers/interview_captions.py`.
+- Services: `backend/app/services/transcript_privacy.py`,
+  `backend/app/services/interview_transcripts.py`,
+  `backend/app/services/transcript_consent.py`,
+  `backend/app/services/caption_transcript.py`,
+  `backend/app/services/interview_captions.py`.
+- Frontend: `frontend/src/App.tsx`, `frontend/src/api/transcripts.ts`,
+  `frontend/src/components/TranscriptPanel.tsx`,
+  `frontend/src/components/InterviewCaptions.tsx`,
+  `frontend/src/components/LiveInterviewPage.tsx`,
+  `frontend/src/components/InterviewScheduling.ts`.
+- Tests: `backend/tests/test_interview_transcripts.py`,
+  `backend/tests/test_transcript_consent.py`,
+  `frontend/tests/transcriptStorage.test.ts`,
+  `frontend/tests/interviewFinalization.test.ts`.
+- Documentation: this guide and `docs/interview_transcript_foundation.md`.

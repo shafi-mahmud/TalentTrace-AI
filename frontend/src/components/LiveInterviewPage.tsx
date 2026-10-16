@@ -23,6 +23,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   const room=useRef<Room|null>(null);const generation=useRef(0);
   const captionFinalizer=useRef<(()=>Promise<void>)|null>(null);
   const leaving=useRef(false);
+  const captionDraining=useRef(false);
   const media=useRef<ReturnType<typeof syntheticInterviewMedia>|null>(null);
   function stopMedia() {media.current?.dispose();media.current=null;local.current?.replaceChildren();remote.current?.replaceChildren();}
   async function leave(normal=false) {
@@ -31,6 +32,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Left interview");try {await active?.disconnect(true);} catch {}finally{leaving.current=false;}}
   useEffect(()=>()=>{generation.current++;const active=room.current;room.current=null;stopMedia();void active?.disconnect(true).catch(()=>{});},[jobId,interview?.id]);
   useEffect(()=>{if(!joined)return;let cancelled=false;const current=generation.current;const check=()=>{
+    if(leaving.current || captionDraining.current)return;
     if(candidate)void candidateStatus().catch(()=>{if(!cancelled && current===generation.current){void leave();setError("Interview access ended or was revoked.");}});
     else if(interview && Date.now()>=Date.parse(interview.scheduled_at)+(interview.duration_minutes+15)*60000)void leave();
   };const timer=window.setInterval(check,15000);return()=>{cancelled=true;window.clearInterval(timer);};},[joined,candidate,interview]);
@@ -103,7 +105,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
     <TranscriptPanel key={`${candidate?'candidate':jobId}:${interview?.id??'current'}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined} onAvailability={setStorageAvailable}/>
-    <InterviewCaptions storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
+    <InterviewCaptions onFinalizing={active=>{captionDraining.current=active;}} storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
     <button className="button button-secondary" onClick={onBack}>Back to screening</button>

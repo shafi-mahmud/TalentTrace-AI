@@ -155,10 +155,28 @@ def test_uncertain_creation_and_failed_closure_do_not_restore_authorization_or_r
     asyncio.run(run())
 
 
-def test_bounded_entries_and_unregistered_integration():
+def test_bounded_entries_and_disabled_feature_cannot_create_sessions(monkeypatch):
     async def run():
         f=setup();f.coordinator._entries={uuid4():None for _ in range(100)}
         with pytest.raises(TranscriptError,match='storage_consent_capacity_unavailable'):await f.prepare()
     asyncio.run(run())
     from app.main import app
-    assert not any('storage-consent' in getattr(route,'path','') for route in app.routes)
+    from app.core.config import settings
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(settings,'transcript_storage_enabled',False)
+    client=TestClient(app)
+    assert client.get('/api/v1/transcript-storage/config').json()['enabled'] is False
+    assert client.post(f'/api/v1/jobs/{uuid4()}/interviews/{uuid4()}/transcript-storage/prepare',json={}).status_code==404
+
+
+def test_expired_pending_handshake_requires_explicit_fresh_review_and_both_consents():
+    async def run():
+        f=setup();f.coordinator.enabled=True
+        old=(await f.prepare())['capture_id'];await f.decide(old)
+        f.now[0]+=timedelta(minutes=6)
+        fresh=(await f.prepare())['capture_id']
+        assert fresh!=old and not f.coordinator._entries[f.interview].receipts
+        with pytest.raises(TranscriptError):await f.decide(old,'candidate')
+        assert (await f.decide(fresh,'candidate'))['status']=='awaiting_consent'
+        f.persistence.create_session.assert_not_awaited()
+    asyncio.run(run())
