@@ -172,3 +172,27 @@ def test_pg_retention_expiry_denies_derived_reads_and_sweep_removes_result(pg):
             async with f.factory() as db:assert await db.get(Record,op) is None
         finally:await m.close()
     run(pg,scenario)
+
+def test_pg_uncertain_result_is_durable_and_withdrawal_deletes_it(pg):
+    from app.db.models.interview_transcript import InterviewTranscriptTurn as Turn
+    from app.services.interview_transcripts import TranscriptError
+    async def scenario(f):
+        await seeded(f)
+        async with f.factory.begin() as db:
+            turns=(await db.scalars(select(Turn).where(Turn.session_id==f.capture).order_by(Turn.sequence))).all()
+            turns[0].text='are lists mutable.'
+            turns[1].text='Lists can change.'
+        provider=FakeProvider(fail=True);m=manager(f,provider);op=uuid4()
+        try:
+            await m.start(f.request(),f.job,f.interview,2,op)
+            await m.operations[op].task
+            result=await manager(f).get(f.request(),f.job,f.interview,op)
+            assert result['status']=='completed' and result['result']['outcome']=='needs_review'
+            assert result['result']['inference_performed'] is False and provider.calls==0
+            assert result['result']['pairs'][0]['question_turns']
+            status=await TranscriptPrivacyService(f.service).withdraw(f.request(),f.interview,f.job)
+            assert status['deletion_verified']
+            with pytest.raises((TranscriptError,HTTPException)):
+                await manager(f).get(f.request(),f.job,f.interview,op)
+        finally:await m.close()
+    run(pg,scenario)

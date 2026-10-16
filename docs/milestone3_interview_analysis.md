@@ -362,3 +362,36 @@ are verified. A grounded technical evaluation of adequate, confidently paired
 interview evidence has mocked coverage but has not passed live on this fragmented
 capture. Human transcript review or better future source evidence remains needed;
 no transcript editing or further inference is authorized by this diagnosis.
+
+## Closure checkpoint: actual review outcome and next speech fixture
+
+**Live-browser verified:** recruiter UI displayed completed processing with
+`needs_review`, all four dimensions not assessed, Python not evidenced, original
+uncertain pair and source references. The deterministic operation was attempt 5
+of the preserved operation; the prior failed attempt was backed up first. External
+inference was explicitly disabled in this runtime and no provider call occurred.
+PostgreSQL result survived a backend restart and authenticated status GET. The
+original four transcript turns remained unchanged. A verified private custom
+archive preserves this completed review result and earlier source records.
+
+**Privacy tests:** seven real disposable PostgreSQL tests passed, including a new
+review-result test for zero provider calls, independent-manager retrieval,
+withdrawal, verified deletion and denial after deletion. Original evidence was
+not withdrawn/deleted to demonstrate this; only separate test fixtures were used.
+An initial new-test run found missing test imports; those were corrected before
+the final successful run. No application privacy checks were bypassed.
+
+**Prepared, not live verified:** a separate new synthetic 60-minute interview and
+private invitation, with local generated speech fixtures. Whole-file local tiny.en
+preflight recognized “Explain Python lists.” and “Python lists are mutable ordered
+sequences. You can append an item to a list.” accurately; total audio 8.35 seconds.
+PCM was decoded locally for this preflight, as in the existing worker. It is not
+proof of browser streaming recognition, confident saved pairing or grounded Groq
+analysis. Invitation preparation initially stopped under review-only runtime;
+the one already-created booking was recovered without creating a duplicate.
+No new transcript/caption consent has been accepted, speech played in browser or
+Groq call made for this separate fixture. Synthetic saved eligibility is a setup
+fixture, not an actual CV-screening claim. Await manual browser sign-in and consent.
+
+Verdict remains PARTIAL pending any separate confident live evaluation. Existing
+capture, review result and failed-attempt backups must be preserved.
