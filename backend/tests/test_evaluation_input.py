@@ -149,3 +149,15 @@ def test_pg_privacy_and_authorization_fence(pg,block):
             with pytest.raises((TranscriptError,EvaluationInputError)):
                 await service.prepare(f.request(),job_id=f.job,interview_id=f.interview,revision=2)
     run(pg,scenario)
+
+def test_empty_failed_history_does_not_replace_saved_capture():
+    from copy import copy
+    parent,snapshot,captures,rows=source();failed=copy(captures[0]);failed.id=uuid4()
+    failed.status='interrupted';failed.persistence_outcome='failed';failed.capture_summary=None
+    result=build_input(parent,snapshot,[failed,*captures],rows)
+    assert [c.id for c in result.captures]==[captures[0].id]
+    assert 'not a complete interview' in result.warning
+    assert len(result.turns)==2
+    bad=copy(rows[0]);bad.id=uuid4();bad.session_id=failed.id
+    with pytest.raises(EvaluationInputError,match='evaluation_transcript_not_finalized'):
+        build_input(parent,snapshot,[failed,*captures],[*rows,bad])

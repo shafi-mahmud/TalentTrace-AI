@@ -466,3 +466,31 @@ Browser resumption is limited to refreshing existing tabs to clear stale in-memo
 UI, rejoining the SAME interview in generated mode, and both participants accepting
 fresh storage then caption consent. Saved source and prior failed captures must
 remain untouched. Overall PARTIAL pending actual corrected browser capture.
+
+## Clear-speech capture ready for final F5 authorization
+
+Actual PostgreSQL evidence: new completed/saved drained capture has three turns,
+one recruiter and two candidate. It produces one answered Q&A, Python partial
+coverage and one official-documentation-summary Python-list reference. Original
+recognized text and speaker identities remain unchanged. Authenticated input
+preparation verifies the selected capture identity against a private saved target.
+A verified private archive preserves both this capture and older empty failure.
+
+Fixed an input-selection defect: empty terminal interrupted/failed attempts no
+longer invalidate a later saved capture. They are retained in PostgreSQL and
+explicitly disclosed in the result warning. Incomplete attempts containing ANY
+recognized text remain rejected; active or contradictory captures remain blocked.
+No selection of arbitrary partial text, consent bypass or completeness claim is
+introduced. Regression covers valid saved plus empty failed history and rejection
+when the failed attempt contains a turn.
+
+Isolated backend restarted with this selection fix and the final synthetic job
+allowlisted. Groq is available only through the separate explicit UI disclosure
+flow. No provider request was sent during preparation. Saved-transcript analysis
+requires no media reconnection. Final live evaluation remains pending user click;
+overall verdict is still PARTIAL until its actual outcome is inspected.
+
+Validation for this selection fix: 67 focused backend tests passed with real
+PostgreSQL enabled, no skips. Earlier offline selection/Q&A/reference suite also
+passed 73 tests with six optional PG tests skipped; the subsequent PG-enabled
+run exercised those database checks. No live inference was part of tests.

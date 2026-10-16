@@ -66,6 +66,12 @@ def build_input(parent, snapshot, captures, rows):
     """Called only under the authenticated interview privacy lock; not an API."""
     if not captures or len(captures) > 100 or not rows or len(rows) > 1500:
         raise EvaluationInputError('evaluation_transcript_missing_or_unbounded')
+    # Preserve failed-attempt history, but do not let an empty, terminal attempt
+    # invalidate a later finalized capture. Never omit partial recognized text.
+    excluded=tuple(c.id for c in captures if c.status=='interrupted'
+        and c.persistence_outcome=='failed' and not any(r.session_id==c.id for r in rows))
+    captures=[c for c in captures if c.id not in excluded]
+    if not captures:raise EvaluationInputError('evaluation_transcript_not_finalized')
     try:
         job = ReviewedJobSnapshot.model_validate(snapshot)
         # Arrival/query order must not change pairing or the input fingerprint.
@@ -110,7 +116,9 @@ def build_input(parent, snapshot, captures, rows):
         return EvaluationInput(job_id=parent.job_id, interview_id=parent.id,
             batch_id=parent.batch_id, upload_id=parent.upload_id, criteria_revision=parent.criteria_revision,
             retention_deadline=parent.transcript_retention_deadline, criteria=tuple(job.criteria),
-            captures=tuple(refs), turns=tuple(turns))
+            captures=tuple(refs), turns=tuple(turns),
+            warning=('Finalized accepted audio only; ASR may be wrong. Missing evidence is not lack of skill.'
+                + (f' {len(excluded)} empty failed capture attempt(s) excluded; this is not a complete interview.' if excluded else '')))
     except ValidationError:
         raise EvaluationInputError('evaluation_source_invalid') from None
 
