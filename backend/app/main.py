@@ -32,9 +32,16 @@ PUBLIC_VALIDATION_MESSAGES: Final[dict[str, str]] = {
 @asynccontextmanager
 async def lifespan(app):
     task = asyncio.create_task(maintenance_loop()) if settings.transcript_storage_enabled else None
+    from app.api.routers.interview_analysis import available,manager
+    analysis=manager() if available() else None
+    analysis_cleanup=asyncio.create_task(analysis.maintain()) if analysis else None
     try:
         yield
     finally:
+        if analysis_cleanup:
+            analysis_cleanup.cancel()
+            await asyncio.gather(analysis_cleanup,return_exceptions=True)
+        if analysis:await analysis.close()
         if task:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)

@@ -6,6 +6,7 @@ import { syntheticInterviewMedia } from "./syntheticInterviewMedia";
 import type { Interview } from "../api/interviews";
 import InterviewCaptions from "./InterviewCaptions";
 import TranscriptPanel from "./TranscriptPanel";
+import InterviewAnalysis from "./InterviewAnalysis";
 
 // SDK diagnostics can contain connection details; public UI uses fixed errors.
 setLogLevel("silent");
@@ -105,6 +106,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
     <TranscriptPanel key={`${candidate?'candidate':jobId}:${interview?.id??'current'}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined} onAvailability={setStorageAvailable}/>
+    {!candidate && jobId && interview && <InterviewAnalysis key={`analysis:${interview.id}`} jobId={jobId} interviewId={interview.id} revision={interview.criteria_revision}/>}
     <InterviewCaptions onFinalizing={active=>{captionDraining.current=active;}} storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>

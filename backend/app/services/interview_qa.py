@@ -61,6 +61,7 @@ def validate_pairs(source, pairs):
         if pair.id in ids:raise EvaluationInputError('qa_duplicate_identity')
         ids.add(pair.id)
         for refs,text,role in [(pair.question_turns,pair.question,'recruiter'),(pair.answer_turns,pair.answer,'candidate')]:
+            if len(refs)!=len(set(refs)):raise EvaluationInputError('qa_duplicate_identity')
             if any(ref not in turns or turns[ref].role!=role or turns[ref].session_id!=pair.capture_id or ref in used for ref in refs):
                 raise EvaluationInputError('qa_source_mismatch')
             if '\n'.join(turns[ref].text for ref in refs)!=text:

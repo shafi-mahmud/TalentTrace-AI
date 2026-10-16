@@ -29,3 +29,6 @@ api_router.include_router(bulk_scheduling.router)
 
 from app.api.routers import transcript_storage
 api_router.include_router(transcript_storage.router)
+
+from app.api.routers import interview_analysis
+api_router.include_router(interview_analysis.router)
