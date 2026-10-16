@@ -2,8 +2,9 @@ import {useEffect,useRef,useState} from "react";
 import {captionUrl,isCaption,isFinalization} from "../api/captions";
 import type {Caption} from "../api/captions";
 
-export default function InterviewCaptions({connected,candidate,jobId,interviewId,microphone,microphoneMuted=false,finalizerRef}:{
+export default function InterviewCaptions({connected,candidate,jobId,interviewId,microphone,microphoneMuted=false,finalizerRef,storageAvailable=false}:{
   connected:boolean;candidate:boolean;jobId?:string;interviewId?:string;microphone:()=>MediaStreamTrack|null;microphoneMuted?:boolean;
+  storageAvailable?:boolean;
   finalizerRef?:{current:(()=>Promise<void>)|null};
 }) {
   const [agreed,setAgreed]=useState(false);const [state,setState]=useState("Off");const [rows,setRows]=useState<Caption[]>([]);
@@ -20,6 +21,7 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
   const finishTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const flushTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const terminalStatus=useRef<string|null>(null);
+  const [storageStatus,setStorageStatus]=useState("");
   function closeAudio() {
     audioCleanup.current?.();audioCleanup.current=null;
     workletRef.current=null;trackRef.current=null;
@@ -142,6 +144,10 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
         if(!endSent.current || Object.keys(value).length!==3 || value.frames!==forwarded.current.frames || value.samples!==forwarded.current.samples){stop();return;}
         acknowledged.current=true;
       }
+      else if(value?.kind==="storage"){
+        if(Object.keys(value).length!==3 || !["disabled","saved","incomplete","unconfirmed"].includes(value.status) || !Number.isInteger(value.committed_turns) || value.committed_turns<0 || value.committed_turns>150){stop();return;}
+        setStorageStatus(`Transcript storage: ${value.status}; acknowledged turns: ${value.committed_turns}.`);
+      }
       else if(isFinalization(value,duration.current)){
         const own=value.roles[candidate?"candidate":"recruiter"];
         const valid=value.outcome!=="drained" || (acknowledged.current && own.accepted_frames===forwarded.current.frames && own.accepted_samples===forwarded.current.samples && own.captured_samples===captured.current);
@@ -156,7 +162,8 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
     ws.onerror=()=>{if(current===generation.current){stop();setState("Captions unavailable. Video continues.");}};
   }
   return <section aria-label="Temporary interview captions"><h2>Free local captions</h2>
-    <p>Optional English captions processed on this computer. Both participants must consent. No recording or saved transcript; stop clears captions.</p>
+    <p>{storageAvailable ? "Optional English captions processed on this computer. Both participants must consent to captions. No audio/video recording. Temporary captions clear on stop; optional transcript storage requires separate consent." : "Optional English captions processed on this computer. Both participants must consent. No recording or saved transcript; stop clears captions."}</p>
+    {storageStatus && <p role="status">{storageStatus}</p>}
     <label><input type="checkbox" checked={agreed} disabled={!connected || !!socket.current} onChange={e=>setAgreed(e.target.checked)}/> I consent to temporary microphone processing for this synthetic test: two minutes by default, up to five minutes only in an isolated extended test.</label>
     <button disabled={!connected || !agreed || !!socket.current} onClick={consent}>Consent to captions</button>
     <button disabled={!socket.current} onClick={stop}>Withdraw consent / stop captions</button>

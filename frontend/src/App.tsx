@@ -1,6 +1,7 @@
 import InterviewSchedulingPage from './components/InterviewSchedulingPage';
 import type {InterviewSelection} from './components/SavedScores';
 import {workspaceModeFromHash, workspaceHash} from './state/workspaceNavigation';
+import TranscriptPanel from './components/TranscriptPanel';
 import CandidateScheduling from './components/CandidateScheduling';
 import { lazy, Suspense, useEffect, useReducer, useRef, useState } from "react";
 import type {ReactNode} from "react";
@@ -87,6 +88,7 @@ export default function App({initialInvitation=null}:{initialInvitation?:string|
     const token=takeInvitation(window.location,window.history);
     setInvitationContext(previous=>({token,revision:previous.revision+1}));
   }};window.addEventListener("hashchange",changed);return()=>window.removeEventListener("hashchange",changed);},[]);
+  if(window.location.pathname==="/transcript-privacy")return <TranscriptPanel candidate={true} privacyOnly={true}/>;
   if(window.location.pathname==="/interview-schedule")return <CandidateScheduling />;
   if(window.location.pathname==="/interview-join")return <CandidateInterview key={invitationContext.revision} initialToken={invitationContext.token} />;
   return <RecruiterSignIn>{(user,accountControls) => <Workspace recruiterId={user.id} accountControls={accountControls} />}</RecruiterSignIn>;

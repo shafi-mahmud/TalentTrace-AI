@@ -5,6 +5,7 @@ import { interviewAccess, candidateAccess, candidateStatus, invitation, revokeIn
 import { syntheticInterviewMedia } from "./syntheticInterviewMedia";
 import type { Interview } from "../api/interviews";
 import InterviewCaptions from "./InterviewCaptions";
+import TranscriptPanel from "./TranscriptPanel";
 
 // SDK diagnostics can contain connection details; public UI uses fixed errors.
 setLogLevel("silent");
@@ -17,6 +18,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   const [muted,setMuted]=useState(false);const [cameraOff,setCameraOff]=useState(false);
   const [peers,setPeers]=useState(0);const [audioBlocked,setAudioBlocked]=useState(false);
   const [remoteMuted,setRemoteMuted]=useState(false);const [remoteCameraOff,setRemoteCameraOff]=useState(false);
+  const [storageAvailable,setStorageAvailable]=useState(false);
   const local=useRef<HTMLDivElement>(null);const remote=useRef<HTMLDivElement>(null);
   const room=useRef<Room|null>(null);const generation=useRef(0);
   const captionFinalizer=useRef<(()=>Promise<void>)|null>(null);
@@ -100,7 +102,8 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     <button className="button button-secondary" onClick={()=>void leave(true)} disabled={(!joined && !busy) || leaving.current}>Leave interview</button>
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
-    <InterviewCaptions connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
+    <TranscriptPanel key={`${candidate?'candidate':jobId}:${interview?.id??'current'}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined} onAvailability={setStorageAvailable}/>
+    <InterviewCaptions storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
     <button className="button button-secondary" onClick={onBack}>Back to screening</button>

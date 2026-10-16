@@ -717,3 +717,52 @@ def test_pg_caption_storage_failure_does_not_stop_temporary_captions(pg):
         await session.stop()
         assert [m for m in messages if m['kind']=='storage'][-1]['status']=='unconfirmed'
     run(pg,scenario)
+
+
+def test_pg_authenticated_consent_api_review_and_after_window_withdrawal(pg,monkeypatch):
+    import httpx
+    from app.main import app
+    from app.api.routers import transcript_storage as api
+    from app.services.transcript_consent import TranscriptConsentCoordinator, CONSENT_VERSION
+    from app.services.transcript_privacy import TranscriptPrivacyService
+    async def scenario(f):
+        authority=StorageConsentAuthority(f.factory,version=CONSENT_VERSION,clock=lambda:f.now[0])
+        storage=TranscriptPersistenceService(f.factory,authority,clock=lambda:f.now[0])
+        rt=N(authority=authority,storage=storage,privacy=TranscriptPrivacyService(storage),
+            coordinator=TranscriptConsentCoordinator(authority,storage,enabled=True))
+        monkeypatch.setattr(api,'runtime',lambda:rt)
+        monkeypatch.setattr(api.settings,'transcript_storage_enabled',True)
+        def headers(candidate=False):
+            return {k.decode():v.decode() for k,v in f.request(candidate).scope['headers']}
+        recruiter=f'/api/v1/jobs/{f.job}/interviews/{f.interview}'
+        candidate='/api/v1/interview-access/transcript-storage'
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
+            response=await client.post(recruiter+'/transcript-storage/prepare',json={},headers=headers())
+            assert response.status_code==200
+            capture=response.json()['capture_id']
+            response=await client.post(candidate+'/prepare',json={},headers=headers(True))
+            assert response.status_code==200 and response.json()['capture_id']==capture
+            assert 'HttpOnly' in response.headers['set-cookie']
+            for path,role in [(recruiter+'/transcript-storage/decision',False),(candidate+'/decision',True)]:
+                h=headers(role);h['x-talenttrace-storage-consent']=CONSENT_VERSION
+                response=await client.post(path,json={'capture_id':capture,'decision':'accept'},headers=h)
+                assert response.status_code==200
+            capture=__import__('uuid').UUID(capture)
+            f.now[0]+=timedelta(seconds=10)
+            await storage.append_final(f.owner,event(capture))
+            response=await client.get(recruiter+'/transcript',headers=headers())
+            assert response.status_code==200 and len(response.json()['turns'])==1
+            assert (await client.get(recruiter+'/transcript',headers=headers(True))).status_code==401
+            assert (await client.post(recruiter+'/transcript-storage/withdraw',json={})).status_code==403
+            assert (await client.post(recruiter+'/transcript-storage/withdraw',json={},headers={'x-talenttrace-request':'1'})).status_code==401
+            async with f.factory.begin() as db:
+                row=await db.get(InterviewSchedule,f.interview);row.scheduled_at=datetime.now(timezone.utc)-timedelta(days=1)
+                invitation=await db.scalar(select(InterviewInvitation).where(InterviewInvitation.interview_id==f.interview))
+                invitation.expires_at=datetime.now(timezone.utc)-timedelta(seconds=1)
+            # Only the dedicated privacy cookie is sent to this path; no join cookie needed.
+            response=await client.post('/api/v1/interview-transcripts/privacy/withdraw',json={},headers={'x-talenttrace-request':'1'})
+            assert response.status_code==200 and response.json()['deletion_verified']
+            response=await client.get(recruiter+'/transcript',headers=headers())
+            assert response.status_code==409 and response.json()['detail']['code']=='storage_authorization_revoked'
+            assert (await client.get('/api/v1/interview-transcripts/privacy/status')).json()['deletion_verified']
+    run(pg,scenario)

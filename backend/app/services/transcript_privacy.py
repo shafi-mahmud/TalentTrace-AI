@@ -46,8 +46,15 @@ class TranscriptPrivacyService:
             old = await db.get(TranscriptPrivacyAccess, token_hash(raw)) if len(raw) == 43 else None
             if old and old.interview_id == interview_id and old.expires_at > self.clock():
                 return raw, old.expires_at
-            # One current privacy-only credential per interview; no raw token in DB.
-            await db.execute(delete(TranscriptPrivacyAccess).where(TranscriptPrivacyAccess.interview_id == interview_id))
+            # Keep prior privacy capabilities valid across invitation rotation.
+            # Bound issuance without invalidating a participant's deletion rights.
+            await db.execute(delete(TranscriptPrivacyAccess).where(
+                TranscriptPrivacyAccess.interview_id == interview_id,
+                TranscriptPrivacyAccess.expires_at <= self.clock()))
+            count = await db.scalar(select(func.count()).select_from(TranscriptPrivacyAccess).where(
+                TranscriptPrivacyAccess.interview_id == interview_id))
+            if count >= 20:
+                raise TranscriptError('privacy_access_capacity_unavailable')
             raw = secrets.token_urlsafe(32)
             expires = deadline + timedelta(days=1)
             db.add(TranscriptPrivacyAccess(token_hash=token_hash(raw),interview_id=interview_id,expires_at=expires))
@@ -56,7 +63,13 @@ class TranscriptPrivacyService:
     async def status(self, request, interview_id, job_id=None):
         async with transaction(self.factory) as db:
             row = await self._identity(db, request, interview_id, job_id)
-            return self.view(row)
+            view = self.view(row)
+            capture = await db.scalar(select(Capture).where(Capture.interview_id == row.id)
+                .order_by(Capture.started_at.desc()).limit(1))
+            view.update(capture_status=capture.status if capture else None,
+                persistence_outcome=capture.persistence_outcome if capture else None,
+                capture_summary=capture.capture_summary if capture else None)
+            return view
 
     def view(self, row):
         return {'withdrawn': row.transcript_storage_revoked_at is not None,

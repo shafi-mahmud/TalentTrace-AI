@@ -1,7 +1,7 @@
-"""Inactive storage-consent integration. No routes, text writer or caption hook.
+"""Optional storage-consent integration; live activation is explicitly configured.
 
 PostgreSQL provides the revocation fence. Pending receipts remain process-local.
-Do not activate transcript writing before deletion and retention are implemented.
+PostgreSQL privacy checks remain authoritative when runtime storage is enabled.
 """
 import asyncio
 from dataclasses import dataclass, field
@@ -40,23 +40,24 @@ class _Pending:
 
 
 class TranscriptConsentCoordinator:
-    """Internal single-process orchestration, deliberately absent from app startup.
+    """Single-process pending-consent orchestration for the single-room caption worker.
 
-    Receipts stay private in RAM. An authenticated adapter may call prepare and
-    decide, but must not enable real storage on the strength of this prototype.
+    Receipts stay private in RAM. Authenticated routes call prepare and decide;
+    durable privacy checks protect every storage operation independently.
     One capture per interview per coordinator lifetime; no reset after revocation.
     """
-    def __init__(self, authority, persistence):
+    def __init__(self, authority, persistence, *, enabled=False):
         if authority.version != CONSENT_VERSION or persistence.authority is not authority:
             raise TranscriptError('invalid_consent_version')
         self.authority, self.persistence = authority, persistence
+        self.enabled = enabled
         self._entries = {}
         self._lock = asyncio.Lock()
 
     def _view(self, entry):
         return {'capture_id': entry.capture_id, 'consent_version': CONSENT_VERSION,
                 'status': entry.status, 'transcript_saved': False,
-                'transcript_writing_enabled': False,
+                'transcript_writing_enabled': self.enabled,
                 'durable_revocation_enforced': True,
                 'withdrawal_committed': entry.withdrawal_committed,
                 'session_closure_pending': entry.closure_pending,

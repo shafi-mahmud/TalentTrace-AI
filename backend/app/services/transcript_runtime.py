@@ -18,7 +18,7 @@ def runtime():
     authority = StorageConsentAuthority(session_factory(), version=CONSENT_VERSION)
     storage = TranscriptPersistenceService(authority.factory, authority)
     return SimpleNamespace(authority=authority, storage=storage,
-        privacy=TranscriptPrivacyService(storage), coordinator=TranscriptConsentCoordinator(authority, storage))
+        privacy=TranscriptPrivacyService(storage), coordinator=TranscriptConsentCoordinator(authority, storage, enabled=True))
 
 
 async def maintenance_loop():

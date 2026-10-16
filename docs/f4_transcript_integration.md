@@ -95,3 +95,55 @@ passed, including disposable PostgreSQL full/residual final-turn storage,
 completeness verification, privacy deletion, storage failure isolation and bounded
 post-window writes. No raw media files, cloud calls or physical microphones were
 used. Frontend consent and retrieval follow in Phase C.
+
+## Consent UI and API
+
+Phase C adds a separate optional-storage panel to the existing interview page.
+Nothing is checked automatically. Both participants review the same approved
+wording, independently accept, then start normal caption consent. Storage
+acceptance after caption capture starts is refused: existing pre-consent buffered
+audio must never become stored text. Decline keeps captions usable and permanently
+disables storage for this interview. The panel distinguishes authorization from
+confirmed saved text, incomplete/unconfirmed storage and verified deletion.
+
+The candidate can bookmark `/transcript-privacy` in the same browser for later
+withdrawal. Its HttpOnly privacy cookie is a separate withdrawal-only credential;
+the URL contains no bearer. It does not grant access to transcript text or room
+tokens. Owning recruiters use the saved interview page to review or withdraw
+without joining. Review uses React text rendering, chunk-level speaker/time
+labels and completeness warnings. No transcript content enters localStorage.
+Status polls are GET-only; POST requests are never automatically retried.
+Withdrawal clears displayed text immediately in the requesting panel; other open
+review panels clear it when their next status poll observes revocation/expiry.
+Previously delivered text cannot be recalled. All new backend reads are denied
+immediately once withdrawal commits.
+
+Actual endpoints, prefixed `/api/v1`:
+
+- `GET /transcript-storage/config`: opt-in availability and approved disclosure.
+- `POST /jobs/{job}/interviews/{interview}/transcript-storage/prepare`: `{}`,
+  authenticated recruiter; returns the server capture UUID and disclosure version.
+- `POST /interview-access/transcript-storage/prepare`: same, using candidate cookie.
+- Corresponding `/decision` POSTs: `{capture_id, decision: "accept"|"decline"}`.
+  Accept requires the exact `X-TalentTrace-Storage-Consent` version header.
+- `GET /jobs/{job}/interviews/{interview}/transcript-storage/status`: authorized
+  privacy/metadata status and sanitized cleanup-worker state, no text.
+- `POST /jobs/{job}/interviews/{interview}/transcript-storage/withdraw`: `{}`.
+- `GET /interview-transcripts/privacy/status` and POST `/withdraw`: candidate
+  privacy-cookie boundary, server-resolved interview; no supplied owner/role IDs.
+- `GET /jobs/{job}/interviews/{interview}/transcript?limit=100&offset=0`: recruiter-only
+  bounded turns, capture outcomes/evidence and chunk-estimate warning. Maximum
+  page size 200; `next_offset` is a conservative next-page hint.
+
+All mutations retain `X-TalentTrace-Request: 1`, cookie and origin protection.
+There is no endpoint accepting transcript text, client consent receipts or
+candidate-supplied role/owner. Errors use fixed sanitized codes and uncertain
+outcome flags. Disabled storage returns 404 on feature operations. Existing API
+no-store middleware and credentialed same-origin/proxy routing remain required.
+The API and caption WebSocket must use the same single caption-worker process
+for pending consent/capture RAM; durable revocation/deletion remain cross-process.
+No cross-worker audio recovery or shared pending HMAC receipts are claimed.
+
+Phase C frontend validation: 176 tests, TypeScript and production build passed.
+The existing LiveKit bundle-size warning remains nonblocking. No interview was
+booked, model invoked or production/development demo process restarted.

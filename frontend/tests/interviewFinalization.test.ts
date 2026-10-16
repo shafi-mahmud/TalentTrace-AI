@@ -21,6 +21,7 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     if(name==="react")return hooks;
     if(name==="livekit-client")return {Room,RoomEvent:{},Track:{Source:{},Kind:{}},setLogLevel(){}};
     if(name==="../api/livekitInterview")return {interviewAccess:async()=>({server_url:"wss://synthetic.invalid",token:"synthetic"})};
+    if(name==="./TranscriptPanel")return {__esModule:true,default:()=>null};
     if(name==="./InterviewCaptions")return {__esModule:true,default:Panel};
     if(name==="./syntheticInterviewMedia")return {syntheticInterviewMedia:()=>{throw Error("No generated/physical audio in this test");}};
     return require(name);
