@@ -395,3 +395,39 @@ fixture, not an actual CV-screening claim. Await manual browser sign-in and cons
 
 Verdict remains PARTIAL pending any separate confident live evaluation. Existing
 capture, review result and failed-attempt backups must be preserved.
+
+## Caption startup defect — confirmed diagnosis
+
+The recovery backend is launched from the worktree root. LocalWhisper spawned
+`python -m app.integrations.stt.local_whisper_worker` without an explicit working
+directory. In-process sys.path setup is not inherited by Python subprocesses.
+Reproduction from that directory returned worker exit 1 and module-not-found for
+app. The ready pipe reached EOF and start() raised JSONDecodeError; approve()
+caught startup failure and stopped the caption session before browser audio
+initialization. This is a demonstrated worker-startup defect, not a requirement
+to click both consent buttons within five seconds.
+
+Fix: resolve the model path and launch the worker with the backend directory
+computed from its installed source path. No consent, authorization, inference or
+STT settings changed. Regression verifies launch root independent of server cwd.
+46 focused caption/finalization tests passed. Additionally two REAL local tiny.en
+workers started from worktree-root launch context, reached active only after
+separate participant approvals, and shut down without receiving audio frames.
+
+Browser currently confirmed LiveKit connected with one remote participant,
+generated-media mode, both storage consents and stopped captions. Read-only DB
+confirmed no revocation, active/pending capture, two consents and zero turns.
+Earlier WebSocket close code/reason and exception were not retained by the
+existing generic close path, so exact historical socket status is unavailable;
+this diagnosis does not invent it. Browser audio initialization was not verified
+because activation never reached that stage. No media playback or Groq request.
+A private verified archive preserves this pending state and earlier evidence.
+
+The running backend still has the old imported launcher class. Applying the fix
+requires a coordinated backend restart; pending consent receipts also live in
+RAM, so do not restart then silently assume those receipts survive. Preserve and
+reconcile current pending capture with the existing supported consent lifecycle
+before a further browser activation. Do not create another interview or delete
+pending evidence merely to hide this state. A final browser activation remains
+necessary to verify client worklet initialization; it is not needed to reproduce
+or validate the confirmed subprocess-import fix. Overall milestone PARTIAL.

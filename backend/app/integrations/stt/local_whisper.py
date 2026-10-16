@@ -9,7 +9,7 @@ MAX_CHUNK_BYTES = 128000  # Four seconds, mono PCM16 at 16 kHz.
 
 class LocalWhisper:
     def __init__(self, model):
-        self.model = Path(model)
+        self.model = Path(model).resolve()
         self.process = None
 
     async def start(self):
@@ -17,6 +17,7 @@ class LocalWhisper:
             raise ValueError("Local model unavailable")
         self.process = await asyncio.create_subprocess_exec(
             sys.executable, "-m", "app.integrations.stt.local_whisper_worker", str(self.model),
+            cwd=str(Path(__file__).resolve().parents[3]),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL, limit=8192)
         ready = await asyncio.wait_for(self.process.stdout.readline(), 15)

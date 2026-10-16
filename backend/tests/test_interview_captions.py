@@ -430,3 +430,22 @@ def test_extended_websocket_authorization_loss_closes_resources(monkeypatch,reas
         # remains until that recruiter disconnects (as in the real UI).
         assert set(session.peers)=={'recruiter'} and session.stopped
     finally:route.sessions.clear()
+
+def test_worker_launch_uses_backend_root_even_when_server_cwd_differs(monkeypatch,tmp_path):
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+    async def scenario():
+        model=tmp_path/'model';model.mkdir();(model/'model.bin').touch()
+        worker=LocalWhisper(model)
+        monkeypatch.chdir(tmp_path)
+        async def read():return b'{"ready":true}\n'
+        async def wait():pass
+        async def spawn(*args,**kwargs):
+            root=Path(kwargs['cwd'])
+            assert (root/'app/integrations/stt/local_whisper_worker.py').is_file()
+            assert Path(args[3]).is_absolute()
+            return SimpleNamespace(stdout=SimpleNamespace(readline=read),returncode=0,wait=wait)
+        monkeypatch.setattr(asyncio,'create_subprocess_exec',spawn)
+        await worker.start();await worker.close()
+    asyncio.run(scenario())
