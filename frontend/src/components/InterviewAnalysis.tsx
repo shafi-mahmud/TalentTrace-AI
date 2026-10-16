@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {analysisConfig,startAnalysis,analysisStatus} from '../api/interviewAnalysis';
+import {analysisConfig,startAnalysis,analysisStatus,AnalysisRequestError} from '../api/interviewAnalysis';
 import type {AnalysisConfig,AnalysisOperation} from '../api/interviewAnalysis';
 
 export default function InterviewAnalysis({jobId,interviewId,revision}:{jobId:string;interviewId:string;revision:number}){
@@ -13,12 +13,15 @@ export default function InterviewAnalysis({jobId,interviewId,revision}:{jobId:st
     return()=>{generation.current++;};},[jobId,interviewId,revision]);
   async function refresh(){if(!id||pending.current)return;const current=generation.current;pending.current=true;
     try{const v=await analysisStatus(jobId,interviewId,id);if(current===generation.current){setOperation(v);setMessage(v.status==='failed'?'Processing failed; this is not a candidate rejection.':'Status checked.');}}
-    catch{if(current===generation.current){setOperation(null);setMessage('Analysis unavailable, expired, withdrawn or lost after restart. Displayed results cleared. No model request repeated.');}}
+    catch(error){if(current===generation.current){setOperation(null);setMessage(`Analysis unavailable${error instanceof AnalysisRequestError?` (HTTP ${error.status})`:''}, expired, withdrawn or lost after restart. Displayed results cleared. No model request repeated.`);}}
     finally{pending.current=false;}}
   useEffect(()=>{if(!id)return;const timer=setInterval(()=>void refresh(),2000);return()=>clearInterval(timer);},[id,jobId,interviewId,revision]);
   async function start(){if(busy||id||!checked||posting.current)return;posting.current=true;const current=generation.current;const next=crypto.randomUUID();setId(next);setBusy(true);setOperation(null);
     try{const v=await startAnalysis(jobId,interviewId,revision,next);if(current===generation.current){setId(v.operation_id);setOperation(v);setMessage('Analysis requested. Status checks do not call the model.');}}
-    catch{if(current===generation.current)setMessage('Delivery unconfirmed. Use Check analysis status; do not repeat the request.');}
+    catch(error){if(current===generation.current){
+      if(error instanceof AnalysisRequestError&&error.rejectedStart){setId(null);setChecked(false);setMessage(`Analysis request rejected (HTTP ${error.status}). Review authorization before a new explicit request. No automatic retry was sent.`);}
+      else setMessage('Delivery unconfirmed. Use Check analysis status; do not repeat the request.');
+    }}
     finally{posting.current=false;if(current===generation.current)setBusy(false);}}
   if(!config?.enabled)return <section className="card" aria-label="Interview analysis"><h2>Interview analysis</h2><p>Synthetic interview analysis is disabled or unavailable. No AI call was made.</p></section>;
   const result=operation?.status==='completed'?operation.result:null;

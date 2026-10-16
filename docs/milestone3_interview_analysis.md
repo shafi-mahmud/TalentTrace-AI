@@ -494,3 +494,28 @@ Validation for this selection fix: 67 focused backend tests passed with real
 PostgreSQL enabled, no skips. Earlier offline selection/Q&A/reference suite also
 passed 73 tests with six optional PG tests skipped; the subsequent PG-enabled
 run exercised those database checks. No live inference was part of tests.
+
+## Final analysis UI state recovery
+
+Authoritative check found zero analysis records for the final interview, while
+browser retained a locally generated operation ID, checked disclosure and disabled
+Analyze control. Retained ID was polled despite no durable operation. Earlier
+original POST response was not captured, so its exact status is not asserted.
+Authenticated storage status currently returns HTTP 200, completed/saved, no
+withdrawal/expiry; source preparation still yields three original turns, one
+answered pair, Python partial and one official reference. Storage-unavailable
+message was stale UI, not proof that the saved transcript disappeared.
+
+Fixed frontend classification of definitive start rejections (400/401/403/404/
+409/422): clear rejected local ID, uncheck disclosure and require a new explicit
+user action. Network/5xx/uncertain delivery retains the ID and never automatically
+retries. GET failure now includes the safe HTTP status without private details.
+Reopening the same interview through ordinary navigation cleared the existing
+stale component state; fresh browser storage GET visibly confirmed saved state.
+No media reconnection, consent recreation, interview creation or analysis POST
+was performed during this recovery.
+
+187 frontend tests passed, including actual component rejected-start recovery
+and API distinction between rejection and network uncertainty; TypeScript and
+production build passed. Existing bundle-size warning remains. No Groq call.
+Ready for one explicit user-authorized Analyze click; live F5 result is pending.

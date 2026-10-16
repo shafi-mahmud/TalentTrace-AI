@@ -1,6 +1,11 @@
 const base=(import.meta.env?.VITE_API_BASE_URL??'').replace(/\/+$/,'');
 const uuid=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 export const analysisDisclosure='synthetic-interview-analysis-v1';
+export class AnalysisRequestError extends Error {
+  readonly status:number;
+  readonly rejectedStart:boolean;
+  constructor(status:number,rejectedStart:boolean){super('Analysis request unavailable.');this.status=status;this.rejectedStart=rejectedStart;}
+}
 export interface AnalysisConfig {enabled:boolean;version:string;disclosure:string;persistence?:string;}
 export interface Pair {id:string;question:string;answer:string;question_turns:string[];answer_turns:string[];status:string;warnings:string[];start_ms:number;end_ms:number;capture_id:string;}
 export interface Quote {turn_id:string;quote:string;}
@@ -18,7 +23,7 @@ async function request(path:string,body?:unknown,revision?:number){
   const response=await fetch(base+'/api/v1'+path,{credentials:'include',cache:'no-store',method:body===undefined?'GET':'POST',
     headers:{'X-TalentTrace-Request':'1',...(body===undefined?{}:{'Content-Type':'application/json','X-TalentTrace-Evaluation-Disclosure':analysisDisclosure,'X-TalentTrace-Job-Revision':String(revision)})},
     ...(body===undefined?{}:{body:JSON.stringify(body)})});
-  if(!response.ok)throw Error('Analysis unavailable or unconfirmed. Check status; do not automatically repeat.');
+  if(!response.ok)throw new AnalysisRequestError(response.status,body!==undefined&&[400,401,403,404,409,422].includes(response.status));
   return await response.json();
 }
 function path(job:string,interview:string){if(!uuid.test(job)||!uuid.test(interview))throw Error('Select a saved interview.');return `/jobs/${job}/interviews/${interview}/analysis`;}

@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
-import {startAnalysis,analysisStatus,analysisConfig,isAnalysisOperation} from '../src/api/interviewAnalysis.ts';
+import {startAnalysis,analysisStatus,analysisConfig,isAnalysisOperation,AnalysisRequestError} from '../src/api/interviewAnalysis.ts';
 const id='12345678-1234-4234-8234-123456789012';
 test('navigation and polling do not POST, explicit analysis retains mutation and disclosure protection',async()=>{
   const calls:any[]=[];
@@ -65,3 +65,34 @@ test('actual component requires unchecked disclosure and sends one retained oper
   assert.equal(button().props.disabled,false);await button().props.onClick();await Promise.resolve();await Promise.resolve();
   tree=render();assert.equal(calls.length,1);assert.equal(calls[0][3],id);assert.equal(button().props.disabled,true);
 });
+
+
+test('start rejection is distinguishable from uncertain network delivery',async()=>{
+  globalThis.fetch=async()=>Response.json({detail:'Synthetic rejection'},{status:409});
+  await assert.rejects(()=>startAnalysis(id,id,2,id),(e:any)=>e instanceof AnalysisRequestError&&e.rejectedStart&&e.status===409);
+  globalThis.fetch=async()=>{throw new TypeError('Network unavailable');};
+  await assert.rejects(()=>startAnalysis(id,id,2,id),(e:any)=>!(e instanceof AnalysisRequestError));
+});
+test('definitively rejected start clears local ID and requires renewed disclosure',async()=>{
+  let index=0,refIndex=0;const state:any[]=[],refs:any[]=[],effects:any[]=[],calls:any[]=[];
+  const hooks={useState(value:any){const i=index++;if(!(i in state))state[i]=value;return [state[i],(v:any)=>{state[i]=v;}];},
+    useRef(value:any){const i=refIndex++;return refs[i]??(refs[i]={current:value});},useEffect(fn:any){effects.push(fn);}};
+  const response={operation_id:id,status:'running',error:null,persistence:'ephemeral_single_worker',result:null};
+  const api={AnalysisRequestError,analysisConfig:async()=>({enabled:true,version:'synthetic-interview-analysis-v1',disclosure:'Synthetic only'}),
+    startAnalysis:async(...args:any[])=>{calls.push(args);throw new AnalysisRequestError(409,true);},analysisStatus:async()=>response};
+  const source=ts.transpileModule(readFileSync(new URL('../src/components/InterviewAnalysis.tsx',import.meta.url),'utf8'),
+    {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  const exports:any={},require=createRequire(import.meta.url);
+  runInNewContext(source,{exports,require:(name:string)=>name==='react'?hooks:name==='../api/interviewAnalysis'?api:require(name),
+    crypto:{randomUUID:()=>id},setInterval:()=>1,clearInterval(){}});
+  function render(){index=0;refIndex=0;return exports.default({jobId:id,interviewId:id,revision:2});}
+  function all(n:any,p:(n:any)=>boolean):any[]{if(!n||typeof n!=='object')return [];return [...(p(n)?[n]:[]),...[n.props?.children].flat(Infinity).flatMap(c=>all(c,p))];}
+  render();effects[0]();await Promise.resolve();await Promise.resolve();
+  let tree=render();const button=()=>all(tree,n=>n.type==='button'&&n.props.children==='Analyze finalized interview')[0];
+  assert.equal(button().props.disabled,true);assert.equal(calls.length,0);
+  all(tree,n=>n.type==='input')[0].props.onChange({target:{checked:true}});tree=render();
+  assert.equal(button().props.disabled,false);await button().props.onClick();await Promise.resolve();await Promise.resolve();
+  tree=render();assert.equal(calls.length,1);assert.equal(calls[0][3],id);assert.equal(button().props.disabled,true);
+  assert.equal(state[3],null);assert.equal(state[1],false);assert.equal(calls.length,1);
+});
+
