@@ -122,7 +122,8 @@ def test_uncertain_asr_pair_can_abstain():
     result=asyncio.run(InterviewEvaluationWorkflow(FakeProvider(),SyntheticTechnicalRetriever()).run(source))
     assert result['validated'] and len(result['pairs'])==1
     assert result['pairs'][0].status=='uncertain'
-    assert all(d.status=='uncertain' for d in result['assessment'].answers[0].dimensions)
+    assert all(d.status=='not_assessed' for d in result['assessment'].answers[0].dimensions)
+    assert result['inference_performed'] is False
 
 
 def test_unknown_validation_error_is_sanitized(monkeypatch):
@@ -152,3 +153,44 @@ def test_adapter_sanitizes_repair_feedback(feedback):
         source,pairs,(),(),repair=True,repair_error=feedback))
     assert payloads[0]['failed_validation_rule']==(feedback if feedback.startswith('evaluation_') else None)
     assert 'private synthetic diagnostic text' not in json.dumps(payloads)
+
+
+def test_uncertain_pair_skips_provider_but_keeps_rule():
+    source=dialogue([('recruiter','are lists mutable.'),('candidate','Lists can change.')])
+    provider=FakeProvider(fail=True)
+    result=asyncio.run(InterviewEvaluationWorkflow(provider,SyntheticTechnicalRetriever()).run(source))
+    assert provider.calls==0 and result['validated']
+    pairs=pair_transcript(source);value=assessment(pairs).model_dump()
+    value['answers'][0]['dimensions'][0]['status']='supported'
+    with pytest.raises(AssessmentError,match='evaluation_pairing_requires_review'):
+        validate_assessment(source,pairs,(),ModelAssessment.model_validate(value))
+    assert result['pairs'][0].question_turns and result['pairs'][0].answer_turns
+
+
+def test_clear_question_and_grounded_answer_still_use_model():
+    source=dialogue([('recruiter','What is Python?'),('candidate','A programming language.')])
+    class Grounded(FakeProvider):
+        async def assess(self,source,pairs,mappings,references,repair=False,repair_error=None):
+            self.calls+=1
+            value=assessment(pairs).model_dump()
+            value['answers'][0]['dimensions'][0].update(status='supported',evidence=[
+                {'turn_id':pairs[0].answer_turns[0],'quote':'A programming language.'}])
+            return ModelAssessment.model_validate(value)
+    provider=Grounded()
+    result=asyncio.run(InterviewEvaluationWorkflow(provider,SyntheticTechnicalRetriever()).run(source))
+    assert provider.calls==1 and result['validated'] and result['inference_performed']
+    assert result['assessment'].answers[0].dimensions[0].status=='supported'
+
+def test_mixed_pairs_only_send_confident_pairs_to_provider():
+    source=dialogue([('recruiter','are lists mutable.'),('candidate','Lists can change.'),
+        ('recruiter','What is Python?'),('candidate','A programming language.')])
+    seen=[]
+    class Mixed(FakeProvider):
+        async def assess(self,source,pairs,mappings,references,repair=False,repair_error=None):
+            seen.extend(pairs)
+            return assessment(pairs)
+    result=asyncio.run(InterviewEvaluationWorkflow(Mixed(),SyntheticTechnicalRetriever()).run(source))
+    assert len(seen)==1 and seen[0].status=='answered'
+    assert result['validated'] and len(result['assessment'].answers)==2
+    review=next(a for a in result['assessment'].answers if a.qa_id!=seen[0].id)
+    assert all(d.status=='not_assessed' for d in review.dimensions)

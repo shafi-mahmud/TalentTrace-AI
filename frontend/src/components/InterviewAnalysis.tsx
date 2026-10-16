@@ -35,7 +35,7 @@ export default function InterviewAnalysis({jobId,interviewId,revision}:{jobId:st
         void startAnalysis(jobId,interviewId,revision,id,operation.attempt).then(v=>{if(current===generation.current)setOperation(v);})
           .catch(()=>{if(current===generation.current)setMessage('Retry unconfirmed. Check the same operation; no automatic repeat.');})
           .finally(()=>{posting.current=false;if(current===generation.current)setBusy(false);});}}>Retry failed analysis once</button></div>}
-    {result&&<div><p><strong>AI interpretation — recruiter review required.</strong> {result.provider} / {result.model} · {result.rubric_version}</p>
+    {result&&<div><p><strong>{result.outcome==='needs_review'?'Needs human review — technical assessment incomplete.':'AI interpretation — recruiter review required.'}</strong> {result.inference_performed===false?'Deterministic evidence review; no model inference performed.':`${result.provider} / ${result.model}`} · {result.rubric_version}</p>
       <p>{result.warning}</p><p>No overall score or hire/reject recommendation. ASR remains unverified.</p>
       {result.pairs.map(pair=>{const a=result.assessment.answers.find(v=>v.qa_id===pair.id);return <article key={pair.id} className="card">
         <h3>Recruiter question</h3><p>{pair.question}</p><p>Candidate statement: {pair.answer||'No associated answer; not evidence of an incorrect response.'}</p>

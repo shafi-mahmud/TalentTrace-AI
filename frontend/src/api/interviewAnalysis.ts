@@ -6,6 +6,7 @@ export interface Pair {id:string;question:string;answer:string;question_turns:st
 export interface Quote {turn_id:string;quote:string;}
 export interface Dimension {dimension:string;status:string;justification:string;evidence:Quote[];}
 export interface AnalysisResult {provider:string;model:string;rubric_version:string;advisory:boolean;scope:string;asr_review:string;warning:string;criteria_revision:number;
+  outcome?:'needs_review'|'assessed';inference_performed?:boolean;
   pairs:Pair[];requirements:{criterion_id:string;description:string;coverage:string;explanation:string;follow_up:string;qa_ids:string[];turn_ids:string[]}[];
   assessment:{answers:{qa_id:string;dimensions:Dimension[];technical_citations:{reference_id:string;quote:string}[];follow_up:string}[]};
   technical_references:{id:string;topic:string;text:string;provenance:string;source_title?:string;document_id?:string;url?:string;location?:string;version?:string;retrieval_basis?:string}[];

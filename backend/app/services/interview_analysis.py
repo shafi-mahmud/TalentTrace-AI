@@ -72,6 +72,8 @@ class AnalysisManager:
                 if fingerprint(fresh)!=item.digest:raise AssessmentError('evaluation_source_changed')
                 referenced={ref for pair in state['pairs'] for ref in pair.question_turns+pair.answer_turns}
                 item.result={'provider':self.workflow.provider.name,'model':self.workflow.provider.model,
+                    'outcome':'needs_review' if any(p.status=='uncertain' for p in state['pairs']) else 'assessed',
+                    'inference_performed':state.get('inference_performed',True),
                     'rubric_version':RUBRIC_VERSION,'advisory':True,'scope':source.scope,'asr_review':source.asr_review,
                     'warning':source.warning,'criteria_revision':source.criteria_revision,
                     'pairs':[p.model_dump(mode='json') for p in state['pairs']],

@@ -320,3 +320,45 @@ the failed-attempt backup because retry updates the same durable operation.
 
 **Verdict: PARTIAL.** F4 saved capture is live verified; successful grounded F5
 analysis remains unverified. No F6 work or production activation is implied.
+
+## 16 October — uncertain pairing recovery
+
+**Verified persisted state:** restored operation subsequently reached attempt 4,
+failed with `evaluation_invalid_model_output`. The baseline archive had attempt
+1. Thus three explicit retry attempts were accepted after restoration. Current
+schema stores only the latest attempt; earlier retry errors and exact cumulative
+provider call counts cannot be reconstructed. Do not infer a fresh invocation
+from a displayed error alone. The latest attempt's schema failure can occur on
+the initial or repair call (one or two calls); exact count is unavailable.
+A private verified backup preserves this later failure and original F4 capture.
+
+**Rule preserved:** `evaluation_pairing_requires_review` is raised when an
+uncertain Q&A pair receives a `supported` model dimension. Its appearance after
+repair indicates that response still violated this conservative contract; it is
+not candidate rejection. The actual ASR question lacks question punctuation and
+has `asr_question_form_requires_review`; a separate fragment contains its Python
+context. Source text was not rewritten or combined into a fabricated answer.
+
+**Implemented:** ambiguous pairs receive deterministic `not_assessed` dimensions
+and original question/answer turn references, without model assessment. Confident
+pairs still use the model and unchanged quote/citation validation. Mixed results
+are explicitly `needs_review`; all-uncertain input makes zero provider calls.
+The operation lifecycle may complete while its business outcome needs review;
+that is not successful technical assessment. UI distinguishes deterministic
+review from model interpretation. No saved failed operation was converted into
+a completed result or retried by this change.
+
+**Verification:** read-only execution on the actual restored four-turn capture
+returned a validated review outcome, four not-assessed dimensions, zero provider
+calls, one uncertain pair, one versioned technical reference and Python coverage
+`not_evidenced`. 61 focused backend tests including real disposable PostgreSQL
+passed; one additional mixed-pair regression then passed with the focused
+workflow suite. 185 frontend tests, TypeScript, production build and compilation
+passed. Existing LiveKit bundle-size warning remains. No new live inference,
+media playback, capture, demo data change or migration occurred.
+
+**Acceptance: PARTIAL.** F4 live saved capture and safe non-assessable F5 handling
+are verified. A grounded technical evaluation of adequate, confidently paired
+interview evidence has mocked coverage but has not passed live on this fragmented
+capture. Human transcript review or better future source evidence remains needed;
+no transcript editing or further inference is authorized by this diagnosis.

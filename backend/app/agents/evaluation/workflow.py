@@ -104,6 +104,7 @@ class State(TypedDict,total=False):
     repair:bool
     validated:bool
     validation_error:str
+    inference_performed:bool
 
 
 class InterviewEvaluationWorkflow:
@@ -135,7 +136,20 @@ class InterviewEvaluationWorkflow:
     async def mapping(self,state):return {'mappings':map_requirements(state['source'],state['pairs'])}
     async def retrieve(self,state):return {'references':await self.retriever.retrieve(state['source'],state['pairs'])}
     async def assess(self,state):
-        return {'assessment':await self.provider.assess(state['source'],state['pairs'],state['mappings'],state['references'],state['repair'],repair_error=state.get('validation_error'))}
+        # Ambiguous source association is a review outcome, not model competence
+        # evidence. Never ask the model to assess these pairs or repair them.
+        certain=tuple(p for p in state['pairs'] if p.status!='uncertain')
+        reviews=[AnswerAssessment(qa_id=p.id,dimensions=[Dimension(
+            dimension=d,status='not_assessed',
+            justification='Question/answer association requires human review; technical competence was not assessed.',
+            evidence=[]) for d in ('relevance','technical_accuracy','completeness','articulation')],
+            technical_citations=[],follow_up='Review the original timestamped source turns and clarify the question before assessment.')
+            for p in state['pairs'] if p.status=='uncertain']
+        answers=[]
+        if certain:
+            result=await self.provider.assess(state['source'],certain,state['mappings'],state['references'],state['repair'],repair_error=state.get('validation_error'))
+            answers=list(result.answers)
+        return {'assessment':ModelAssessment(answers=answers+reviews),'inference_performed':bool(certain)}
     async def validate(self,state):
         try:validate_assessment(state['source'],state['pairs'],state['references'],state['assessment'])
         except (AssessmentError,ValidationError) as error:
