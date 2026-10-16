@@ -95,4 +95,3 @@ test('definitively rejected start clears local ID and requires renewed disclosur
   tree=render();assert.equal(calls.length,1);assert.equal(calls[0][3],id);assert.equal(button().props.disabled,true);
   assert.equal(state[3],null);assert.equal(state[1],false);assert.equal(calls.length,1);
 });
-
