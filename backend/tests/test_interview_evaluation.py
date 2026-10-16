@@ -19,7 +19,7 @@ def assessment(pairs,unsupported=False):
 class FakeProvider:
     name='mock';model='offline-test-only'
     def __init__(self,invalid=False,fail=False):self.calls=0;self.invalid=invalid;self.fail=fail
-    async def assess(self,source,pairs,mappings,references,repair=False):
+    async def assess(self,source,pairs,mappings,references,repair=False,repair_error=None):
         self.calls+=1
         if self.fail:raise AssessmentError('evaluation_provider_unavailable')
         return assessment(pairs,self.invalid and not repair)
@@ -103,3 +103,52 @@ def test_groq_failures_are_sanitized_and_never_automatically_retried(failure):
     with pytest.raises(AssessmentError) as error:
         asyncio.run(GroqInterviewAssessment('synthetic-secret','configured',Client).assess(source,pair_transcript(source),(),()))
     assert 'private' not in str(error.value) and len(calls)==1
+
+def test_repair_rule_is_specific_and_bounded():
+    feedback=[]
+    class InvalidProvider(FakeProvider):
+        async def assess(self,source,pairs,mappings,references,repair=False,repair_error=None):
+            feedback.append((repair,repair_error))
+            return assessment(pairs,unsupported=True)
+    with pytest.raises(AssessmentError,match='evaluation_quote_not_in_source'):
+        asyncio.run(InterviewEvaluationWorkflow(InvalidProvider(),SyntheticTechnicalRetriever()).run(
+            dialogue([('recruiter','What is Python?'),('candidate','A language.')])) )
+    assert feedback==[(False,None),(True,'evaluation_quote_not_in_source')]
+
+
+def test_uncertain_asr_pair_can_abstain():
+    source=dialogue([('recruiter','In Python.'),('candidate','Bye.'),
+        ('recruiter','are lists mutable.'),('candidate','on lists are mutable. You can append new items.')])
+    result=asyncio.run(InterviewEvaluationWorkflow(FakeProvider(),SyntheticTechnicalRetriever()).run(source))
+    assert result['validated'] and len(result['pairs'])==1
+    assert result['pairs'][0].status=='uncertain'
+    assert all(d.status=='uncertain' for d in result['assessment'].answers[0].dimensions)
+
+
+def test_unknown_validation_error_is_sanitized(monkeypatch):
+    import app.agents.evaluation.workflow as module
+    def invalid(*args):raise AssessmentError('private synthetic diagnostic text')
+    monkeypatch.setattr(module,'validate_assessment',invalid)
+    with pytest.raises(AssessmentError,match='evaluation_output_not_grounded'):
+        asyncio.run(InterviewEvaluationWorkflow(FakeProvider(),SyntheticTechnicalRetriever()).run(
+            dialogue([('recruiter','What is Python?'),('candidate','A language.')])) )
+
+
+@pytest.mark.parametrize('feedback',['evaluation_quote_not_in_source','private synthetic diagnostic text'])
+def test_adapter_sanitizes_repair_feedback(feedback):
+    import json
+    from types import SimpleNamespace as N
+    from app.integrations.llm.interview_evaluation import GroqInterviewAssessment
+    source=dialogue([('recruiter','What is Python?'),('candidate','A language.')]);pairs=pair_transcript(source)
+    payloads=[]
+    class Client:
+        def __init__(self,**kwargs):self.chat=N(completions=self)
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def create(self,**kwargs):
+            payloads.append(json.loads(kwargs['messages'][1]['content']))
+            return N(choices=[N(message=N(content=assessment(pairs).model_dump_json()))])
+    asyncio.run(GroqInterviewAssessment('synthetic-secret','configured',Client).assess(
+        source,pairs,(),(),repair=True,repair_error=feedback))
+    assert payloads[0]['failed_validation_rule']==(feedback if feedback.startswith('evaluation_') else None)
+    assert 'private synthetic diagnostic text' not in json.dumps(payloads)

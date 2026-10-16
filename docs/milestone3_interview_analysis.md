@@ -283,3 +283,40 @@ and coverage, a reviewed technical corpus, production disclosure/privacy decisio
 durable operations/results if required, meaningful recovery/checkpoint policy,
 F6 consolidation/export/comparison, and reviewed integration/container startup.
 No merge, push, demo migration, email, booking or production activation occurs.
+
+## 16 October 2026 — actual saved-capture evaluation diagnosis
+
+**Live verified:** synthetic browser F4 capture finalized as drained/saved; four
+retrievable timestamped turns, two per speaker. Recognition was imperfect. This
+is accepted-audio evidence, not a complete or verified-accurate interview.
+
+**Live F5 outcome:** one authorized analysis operation failed at LangGraph
+`validate_evidence` with `evaluation_output_not_grounded`. The implemented graph
+reaches that code only after the initial model response and its single repair
+response both fail semantic grounding. The operation retained no result. The
+specific validation rule and raw responses were not retained, so the exact
+original violation cannot honestly be reconstructed. Source preparation found
+one uncertain Q&A and one technical reference; this does not establish which
+contract the model violated. Conservative uncertain/not-assessed output is
+supported and does not imply candidate rejection.
+
+**Implemented correction:** repair receives an allowlisted fixed validation-rule
+code; exhausted repair exposes the final safe rule through existing operation
+error persistence. No raw response, transcript text or exception inputs are
+added to diagnostics. Quote, citation, pairing and authorization checks remain
+unchanged. This corrects lost diagnostics and generic repair feedback; it does
+not prove the earlier model output was otherwise valid or guarantee retry success.
+
+**Validation:** 46 focused evaluation, Q&A, mapping, reference and API tests passed;
+7 optional database tests skipped. Compilation passed. All provider calls in
+these tests were mocked. No new live provider request was made.
+
+The disposable backend/database reached its scheduled 18:21:59 shutdown.
+Successful capture plus failed operation were preserved in a verified private
+custom PostgreSQL backup before shutdown. Do not recreate fixtures in place of
+that actual evidence or retry automatically. A future explicit UI retry requires
+a safely restored isolated environment and renewed user authorization; preserve
+the failed-attempt backup because retry updates the same durable operation.
+
+**Verdict: PARTIAL.** F4 saved capture is live verified; successful grounded F5
+analysis remains unverified. No F6 work or production activation is implied.

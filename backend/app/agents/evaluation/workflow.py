@@ -14,6 +14,17 @@ RUBRIC_VERSION='interview-evidence-v1'
 class AssessmentError(Exception):pass
 
 
+# Fixed codes only: never send exception inputs or model text as repair feedback.
+GROUNDING_ERRORS=frozenset({
+    'evaluation_question_identity_mismatch','evaluation_dimensions_incomplete',
+    'evaluation_technical_citation_invalid','evaluation_unanswered_is_not_failure',
+    'evaluation_pairing_requires_review','evaluation_evidence_missing',
+    'evaluation_quote_not_in_source','evaluation_cross_question_evidence',
+    'evaluation_candidate_evidence_missing','evaluation_accuracy_reference_missing',
+    'evaluation_invalid_model_output',
+})
+
+
 class Output(BaseModel):
     model_config=ConfigDict(extra='forbid',frozen=True,hide_input_in_errors=True)
 
@@ -49,7 +60,7 @@ class ModelAssessment(Output):
 class AssessmentProvider(Protocol):
     name:str
     model:str
-    async def assess(self,source,pairs,mappings,references,repair=False)->ModelAssessment: ...
+    async def assess(self,source,pairs,mappings,references,repair=False,repair_error=None)->ModelAssessment: ...
 
 
 def validate_assessment(source,pairs,references,result):
@@ -92,6 +103,7 @@ class State(TypedDict,total=False):
     assessment:ModelAssessment
     repair:bool
     validated:bool
+    validation_error:str
 
 
 class InterviewEvaluationWorkflow:
@@ -123,10 +135,12 @@ class InterviewEvaluationWorkflow:
     async def mapping(self,state):return {'mappings':map_requirements(state['source'],state['pairs'])}
     async def retrieve(self,state):return {'references':await self.retriever.retrieve(state['source'],state['pairs'])}
     async def assess(self,state):
-        return {'assessment':await self.provider.assess(state['source'],state['pairs'],state['mappings'],state['references'],state['repair'])}
+        return {'assessment':await self.provider.assess(state['source'],state['pairs'],state['mappings'],state['references'],state['repair'],repair_error=state.get('validation_error'))}
     async def validate(self,state):
         try:validate_assessment(state['source'],state['pairs'],state['references'],state['assessment'])
-        except (AssessmentError,ValidationError):
-            if state['repair']:raise AssessmentError('evaluation_output_not_grounded') from None
-            return {'validated':False,'repair':True}
+        except (AssessmentError,ValidationError) as error:
+            code=str(error) if isinstance(error,AssessmentError) else 'evaluation_invalid_model_output'
+            if code not in GROUNDING_ERRORS:code='evaluation_output_not_grounded'
+            if state['repair']:raise AssessmentError(code) from None
+            return {'validated':False,'repair':True,'validation_error':code}
         return {'validated':True}
