@@ -43,3 +43,33 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
   assert.equal(disconnected,0);
   release();await tick();assert.equal(disconnected,1);
 });
+
+test('disconnect during initial connect does not hide sanitized stage diagnostic',async()=>{
+  const states:any[]=[],refs:any[]=[];let si=0,ri=0;
+  const hooks={useState(v:any){const i=si++;if(!(i in states))states[i]=v;return [states[i],(x:any)=>states[i]=x];},
+    useRef(v:any){const i=ri++;return refs[i]??(refs[i]={current:v});},useEffect(){}};
+  class Room{
+    callback=()=>{};remoteParticipants=new Map();localParticipant={};
+    on(name:any,fn:any){if(name==='disconnected')this.callback=fn;return this;}
+    async connect(){this.callback();throw {reasonName:'ServerUnreachable',message:'private token must never appear'};}
+    async disconnect(){}
+  }
+  const source=ts.transpileModule(readFileSync(new URL('../src/components/LiveInterviewPage.tsx',import.meta.url),'utf8').replace('import.meta.env.DEV','false'),
+    {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  const require=createRequire(import.meta.url),exports:any={};
+  runInNewContext(source,{exports,require:(name:string)=>{
+    if(name==='react')return hooks;
+    if(name==='livekit-client')return {Room,RoomEvent:{Disconnected:'disconnected'},Track:{Source:{},Kind:{}},setLogLevel(){}};
+    if(name==='../api/livekitInterview')return {interviewAccess:async()=>({server_url:'ws://127.0.0.1:7880',token:'synthetic'}),InterviewAccessError:class extends Error{}};
+    if(name==='./syntheticInterviewMedia')return {syntheticInterviewMedia:()=>({dispose(){}})};
+    if(['./TranscriptPanel','./InterviewAnalysis','./InterviewCaptions'].includes(name))return {__esModule:true,default:()=>null};
+    return require(name);
+  }});
+  function render(){si=0;ri=0;return exports.default({jobId:'synthetic',interview:{id:'synthetic'},onBack(){}});}
+  function all(n:any,p:(n:any)=>boolean):any[]{if(!n||typeof n!=='object')return [];return [...(p(n)?[n]:[]),...[n.props?.children].flat(Infinity).flatMap(c=>all(c,p))];}
+  let tree=render();all(tree,n=>n.type==='input')[1].props.onChange({target:{checked:true}});
+  tree=render();await all(tree,n=>n.type==='button'&&n.props.children==='Join interview')[0].props.onClick();
+  for(let i=0;i<20;i++)await Promise.resolve();
+  tree=render();const message=all(tree,n=>n.props?.role==='alert')[0].props.children;
+  assert.match(message,/livekit_connection \(ServerUnreachable\)/);assert.ok(!message.includes('private token'));
+});

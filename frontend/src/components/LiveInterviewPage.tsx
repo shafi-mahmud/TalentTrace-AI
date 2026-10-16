@@ -51,6 +51,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   async function join() {
     if(!confirmed || busy || room.current)return;
     const current=++generation.current;setBusy(true);setError("");setState("Connecting…");
+    let establishing=true;let stage='synthetic_media';
     const active=new Room();room.current=active;
     function remoteState(publication:RemoteTrackPublication) {
       if(current!==generation.current)return;
@@ -69,19 +70,23 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
       .on(RoomEvent.TrackMuted,(publication,participant)=>{if(!participant.isLocal)remoteState(publication as RemoteTrackPublication);})
       .on(RoomEvent.TrackUnmuted,(publication,participant)=>{if(!participant.isLocal)remoteState(publication as RemoteTrackPublication);})
       .on(RoomEvent.AudioPlaybackStatusChanged,()=>{if(current===generation.current)setAudioBlocked(!active.canPlaybackAudio);})
-      .on(RoomEvent.Disconnected,()=>{if(room.current===active){room.current=null;generation.current++;stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Disconnected");setError("Interview connection ended. Check the network before joining again.");}});
+      .on(RoomEvent.Disconnected,()=>{if(!establishing&&room.current===active){room.current=null;generation.current++;stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Disconnected");setError("Interview connection ended. Check the network before joining again.");}});
     try {
       const generated=synthetic?syntheticInterviewMedia(candidate?"b":"a",syntheticSpeech):null;media.current=generated;
+      stage='room_authorization';
       let access=candidate?await candidateAccess():await interviewAccess(jobId!,interview!.id);
       if(current!==generation.current)return;
-      await active.connect(access.server_url,access.token);access={server_url:"",token:"",expires_in:300};
+      stage='livekit_connection';await active.connect(access.server_url,access.token);access={server_url:"",token:"",expires_in:300};
       if(current!==generation.current){await active.disconnect(true);return;}
-      if(generated){await active.localParticipant.publishTrack(generated.video,{source:Track.Source.Camera});
+      stage='media_publication';if(generated){await active.localParticipant.publishTrack(generated.video,{source:Track.Source.Camera});
         await active.localParticipant.publishTrack(generated.audio,{source:Track.Source.Microphone});}
       else await active.localParticipant.enableCameraAndMicrophone();
       if(current!==generation.current){await active.disconnect(true);return;}
-      setJoined(true);setMuted(false);setCameraOff(false);setPeers(active.remoteParticipants.size);setState("Connected");
-    } catch(failure) {if(current===generation.current){await leave();setError(failure instanceof InterviewAccessError?failure.message:"Interview connection failed. Check configuration, network or media permissions before joining again.");}
+      establishing=false;setJoined(true);setMuted(false);setCameraOff(false);setPeers(active.remoteParticipants.size);setState("Connected");
+    } catch(failure) {if(current===generation.current){await leave();
+        const code=failure&&typeof failure==='object'&&'reasonName' in failure?failure.reasonName:failure instanceof Error?failure.name:'';
+        const safe=['NotAllowed','ServerUnreachable','InternalError','Cancelled','LeaveRequest','Timeout','WebSocket','ServiceNotFound','NotSupportedError','NotAllowedError','TypeError','ReferenceError'].includes(String(code))?String(code):'unavailable';
+        setError(failure instanceof InterviewAccessError?failure.message:`Interview connection failed at ${stage} (${safe}). Check configuration, network or media permissions before joining again.`);}
       else {try {await active.disconnect(true);} catch {}}}
     finally {if(current===generation.current)setBusy(false);}
   }

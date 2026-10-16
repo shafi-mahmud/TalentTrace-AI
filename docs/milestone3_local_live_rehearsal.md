@@ -107,6 +107,18 @@ and `LIVE-TARGETS.json`. Do not paste those values into documentation or chat.
 
 At the current checkpoint, actual loopback password login, owned job/interview
 loading, normal scheduling/invitation API creation and exact network bindings
-have passed. Full independent-browser media, newly recognized speech, finalization
-and live durable Groq analysis remain **unverified**, pending the manual browser
-sign-in/rehearsal. Earlier seeded-input model/UI tests are separate evidence.
+have passed. The owner signed in through the actual built-in browser and opened
+the saved job/interview. Generated recruiter WAV selection succeeded. The first
+LiveKit connection failed before media publication; after fixing a diagnostic
+race, the safe UI reports `livekit_connection (ServerUnreachable)`. The server
+accepted signaling but the client closed before an RTC connection. This does not
+yet establish whether the cause is browser-specific. An independent Edge check
+is pending manual sign-in. No physical device or new model inference was used.
+
+Full independent-browser media, newly recognized speech, finalization and live
+durable Groq analysis remain **unverified**. Earlier seeded-input model/UI tests
+are separate evidence. A disconnected event during initial connection previously
+advanced the UI generation counter and hid the actual connection failure; the
+initial connect catch now retains a fixed stage/allowlisted reason without
+printing SDK messages, tokens or SDP. Unexpected post-join disconnect handling is
+unchanged. A focused regression verifies that event ordering and secret redaction.
