@@ -32,3 +32,6 @@ api_router.include_router(transcript_storage.router)
 
 from app.api.routers import interview_analysis
 api_router.include_router(interview_analysis.router)
+
+from app.api.routers import consolidated_assessment
+api_router.include_router(consolidated_assessment.router)

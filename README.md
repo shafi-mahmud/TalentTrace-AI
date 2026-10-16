@@ -8,6 +8,7 @@
 * **Author**: Shafi Mahmud
 
 ## Documentation Directory (/docs)
+* [F6 Increment 1: read-only consolidated candidate assessment](docs/f6_consolidated_assessment.md)
 * [Milestone 3 closure: verified demonstration and remaining gaps](docs/milestone3_closure.md)
 * [Project Naming & Positioning (P1.1)](docs/project_naming.md)
 * [Requirement Clarifications (P1.2)](docs/clarifications.md) *(In progress)*
