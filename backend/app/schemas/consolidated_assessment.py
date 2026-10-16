@@ -44,3 +44,13 @@ class ConsolidatedAssessment(Contract):
     notice: str = ('Recruiter review required. F2 measures demonstrated CV requirement coverage; '
                    'F5 is advisory and ASR is unverified. Missing evidence is not poor performance. '
                    'No combined score or suitability decision is calculated.')
+
+
+class CandidateComparison(Contract):
+    version: Literal['f6-comparison-1'] = 'f6-comparison-1'
+    job_id: UUID
+    criteria_revision: int
+    reports: tuple[ConsolidatedAssessment, ConsolidatedAssessment]
+    review_required: Literal[True] = True
+    notice: str = ('Same-job saved evidence only. Different interviews may assess different questions. '
+                   'Missing evidence is not poor performance. No combined score, ranking or hiring recommendation.')

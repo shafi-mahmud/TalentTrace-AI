@@ -550,3 +550,20 @@ body { background: var(--page); color: var(--ink); }
 @media print {
   #talenttrace-assessment-print :is(p,li,strong,summary) { color: #111; background: transparent; box-shadow: none; }
 }
+
+.candidate-comparison { margin: 24px 0; padding: 18px 0; border-block: 1px solid var(--line); }
+.comparison-selectors { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-bottom: 12px; }
+.comparison-selectors select { width: 100%; }
+.comparison-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; align-items: start; }
+.comparison-columns > article { min-width: 0; }
+.comparison-columns .consolidated-assessment { padding: 14px; border: 1px solid var(--line); }
+.comparison-columns .consolidated-assessment h3 { font-size: 20px; }
+.comparison-summary { overflow-x: auto; margin: 16px 0; }
+.comparison-summary table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.comparison-summary :is(th,td) { padding: 10px; text-align: left; vertical-align: top; border: 1px solid var(--line); overflow-wrap: anywhere; }
+.comparison-summary th { background: #edf4f1; }
+.comparison-summary caption { text-align: left; font-weight: 600; margin-bottom: 8px; }
+@media(max-width:1000px) {
+ .comparison-columns, .comparison-selectors { grid-template-columns: minmax(0,1fr); }
+ .comparison-summary :is(th,td) { padding: 6px; font-size: 13px; }
+}

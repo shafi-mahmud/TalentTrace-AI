@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from app.core.auth import current_recruiter, database_session
 from app.core.config import settings
-from app.schemas.consolidated_assessment import ConsolidatedAssessment
+from app.schemas.consolidated_assessment import ConsolidatedAssessment, CandidateComparison
 from app.services.consolidated_assessment import consolidated_assessment
 
 router = APIRouter(tags=['Consolidated candidate assessment'])
@@ -18,3 +18,15 @@ async def report(job_id: UUID, batch_id: UUID, upload_id: UUID, request: Request
             storage_enabled=settings.transcript_storage_enabled)
     except SQLAlchemyError:
         raise HTTPException(503, 'Saved candidate assessment is unavailable.') from None
+
+
+@router.get('/jobs/{job_id}/assessment-comparison', response_model=CandidateComparison)
+async def comparison(job_id: UUID, left_batch: UUID, left_upload: UUID, right_batch: UUID, right_upload: UUID,
+                     request: Request, user=Depends(current_recruiter), session=Depends(database_session)):
+    from app.services.consolidated_assessment import compare_assessments
+    try:
+        return await compare_assessments(session, request, user, job_id,
+            ((left_batch, left_upload), (right_batch, right_upload)),
+            storage_enabled=settings.transcript_storage_enabled)
+    except SQLAlchemyError:
+        raise HTTPException(503, 'Candidate comparison is unavailable.') from None

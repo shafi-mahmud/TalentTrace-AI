@@ -1,4 +1,4 @@
-# F6 consolidated candidate assessment — Increments 1 and 2
+# F6 consolidated candidate assessment — Increments 1–3
 
 Implemented on `feature/f6-consolidated-report`, based on verified M3
 `2967ae9ef36748d33a5b3107d0122a70d8418979`. This is **not full F6 completion**.
@@ -9,7 +9,8 @@ The official BID Section 5.4.1 F6 was not found in the inspected home files.
 Scope follows the owner's Increment 1 request and existing F5/closure notes.
 Increment 1 left printing/export, comparisons, complete evidence coverage and any
 approved overall suitability formulation unfinished. Increment 2 below adds native
-browser printing/Save as PDF; the other areas remain unfinished. No numeric combined
+browser printing/Save as PDF. Increment 3 below adds two-application comparison;
+complete coverage and an approved overall formulation remain unfinished. No numeric combined
 score, candidate recommendation, new assessment, schema migration or external
 service is introduced. Reviewed M3, notifications, LinkedIn and intake are not
 merged or modified by this branch.
@@ -308,3 +309,175 @@ formulation. Additional export formats and production privacy/disclosure accepta
 are separate work. A small follow-up should verify this native print flow in the
 user's normal desktop browser with synthetic long multi-page evidence before
 claiming print-layout acceptance across browsers.
+
+## F6 Increment 3 — same-job candidate comparison (17 October 2026)
+
+Implemented on `feature/f6-candidate-comparison`, based on Increment 2
+`c49b2578cfc11d26610193ba0d8d9da2113ff761`. Parent increments and verified M3 are
+preserved. This increment does not claim full F6 acceptance. The official BID
+PDF was still not present in the inspected Downloads/Documents paths; comparison
+scope follows the owner's explicit mandatory F6 request, not an independently
+reverified BID quotation.
+
+### Architecture and actual data flow
+
+The recruiter loads **Previously saved candidate scores**, selects **Application A**
+and **Application B**, then explicitly clicks **Compare selected applications**.
+Choices come from the selected job's existing current saved-score discovery.
+The exact identity remains `(job_id, batch_id, upload_id)`, not a name, CV filename,
+email address or inferred person identity. Duplicate exact application selections
+are blocked in UI, client API validation and backend validation. A repeated upload
+UUID in another batch is a different application identity; there is no new
+cross-application person deduplication claim.
+
+One authenticated, uncached GET is used:
+
+```text
+/api/v1/jobs/{job_id}/assessment-comparison
+  ?left_batch={uuid}&left_upload={uuid}&right_batch={uuid}&right_upload={uuid}
+```
+
+The backend obtains the owned job lock, checks confirmed criteria, and calls the
+existing `consolidated_assessment` service for each exact application using the
+same session/transaction. No second implementation of F2/F5 evidence generation
+or source/privacy validation is introduced. Job locking stabilizes revision and
+weights across both reads; existing interview locks serialize with withdrawal.
+A failed second lookup returns a generic error, not a partial first report.
+Both reports must use the current criteria revision and current scoring weights;
+historical/incompatible selection snapshots are rejected with 409. Selection-time
+F2 snapshots remain the evidence source where an interview exists; later F2 reruns
+are not silently substituted. Final retention checking redacts an interview if
+its deadline passes while the other report is retrieved.
+
+The typed `f6-comparison-1` response contains the two existing typed report
+contracts in the original A/B order, job identity, criteria revision and a review
+notice. It performs no score arithmetic, cross-interview rubric aggregation,
+ranking, tie-breaking, selection recommendation, writes or inference. F2 numbers
+remain weighted CV requirement coverage, not a new overall suitability score.
+Different interviews can cover different questions; the UI says so explicitly.
+
+### Presentation and privacy
+
+A summary table aligns application/batch identities, criteria revision, original
+F2 score, screening status, skill/experience/education component values and
+interview availability. Missing scores remain **Not scored**, not zero.
+The detailed A/B columns reuse `AssessmentView`, including original F5 dimensions,
+coverage/gaps, strengths/follow-ups, technical citations and source-turn links.
+No arbitrary result is chosen when multiple valid analysis variants exist: the
+existing `ambiguous` state is retained. A future selection policy should require
+an explicit authorized operation/model/corpus choice, validate it against the same
+current source and disclose those versions for each candidate.
+
+Wide layouts use two columns; below 1000 px the detailed reports and selectors
+stack. The summary remains paired with wrapping identities. No independent scroll
+panes or fixed report heights are introduced. The current narrow embedded browser
+was verified with this stacked layout and side-by-side summary.
+
+Each comparison retrieval rechecks recruiter authentication and ownership for both
+applications, along with the inherited consent, retention, deletion, revocation,
+criteria and transcript fingerprint checks. Candidate-facing capabilities cannot
+read it. Restricted evidence has no interview text/assessment. Source quote links
+remain scoped to their rendered report instance. The client validates exact A/B
+identities, response order/revision/weights and the existing report contracts.
+
+Changing selections, job/revision, reloading the saved choices, navigating, hiding
+the document or closing clears comparison evidence and aborts pending retrieval.
+Sequence guards discard stale responses. The earliest available interview
+retention deadline clears the whole comparison. Recompare performs a fresh GET;
+no automatic fetch, polling, browser storage, print or external action is added.
+Like prior reports, previously delivered browser content cannot be retroactively
+revoked by a later server withdrawal; reopening/retrieving checks it again.
+
+### Test evidence
+
+Executed on the existing synthetic home PostgreSQL database:
+
+```bash
+cd /home/shafi/Projects/TalentTrace-AI/backend
+F6_HOME_PG_TEST=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+ .venv/bin/python -m pytest tests/test_consolidated_assessment.py \
+ tests/test_candidate_comparison.py -q
+cd /home/shafi/Projects/TalentTrace-AI/frontend
+pnpm test
+pnpm build
+```
+
+- Backend: **41 passed, 0 failed, 0 skipped**. This includes **19 new PostgreSQL
+  comparison cases**, plus Increment 1's 22 checks (17 PostgreSQL). Total executed
+  PostgreSQL cases: **36**. Random fixtures and edits are rolled back; the helper
+  verifies its synthetic recruiter is absent afterward. No existing records,
+  tables, migrations, images or database services are recreated.
+- Tests exercise two valid same-job applications, CV-only versus available F5,
+  missing/withdrawn/expired/deleted/changed/ambiguous interview sources, duplicate,
+  different-job and foreign application selections, foreign recruiter/anonymous/
+  candidate access, wrong batch, unconfirmed/stale criteria, incompatible weights,
+  and expiry during pair retrieval. Repeated GET results are stable; SQL write
+  statements are absent, and existing manager/workflow traps disallow inference.
+- Frontend: **211 passed, 0 failed, 0 skipped**, including 8 new comparison checks:
+  exact identity validation, wrong-order/revision/weight/protected-text rejection,
+  CV-only/F5 rendering, unavailable/ambiguous states, fresh credentialed GETs,
+  generic errors/no request on invalid selection, explicit-selection empty state,
+  and responsive/memory lifecycle structure.
+- TypeScript and Vite production build passed; existing LiveKit >500 kB chunk
+  warning remains. Static CSS/lifecycle assertions do not establish every browser
+  viewport, async timing race or physical print behavior.
+- Browser: synthetic scored and explicitly unscored applications loaded; comparison
+  summary and detailed states rendered. Selecting the same application in both
+  selectors immediately cleared the old result and disabled comparison. Restoring
+  distinct choices and retrieving again produced the same persisted values.
+  Screenshot: ignored local `data/home/f6-comparison-verified.png`.
+- The persistent walkthrough adds one clearly synthetic unscored score record
+  under the existing synthetic F6 fixture job; prior data is unchanged. No mock
+  interview result was persisted for the walkthrough. Complete F5 comparisons use
+  rollback-only test fixtures, not real candidates, audio or inference.
+- Older office-container-dependent PostgreSQL gates were not enabled/rerun;
+  these results do not claim full database, concurrency or full F6 acceptance.
+
+### Print cancellation review — separate follow-up
+
+Increment 2's print code was reviewed without modification. It registers
+`afterprint`, removes temporary DOM/listeners, has context/retention/five-minute
+cleanup, explicit manual clearing and a single-print guard. Unit tests cover those
+hooks, but native cancel/Escape delivery of `afterprint` remains unverified on the
+intended desktop browsers. The embedded browser attempt was not an adequate proof.
+This needs a **separate compatibility/cleanup follow-up**: reproduce cancel/Escape
+in the user's normal browser and verify temporary DOM removal, enabled controls
+and a second print. If that browser omits the event or retains state, make a narrow
+cleanup fix with a regression test. Review alone found no proven new defect and
+this increment does not claim the gap fixed or redesign printing.
+
+### Changed files, limitations and next step
+
+- `backend/app/schemas/consolidated_assessment.py`: comparison response contract.
+- `backend/app/services/consolidated_assessment.py`: paired existing report reads and current revision/weight checks.
+- `backend/app/api/routers/consolidated_assessment.py`: authenticated comparison GET.
+- `backend/tests/test_candidate_comparison.py`: rollback-only PostgreSQL coverage.
+- `frontend/src/api/candidateComparison.ts`: exact selection and response checks.
+- `frontend/src/components/CandidateComparison.ts`: selectors, summary and reused reports.
+- `frontend/src/components/SavedScores.ts`: comparison entry point.
+- `frontend/src/index.css`: responsive comparison layout.
+- `frontend/tests/candidateComparison.test.ts`: focused client/rendering checks.
+- `docs/f6_consolidated_assessment.md`: this implementation and verification record.
+
+Selection discovery currently includes current saved F2 rows; applications whose
+only remaining evidence is an interview selection snapshot are supported by the
+underlying report reader but are not listed in these selectors. Cross-job,
+historical-criteria, more-than-two and cross-person matching comparisons are not
+supported. F5 dimensions/questions are shown as recorded, without forcing unlike
+interviews into one normalized score. Comparison printing/export is not added.
+
+Remaining F6 work: complete persisted per-requirement evidence for unscored
+applications, explicit analysis-version selection, broader export/print acceptance,
+and any separately approved overall suitability formulation. The next small step
+is the native print-cancel validation above, followed by a scoped design for the
+missing persisted CV-evidence coverage. No dependency or model download was needed.
+
+### Three viva questions
+
+1. **Why one comparison request?** It holds one owned job/revision context while
+   both existing report readers validate their exact applications and privacy.
+2. **How do you handle a withdrawn interview or ambiguous result?** Withhold its
+   text, retain the explicit availability state, and require deliberate authorized
+   version selection rather than inventing or arbitrarily choosing evidence.
+3. **Why no combined score or winner?** F2 is CV requirement coverage and F5 is
+   advisory question-specific evidence; combining them requires an approved design.

@@ -120,3 +120,27 @@ async def consolidated_assessment(db, request, owner, job_id, batch_id, upload_i
     return ConsolidatedAssessment(job_id=job.id, job_title=job.job_title, job_reference=job.job_reference,
         batch_id=batch_id, upload_id=upload_id, criteria_revision=revision,
         cv_source=origin, cv=cv, interview=evidence)
+
+
+async def compare_assessments(db, request, owner, job_id, selections, *, storage_enabled):
+    from app.schemas.consolidated_assessment import CandidateComparison
+    # One owned job lock stabilizes criteria/weights across both reads. The shared
+    # report reader retains interview locks until this request transaction closes.
+    job = await owned_job(db, owner.id, job_id, lock=True)
+    if job.confirmed_snapshot is None:
+        raise HTTPException(409, 'Comparison requires current confirmed job criteria.')
+    if len(selections) != 2 or selections[0] == selections[1]:
+        raise HTTPException(422, 'Select two distinct applications from the same job.')
+    reports = []
+    for batch_id, upload_id in selections:
+        reports.append(await consolidated_assessment(db, request, owner, job_id, batch_id, upload_id,
+            storage_enabled=storage_enabled))
+    if any(r.criteria_revision != job.revision or r.cv.weights.model_dump() != job.scoring_weights for r in reports):
+        raise HTTPException(409, 'Comparison requires the current confirmed criteria revision and weights.')
+    # Time can advance while the second report is read, even under row locks.
+    for index, report in enumerate(reports):
+        deadline = report.interview.retention_deadline
+        if report.interview.state == 'available' and deadline is not None and utc_now() >= deadline:
+            reports[index] = report.model_copy(update={'interview': InterviewEvidence(
+                state='expired', interview_id=report.interview.interview_id)})
+    return CandidateComparison(job_id=job.id, criteria_revision=job.revision, reports=tuple(reports))
