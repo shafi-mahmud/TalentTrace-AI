@@ -58,7 +58,40 @@ columns destroys retention/revocation history.
 
 ## Integration verification status
 
-Phase A privacy enforcement is implemented. Live transcript writer and UI are
-being added in subsequent milestones in this branch. No current live demo was
-activated by this development session. Mocked microphone/STT tests do not prove
-physical-device performance or speech-recognition accuracy.
+Phase A privacy enforcement and Phase B's opt-in trusted caption adapter are
+implemented. No current live demo was activated by this development session.
+Mocked microphone/STT tests do not prove physical-device performance or accuracy.
+
+## Trusted final turns and normal finalization
+
+Only validated final output from the existing local tiny.en worker enters
+`CaptionTranscript`; no endpoint accepts browser transcript text. Text events
+have deterministic UUIDv5 identities from capture UUID and caption sequence.
+Repeated identical events reconcile through the existing unique keys. There is
+no text queue and no automatic retry after a persistence failure/uncertain commit.
+Storage failure does not stop ordinary temporary captions.
+
+Normal finish preserves the browser flush, per-role end acknowledgement, bounded
+pending chunk drain and final-caption exchange. The adapter waits for each
+database acknowledgement. Capture completion also compares actual persisted turn
+count with expected/acknowledged events and validated accepted/processed sample
+evidence. Calling `finish_session(completed=True)` without evidence is rejected.
+Empty recognized speech is legitimate silence, not a missing text turn. Outcomes
+remain incomplete/unconfirmed when processing, delivery or persistence fails.
+Summaries certify accepted audio only, never all speech or ASR accuracy.
+
+An already authorized active capture can obtain one non-extending, persisted
+35-second finalization deadline before its join window closes. Trusted final
+writes may use this deadline and the immutable interview context after the window;
+they never reopen a room or create a general post-interview text-writing API.
+Existing caption sockets can drain only within that bound, with fresh owner and
+invitation-revocation checks. A new socket still needs the normal join window.
+Revocation/retention remain authoritative throughout. Timestamps are server chunk
+interval estimates, not word-level alignment. Caption consent withdrawal and
+disconnect remain immediate audio discard, not graceful drain.
+
+Phase B validation: 105 focused transcript, privacy, consent and caption tests
+passed, including disposable PostgreSQL full/residual final-turn storage,
+completeness verification, privacy deletion, storage failure isolation and bounded
+post-window writes. No raw media files, cloud calls or physical microphones were
+used. Frontend consent and retrieval follow in Phase C.

@@ -138,7 +138,11 @@ def test_pg_valid_session_turns_repeated_speech_and_order(pg,caplog):
         await f.service.append_final(f.owner,late);await f.service.append_final(f.owner,early)
         rows=await f.service.list_turns(f.owner,f.interview)
         assert [r.id for r in rows]==[early.id,late.id] and rows[0].text==rows[1].text
-        assert (await f.service.finish_session(f.owner,f.capture,completed=True)).persistence_outcome=='saved'
+        with pytest.raises(TranscriptError,match='capture_completeness_unverified'):
+            await f.service.finish_session(f.owner,f.capture,completed=True)
+        assert (await f.service.finish_session(f.owner,f.capture,completed=True,evidence={
+            'audio_outcome':'drained','expected_turns':2,'acknowledged_turns':2,'scope':'accepted_audio_only','commit_uncertain':False,
+            'accepted_samples':{'recruiter':1,'candidate':1},'processed_samples':{'recruiter':1,'candidate':1}})).persistence_outcome=='saved'
         assert 'Clearly synthetic speech.' not in caplog.text
     run(pg,scenario)
 
@@ -634,4 +638,82 @@ def test_pg_privacy_cleanup_failure_retry_and_concurrency(pg):
         finally:sa_event.remove(f.engine.sync_engine,'before_cursor_execute',fail)
         await asyncio.gather(privacy.delete_revoked(f.owner,f.interview),privacy.delete_revoked(f.owner,f.interview))
         assert (await privacy.status(f.request(),f.interview,f.job))['deletion_verified']
+    run(pg,scenario)
+
+
+def test_pg_trusted_caption_pipeline_saves_full_and_residual_turns(pg):
+    from app.services.caption_transcript import CaptionTranscript
+    from app.services.interview_captions import CaptionSession
+    async def scenario(f):
+        await start(f)
+        runtime=N(storage=f.service,coordinator=N(_entries={f.interview:N(status='authorized_session_no_transcript',owner=f.owner,capture_id=f.capture)}))
+        adapter=CaptionTranscript(runtime,f.interview)
+        class Worker:
+            async def start(self):pass
+            async def close(self):pass
+            async def transcribe(self,pcm):
+                f.now[0]+=timedelta(seconds=1)
+                return 'Synthetic trusted final speech.'
+        messages=[]
+        async def send(value):messages.append(value)
+        session=CaptionSession(Worker,storage=adapter)
+        for role in ('recruiter','candidate'):await session.connect(role,send)
+        await session.approve('recruiter');await session.approve('candidate')
+        for _ in range(40):await session.audio('recruiter',bytes(3200))
+        await session.request_finish('recruiter')
+        await session.audio('candidate',bytes(74))
+        for role in ('recruiter','candidate'):
+            await session.end_audio(role,dict(kind='end',frames=session.frames[role],
+                samples=session.accepted_samples[role],captured_samples=session.accepted_samples[role]))
+        await session.finalizer
+        turns=await f.service.list_turns(f.owner,f.interview)
+        assert len(turns)==2 and {turn.role for turn in turns}=={'recruiter','candidate'}
+        assert [m for m in messages if m['kind']=='storage'][-1]['status']=='saved'
+        async with f.factory() as db:
+            capture=await db.get(Capture,f.capture)
+            assert capture.status=='completed' and capture.capture_summary['acknowledged_turns']==2
+            assert capture.capture_summary['accepted_samples']==capture.capture_summary['processed_samples']
+        from app.services.transcript_privacy import TranscriptPrivacyService
+        assert (await TranscriptPrivacyService(f.service).withdraw(f.request(True),f.interview))['deletion_verified']
+    run(pg,scenario)
+
+
+def test_pg_finalization_after_window_is_bounded_and_not_general_join_access(pg):
+    async def scenario(f):
+        await start(f);f.now[0]+=timedelta(seconds=10)
+        deadline=await f.service.begin_finalization(f.owner,f.capture)
+        async with f.factory.begin() as db:
+            row=await db.get(InterviewSchedule,f.interview)
+            row.scheduled_at=f.now[0]-timedelta(days=1)
+        with pytest.raises(TranscriptError,match='interview_window_closed'):
+            await f.service.append_final(f.owner,event(f.capture))
+        await f.service.append_final(f.owner,event(f.capture),finalizing=True)
+        f.now[0]=deadline
+        with pytest.raises(TranscriptError,match='finalization_window_closed'):
+            await f.service.append_final(f.owner,event(f.capture,sequence=2),finalizing=True)
+    run(pg,scenario)
+
+
+def test_pg_caption_storage_failure_does_not_stop_temporary_captions(pg):
+    from app.services.caption_transcript import CaptionTranscript
+    from app.services.interview_captions import CaptionSession
+    from unittest.mock import AsyncMock
+    async def scenario(f):
+        await start(f)
+        runtime=N(storage=f.service,coordinator=N(_entries={f.interview:N(status='authorized_session_no_transcript',owner=f.owner,capture_id=f.capture)}))
+        adapter=CaptionTranscript(runtime,f.interview)
+        class Worker:
+            async def start(self):pass
+            async def close(self):pass
+            async def transcribe(self,pcm):return 'Synthetic speech.'
+        messages=[]
+        async def send(value):messages.append(value)
+        session=CaptionSession(Worker,storage=adapter)
+        for role in ('recruiter','candidate'):await session.connect(role,send)
+        await session.approve('recruiter');await session.approve('candidate')
+        f.service.append_final=AsyncMock(side_effect=TranscriptError('transcript_storage_unavailable',outcome_uncertain=True))
+        for _ in range(40):await session.audio('candidate',bytes(3200))
+        assert not session.stopped and any(m['kind']=='caption' for m in messages)
+        await session.stop()
+        assert [m for m in messages if m['kind']=='storage'][-1]['status']=='unconfirmed'
     run(pg,scenario)

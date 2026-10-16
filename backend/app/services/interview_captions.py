@@ -11,12 +11,14 @@ FINALIZATION_SECONDS = 35
 
 
 class CaptionSession:
-    def __init__(self, provider_factory, clock=time.monotonic, duration_seconds=120, authorization_deadline=None):
+    def __init__(self, provider_factory, clock=time.monotonic, duration_seconds=120, authorization_deadline=None, storage=None):
         if isinstance(duration_seconds, bool) or not isinstance(duration_seconds, int) or not 120 <= duration_seconds <= 300:
             raise ValueError("Bounded caption duration required")
         self.duration_seconds = duration_seconds
         self.authorization_deadline = authorization_deadline
         self.factory, self.clock = provider_factory, clock
+        self.storage = storage
+        self.drain_deadline = None
         self.peers, self.consent, self.buffers, self.providers = {}, set(), {}, {}
         self.started = None
         self.created = self.clock()
@@ -42,6 +44,8 @@ class CaptionSession:
 
     def expired(self):
         now = self.clock()
+        if self.finishing and self.drain_deadline is not None:
+            return now >= self.drain_deadline
         return ((self.authorization_deadline is not None and now >= self.authorization_deadline)
                 or (self.started is not None and now - self.started >= self.duration_seconds))
 
@@ -72,6 +76,8 @@ class CaptionSession:
                         if self.stopped or self.expired():
                             await provider.close()
                             raise ValueError("Consent withdrawn")
+                    if self.storage:
+                        await self.storage.start()
                     self.started = self.clock()
                     await self.broadcast({"kind": "active", "duration_seconds": self.duration_seconds})
                 except Exception:
@@ -99,6 +105,12 @@ class CaptionSession:
     async def _cleanup(self):
         await asyncio.gather(*(asyncio.wait_for(p.close(), 2) for p in self.providers.values()), return_exceptions=True)
         self.providers.clear()
+        if self.storage:
+            try:
+                result = await asyncio.wait_for(self.storage.finish(self.final_result or self.summary('partial' if any(self.processed_samples.values()) else 'failed')), 5)
+                await asyncio.gather(*(asyncio.wait_for(send(result), 1) for send in self.peers.values()), return_exceptions=True)
+            except Exception:
+                await asyncio.gather(*(asyncio.wait_for(send({'kind':'storage','status':'unconfirmed','committed_turns':0}),1) for send in self.peers.values()),return_exceptions=True)
         if self.finishing and self.final_result is None:
             self.final_result = self.summary('partial' if any(self.processed_samples.values()) else 'failed')
             await asyncio.gather(*(asyncio.wait_for(send(self.final_result), 1) for send in self.peers.values()), return_exceptions=True)
@@ -116,6 +128,10 @@ class CaptionSession:
             raise ValueError('Normal finalization unavailable')
         if self.finishing:
             return
+        if self.storage:
+            await self.storage.begin_finish()
+            if self.storage.grace_until is not None:
+                self.drain_deadline = self.clock() + FINALIZATION_SECONDS
         self.finishing = True
         self.finalizer = asyncio.create_task(self._finalize())
         await self.broadcast({"kind": "finishing", "deadline_seconds": FINALIZATION_SECONDS})
@@ -185,9 +201,12 @@ class CaptionSession:
             if self.sequence >= max(120, self.duration_seconds // 2):
                 raise ValueError('Caption limit exceeded')
             self.sequence += 1
-            await self.broadcast({"kind":"caption", "role":role, "sequence":self.sequence,
-                                  "start":start, "end":end, "text":text})
+            event = {"kind":"caption", "role":role, "sequence":self.sequence,
+                     "start":start, "end":end, "text":text}
+            await self.broadcast(event)
             self.caption_events[role] += 1
+            if self.storage:
+                await self.storage.caption(event)
 
     async def _drain_tail(self, role):
         buffer = self.buffers[role]

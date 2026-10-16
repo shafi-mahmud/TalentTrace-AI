@@ -35,3 +35,20 @@ class FinalTranscriptEvent(BaseModel):
         if self.end_ms < self.start_ms:
             raise ValueError('Invalid recognition interval.')
         return self
+
+
+class SampleCounts(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    recruiter: int = Field(ge=0, le=4800000)
+    candidate: int = Field(ge=0, le=4800000)
+
+
+class CaptureEvidence(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True, hide_input_in_errors=True)
+    audio_outcome: Literal['drained','partial','failed']
+    expected_turns: int = Field(ge=0, le=150)
+    acknowledged_turns: int = Field(ge=0, le=150)
+    accepted_samples: SampleCounts
+    processed_samples: SampleCounts
+    scope: Literal['accepted_audio_only']
+    commit_uncertain: bool

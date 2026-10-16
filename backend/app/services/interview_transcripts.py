@@ -15,7 +15,8 @@ from app.core.auth import current_recruiter, protect_mutation
 from app.api.routers.interview_access import candidate_session, owned_schedule
 from app.db.models.recruiter import InterviewSchedule, InterviewInvitation, JobProfile, Recruiter
 from app.db.models.interview_transcript import InterviewTranscriptSession, InterviewTranscriptTurn
-from app.schemas.interview_transcript import FinalTranscriptEvent
+from app.schemas.interview_transcript import FinalTranscriptEvent, CaptureEvidence
+from pydantic import ValidationError
 from app.services.livekit_interview import join_window
 
 
@@ -228,6 +229,17 @@ class TranscriptPersistenceService:
             db.add(row)
         return row
 
+    async def begin_finalization(self, owner, capture_id):
+        async with transaction(self.factory) as db:
+            capture = await self._capture(db, owner, capture_id)
+            await self._owned(db, owner, capture.interview_id, current=True)
+            if capture.status != 'active':
+                raise TranscriptError('capture_closed')
+            if capture.finalization_deadline is None:
+                capture.finalization_deadline = self.clock() + timedelta(seconds=35)
+            deadline = capture.finalization_deadline
+        return deadline
+
     async def _capture(self, db, owner, capture_id, *, storage=True):
         interview_id = await db.scalar(select(InterviewTranscriptSession.interview_id)
             .join(InterviewSchedule).where(InterviewTranscriptSession.id == capture_id,
@@ -243,7 +255,7 @@ class TranscriptPersistenceService:
             raise TranscriptError('capture_not_found')
         return capture
 
-    async def append_final(self, owner, event):
+    async def append_final(self, owner, event, *, finalizing=False):
         if type(event) is not FinalTranscriptEvent:
             raise TranscriptError('invalid_final_event')
         # Revalidate even an object constructed using Pydantic's unchecked constructor.
@@ -260,7 +272,11 @@ class TranscriptPersistenceService:
                 return existing[0]
             if capture.status != 'active':
                 raise TranscriptError('capture_closed')
-            await self._owned(db, owner, capture.interview_id, current=True)
+            if finalizing:
+                if capture.finalization_deadline is None or self.clock() >= capture.finalization_deadline:
+                    raise TranscriptError('finalization_window_closed')
+            else:
+                await self._owned(db, owner, capture.interview_id, current=True)
             if not capture.recruiter_consented_at or not capture.candidate_consented_at:
                 raise TranscriptError('storage_consent_not_verified')
             now = self.clock()
@@ -271,15 +287,29 @@ class TranscriptPersistenceService:
             capture.persistence_outcome = 'saved'
         return row
 
-    async def finish_session(self, owner, capture_id, *, completed, persistence_failed=False):
+    async def finish_session(self, owner, capture_id, *, completed, persistence_failed=False, evidence=None):
         if type(completed) is not bool or type(persistence_failed) is not bool:
             raise TranscriptError('invalid_session_outcome')
+        if evidence is not None:
+            try:
+                evidence = CaptureEvidence.model_validate(evidence).model_dump()
+            except ValidationError:
+                raise TranscriptError('invalid_capture_evidence') from None
         async with transaction(self.factory) as db:
             # Interrupted metadata cleanup is allowed after revocation, but
             # completed/saved finalization must obey the same durable fence.
             capture = await self._capture(db, owner, capture_id, storage=completed)
             count = await db.scalar(select(func.count()).select_from(InterviewTranscriptTurn).where(
                 InterviewTranscriptTurn.session_id == capture_id))
+            if completed:
+                if (not isinstance(evidence, dict) or evidence.get('audio_outcome') != 'drained'
+                    or evidence.get('expected_turns') != count or evidence.get('acknowledged_turns') != count
+                    or evidence.get('accepted_samples') != evidence.get('processed_samples')
+                    or evidence.get('commit_uncertain') is not False
+                    or not isinstance(evidence.get('accepted_samples'), dict)):
+                    raise TranscriptError('capture_completeness_unverified')
+            if evidence is not None:
+                capture.capture_summary = evidence
             outcome = 'saved' if completed and not persistence_failed else ('partial' if count else 'failed')
             status = 'completed' if completed else 'interrupted'
             if capture.status != 'active':

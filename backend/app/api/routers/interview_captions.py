@@ -4,6 +4,11 @@ import json
 from datetime import datetime, timedelta, timezone
 import time
 from uuid import UUID
+from sqlalchemy import select
+from app.core.auth import token_hash
+from app.db.models.recruiter import InterviewInvitation
+from app.services.transcript_runtime import runtime
+from app.services.caption_transcript import CaptionTranscript
 
 from fastapi import APIRouter, WebSocket
 from starlette.requests import Request
@@ -41,6 +46,32 @@ async def authorize(socket, job_id=None, interview_id=None):
         return interview.id, role, identity, expires
 
 
+async def authorize_finalizing(socket, association, storage):
+    """Only the already-authenticated socket's frozen capture, for <=35 seconds.
+
+    Never issues a room token or accepts a new connection after the join window.
+    Invitation revocation and owner inactivity still stop the existing drain.
+    """
+    key, role, actor, expires = association
+    now = datetime.now(timezone.utc)
+    if (storage.grace_until is None or now >= storage.grace_until
+            or now >= expires + timedelta(seconds=35)):
+        raise ValueError('Finalization access ended')
+    async with session_factory()() as db:
+        interview = await storage.runtime.storage._owned(db, storage.owner, key)
+        if role == 'recruiter':
+            user = await current_recruiter(Request({**socket.scope,'type':'http','method':'GET'}),db)
+            if user.id != actor or user.id != interview.recruiter_id:
+                raise ValueError('Finalization access changed')
+        else:
+            invitation = await db.scalar(select(InterviewInvitation).where(
+                InterviewInvitation.id==actor,InterviewInvitation.interview_id==key,
+                InterviewInvitation.revoked.is_(False)))
+            raw = socket.cookies.get('talenttrace_interview','')
+            if invitation is None or len(raw)!=43 or invitation.candidate_session_hash != token_hash(raw):
+                raise ValueError('Finalization access changed')
+
+
 async def serve(socket, job_id=None, interview_id=None):
     if not trusted_socket(socket):
         await socket.close(code=1008)
@@ -55,14 +86,18 @@ async def serve(socket, job_id=None, interview_id=None):
             if sessions:  # Explicit single-room proof bound.
                 raise ValueError("Caption capacity unavailable")
             sessions[key] = CaptionSession(lambda: LocalWhisper(settings.local_caption_model_path),
-                duration_seconds=settings.local_caption_test_duration_seconds)
+                duration_seconds=settings.local_caption_test_duration_seconds,
+                storage=CaptionTranscript(runtime(),key) if settings.transcript_storage_enabled else None)
         session = sessions[key]
         deadline = time.monotonic() + max(0, (expires - datetime.now(timezone.utc)).total_seconds())
         session.authorization_deadline = min(session.authorization_deadline, deadline) if session.authorization_deadline is not None else deadline
         await socket.accept()
         await session.connect(role, socket.send_json)
         async def check_authorization():
-            if await authorize(socket, job_id, interview_id) != association:
+            if (session.finishing and session.storage and session.storage.grace_until is not None
+                    and datetime.now(timezone.utc) >= association[3]):
+                await authorize_finalizing(socket, association, session.storage)
+            elif await authorize(socket, job_id, interview_id) != association:
                 raise ValueError('Access changed')
         session.authorization_checks[role] = check_authorization
         await socket.send_json({"kind": "waiting"})
@@ -71,8 +106,7 @@ async def serve(socket, job_id=None, interview_id=None):
             while not session.stopped:
                 await asyncio.sleep(1)
                 try:
-                    if await authorize(socket, job_id, interview_id) != association:
-                        raise ValueError("Access changed")
+                    await check_authorization()
                     if session.expired():
                         raise ValueError("Caption window ended")
                     if session.started is None and session.clock() - session.created >= 120:
