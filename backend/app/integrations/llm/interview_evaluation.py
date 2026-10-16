@@ -23,7 +23,9 @@ Quote exact original turn text, preserve negation, never invent experience or ev
 Each substantive judgement needs candidate evidence from THAT Q&A. Do not cite another pair.
 If pairing is uncertain, never use supported. Unanswered questions can only be uncertain/not_assessed.
 Technical accuracy MUST be uncertain/not_assessed without a provided relevant technical reference;
-otherwise cite its exact text/reference_id. Synthetic references are limited demo facts, not a full corpus.
+otherwise cite its exact text/reference_id. References have explicit provenance and version scope;
+official_documentation_summary is a curated paraphrase of its linked official source,
+synthetic_demo is only a fixture. Neither is an exhaustive corpus. Abstain on conflicting or irrelevant references.
 Articulation concerns text organization only; never infer accent, personality or protected traits.
 Each dimension needs a concise evidence-backed justification; follow-up is a suggestion, not an answer.
 No overall suitability, hiring/rejection, unsupported strengths or numerical scores.'''

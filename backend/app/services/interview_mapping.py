@@ -37,7 +37,13 @@ class TechnicalReference(Contract):
     id: str
     topic: str
     text: str = Field(repr=False)
-    provenance: Literal['synthetic_demo'] = 'synthetic_demo'
+    provenance: Literal['synthetic_demo','official_documentation_summary'] = 'synthetic_demo'
+    source_title: str = ''
+    document_id: str = ''
+    location: str = ''
+    url: str = ''
+    version: str = ''
+    retrieval_basis: str = 'synthetic_fixture'
 
 
 class TechnicalRetriever(Protocol):
