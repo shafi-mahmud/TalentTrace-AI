@@ -61,7 +61,12 @@ From `backend`, substituting your existing private provider file and local model
 It reads only GROQ_API_KEY and LLM_MODEL from that file, disables email, uses the
 normal consent runtime and enables privacy-bound durable analysis for its single
 fictional job. It does not seed transcript text or call a model on startup.
-Backend: 8022, lifetime at most 1800 seconds. Ctrl+C/deadline removes its own
+Backend: 8022, default lifetime 1800 seconds. For a paced manual rehearsal add
+`--max-runtime-seconds 7200 --interview-duration-minutes 120`. Maximum lifetime is
+two hours, must fit the supported interview duration, and is printed at startup.
+Invitation expiry is bounded by the matching interview/join window, not one hour.
+This does not extend the two-minute caption-processing limit.
+Ctrl+C/deadline removes its own
 disposable database. The launcher does not start/stop unrelated services.
 
 In a separate `frontend` terminal:
@@ -122,3 +127,14 @@ advanced the UI generation counter and hid the actual connection failure; the
 initial connect catch now retains a fixed stage/allowlisted reason without
 printing SDK messages, tokens or SDP. Unexpected post-join disconnect handling is
 unchanged. A focused regression verifies that event ordering and secret redaction.
+
+The owner subsequently verified Edge regular and InPrivate both joined with one
+remote participant. Before storage consent, the 30-minute launcher deadline
+removed the disposable backend/database at approximately 16:13 Asia/Dhaka.
+Vite recorded consent-prepare ECONNREFUSED at 16:13:41 and candidate status
+ECONNREFUSED at 16:13:46. The generic candidate "ended or revoked" message is not
+proof of explicit revocation; any failed status check triggers that fail-closed
+behavior. Those recorded prepare attempts did not reach the backend. Earlier
+database state is unavailable after disposable cleanup; no consent is assumed.
+Recovery uses a new disposable fixture and fresh authorization, never a consent
+reset or timestamp edit. The old candidate link is unusable.

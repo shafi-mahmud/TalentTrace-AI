@@ -7,6 +7,7 @@ import argparse
 import asyncio
 from datetime import datetime,timedelta,timezone
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -15,6 +16,12 @@ from uuid import uuid4
 
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'backend'))
+
+
+def valid_lifetime(runtime_seconds,interview_minutes):
+    return (type(runtime_seconds) is int and 60<=runtime_seconds<=7200
+        and type(interview_minutes) is int and 30<=interview_minutes<=180
+        and runtime_seconds<=interview_minutes*60)
 
 
 async def serve(args):
@@ -73,10 +80,11 @@ async def serve(args):
             scheduled=await client.post(f'/api/v1/jobs/{f.job}/interviews',json={
                 'batch_id':str(batch),'upload_id':str(score.upload_id),'criteria_revision':2,
                 'selection_confirmed':True,'scheduled_at':(datetime.now(timezone.utc)+timedelta(minutes=1)).isoformat(),
-                'timezone':'Asia/Dhaka','duration_minutes':30})
+                'timezone':'Asia/Dhaka','duration_minutes':args.interview_duration_minutes})
             if scheduled.status_code!=201:raise RuntimeError('Normal scheduling refused synthetic fixture')
             interview=scheduled.json()['id']
-            invitation=await client.post(f'/api/v1/jobs/{f.job}/interviews/{interview}/invitation',json={'expires_in_hours':1})
+            invitation=await client.post(f'/api/v1/jobs/{f.job}/interviews/{interview}/invitation',
+                json={'expires_in_hours':math.ceil(args.interview_duration_minutes/60)+1})
             if invitation.status_code!=200:raise RuntimeError('Invitation creation failed')
         private=ROOT/'data/milestone3';private.mkdir(parents=True,exist_ok=True)
         (private/'LOGIN.txt').write_text(email+'\n'+password+'\n')
@@ -86,6 +94,8 @@ async def serve(args):
         async def deadline():await asyncio.sleep(args.max_runtime_seconds);server.should_exit=True
         timer=asyncio.create_task(deadline())
         print('Live disposable rehearsal ready on 8022; private LOGIN.txt and LIVE-TARGETS.json are in ignored data/milestone3. No transcript or inference seeded.',flush=True)
+        print('Automatic shutdown: '+(datetime.now(timezone.utc)+timedelta(seconds=args.max_runtime_seconds)).isoformat()+
+            '; disposable data is removed at shutdown.',flush=True)
         try:await server.serve()
         finally:timer.cancel()
     finally:
@@ -100,8 +110,9 @@ if __name__=='__main__':
     parser.add_argument('--whisper-model',required=True)
     parser.add_argument('--confirm-free-tier-synthetic',action='store_true')
     parser.add_argument('--max-runtime-seconds',type=int,default=1800)
+    parser.add_argument('--interview-duration-minutes',type=int,default=30)
     args=parser.parse_args()
-    if not args.confirm_free_tier_synthetic or Path.cwd()!=ROOT/'backend' or not 60<=args.max_runtime_seconds<=1800:
+    if not args.confirm_free_tier_synthetic or Path.cwd()!=ROOT/'backend' or not valid_lifetime(args.max_runtime_seconds,args.interview_duration_minutes):
         parser.error('Explicit synthetic confirmation, backend working directory and bounded lifetime required')
     os.environ['TRANSCRIPT_PG_TEST']='1'
     try:asyncio.run(serve(args))
