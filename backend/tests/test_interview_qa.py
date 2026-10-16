@@ -56,3 +56,19 @@ def test_stacked_questions_do_not_claim_certain_answer_association():
     data=dialogue([('recruiter','What is Python?'),('recruiter','How are tuples different?'),('candidate','They are immutable.')])
     pairs=pair_transcript(data)
     assert pairs[0].status=='unanswered' and pairs[1].status=='uncertain'
+
+
+def test_connection_check_not_assessed_as_technical_competence():
+    data=dialogue([('recruiter','Can you hear me?'),('candidate','Yes.'),
+        ('recruiter','Explain Python lists.'),('candidate','They are mutable.')])
+    pairs=pair_transcript(data)
+    assert len(pairs)==1 and pairs[0].question=='Explain Python lists.'
+    assert pairs[0].answer=='They are mutable.'
+
+
+def test_connection_check_interrupts_pairing_without_losing_source():
+    data=dialogue([('recruiter','Explain Python lists.'),('recruiter','Can you hear me now?'),
+        ('candidate','Yes.'),('recruiter','How does audio buffering work?'),('candidate','It queues samples.')])
+    pairs=pair_transcript(data)
+    assert pairs[0].status=='uncertain' and pairs[0].answer==''
+    assert pairs[1].answer=='It queues samples.'

@@ -27,6 +27,11 @@ def is_question(text):
         text.strip(),re.I))
 
 
+def is_connection_check(text):
+    # Exact administrative phrases only; technical questions about audio remain.
+    return bool(re.fullmatch(r'(can|could) you (hear|see) me(?: (?:clearly|now|okay|ok))?[?.!]*',text.strip(),re.I))
+
+
 def pair_transcript(source: EvaluationInput) -> tuple[QAPair, ...]:
     pairs, question, answers, warnings = [], None, [], []
     def flush():
@@ -41,7 +46,11 @@ def pair_transcript(source: EvaluationInput) -> tuple[QAPair, ...]:
     for turn in source.turns:
         if question is not None and turn.session_id != question.session_id:
             warnings.append('capture_boundary_no_association');flush();question=None;answers=[];warnings=[]
-        if turn.role=='recruiter' and is_question(turn.text):
+        if turn.role=='recruiter' and is_connection_check(turn.text):
+            if question is not None:
+                warnings.append('connection_check_boundary_requires_review');flush()
+            question=None;answers=[];warnings=[]
+        elif turn.role=='recruiter' and is_question(turn.text):
             pending_without_answer=question is not None and not answers
             flush();question=turn;answers=[];warnings=[]
             if pending_without_answer:warnings.append('preceding_unanswered_question_requires_review')
