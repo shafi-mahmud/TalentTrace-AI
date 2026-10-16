@@ -24,6 +24,16 @@ test('incomplete and failed operations cannot masquerade as model results',()=>{
   const v={operation_id:id,status:'failed',error:'processing_failed',persistence:'ephemeral_single_worker',result:null};
   assert.ok(isAnalysisOperation(v));assert.equal(isAnalysisOperation({...v,result:{mock:'fabricated'}}),false);
   assert.equal(isAnalysisOperation({...v,status:'completed',result:{provider:'mock'}}),false);
+  assert.equal(isAnalysisOperation({...v,persistence:'postgresql_privacy_bound'}),false);
+  assert.equal(isAnalysisOperation({...v,persistence:'postgresql_privacy_bound',attempt:1}),true);
+});
+
+test('durable retry is explicit and carries the failed attempt fence',async()=>{
+  const calls:any[]=[];
+  globalThis.fetch=async(url:any,options:any)=>{calls.push(options);return Response.json({operation_id:id,status:'running',error:null,persistence:'postgresql_privacy_bound',attempt:2,result:null});};
+  await startAnalysis(id,id,2,id,1);
+  assert.deepEqual(JSON.parse(calls[0].body),{operation_id:id,retry_failed:true,expected_attempt:1});
+  assert.equal(calls.length,1);
 });
 test('UI has no automatic model launch and labels evidence, interpretation and ephemeral state',()=>{
   const text=readFileSync(new URL('../src/components/InterviewAnalysis.tsx',import.meta.url),'utf8');

@@ -1,7 +1,7 @@
 """Text-only retention/deletion. No audio, content logging or external providers."""
 import secrets
 from datetime import timedelta
-from sqlalchemy import select, delete, func, or_, DateTime
+from sqlalchemy import select, delete, func, or_, DateTime, text
 from fastapi import HTTPException
 from app.core.auth import current_recruiter, protect_mutation, token_hash
 from app.api.routers.interview_access import candidate_session
@@ -124,6 +124,14 @@ class TranscriptPrivacyService:
                 if row.transcript_storage_revoked_at is None:
                     raise TranscriptError('deletion_not_authorized')
                 captures = select(Capture.id).where(Capture.interview_id == interview_id)
+                # Cleanup also works when analysis serving is disabled. Legacy 0013
+                # installations have no derived table; never assume a feature flag
+                # means previously saved sensitive text no longer needs deletion.
+                if await db.scalar(text("SELECT to_regclass('interview_analyses')")):
+                    from app.db.models.interview_analysis import InterviewAnalysis
+                    await db.execute(delete(InterviewAnalysis).where(InterviewAnalysis.interview_id==interview_id))
+                    if await db.scalar(select(func.count()).select_from(InterviewAnalysis).where(InterviewAnalysis.interview_id==interview_id)):
+                        raise TranscriptError('deletion_unverified')
                 await db.execute(delete(Turn).where(Turn.session_id.in_(captures)))
                 await db.execute(delete(Capture).where(Capture.interview_id == interview_id))
                 remaining = await db.scalar(select(func.count()).select_from(Capture).where(Capture.interview_id == interview_id))

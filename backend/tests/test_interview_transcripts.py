@@ -85,6 +85,9 @@ def pg():
         migration('0012_transcript_privacy_guard:0013_transcript_lifecycle')
         migration('0013_transcript_lifecycle:0012_transcript_privacy_guard',down=True)
         migration('0012_transcript_privacy_guard:0013_transcript_lifecycle')
+        migration('0013_transcript_lifecycle:0014_interview_analysis')
+        migration('0014_interview_analysis:0013_transcript_lifecycle',down=True)
+        migration('0013_transcript_lifecycle:0014_interview_analysis')
         yield URL.create('postgresql+asyncpg',username='transcript_test',password=password,
             host='127.0.0.1',port=54402,database='transcript_test')
     finally:
@@ -529,7 +532,8 @@ def test_privacy_migration_has_one_linear_head():
     from alembic.script import ScriptDirectory
     cfg=Config(str(Path(__file__).resolve().parents[1]/'alembic.ini'))
     scripts=ScriptDirectory.from_config(cfg)
-    assert scripts.get_heads()==['0013_transcript_lifecycle']
+    assert scripts.get_heads()==['0014_interview_analysis']
+    assert scripts.get_revision('0014_interview_analysis').down_revision=='0013_transcript_lifecycle'
     assert scripts.get_revision('0012_transcript_privacy_guard').down_revision=='0011_application_views'
     assert scripts.get_revision('0011_application_views').down_revision=='0010_interview_transcripts'
 

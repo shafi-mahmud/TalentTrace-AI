@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     interview_evaluation_enabled: bool = False
     interview_evaluation_synthetic_job_ids: list[UUID] = Field(default_factory=list)
     livekit_url: SecretStr | None = None
+    livekit_local_development_enabled: bool = False
+    technical_reference_model_path: Path | None = None
+    interview_evaluation_durable_enabled: bool = False
     livekit_api_key: SecretStr | None = None
     livekit_api_secret: SecretStr | None = None
     livekit_synthetic_demo_enabled: bool = False
