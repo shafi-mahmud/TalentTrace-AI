@@ -21,6 +21,10 @@ from test_interview_transcripts import pg,run,fixture
 async def seeded(f):
     await completed(f)
     async with f.factory.begin() as db:
+        from app.db.models.recruiter import JobProfile
+        job=await db.get(JobProfile,f.job)
+        job.job_title=job.confirmed_snapshot['job_title']
+        job.suggestions={'job_title':job.job_title,'criteria':job.confirmed_snapshot['criteria']}
         turns=(await db.scalars(select(Turn).where(Turn.session_id==f.capture).order_by(Turn.sequence))).all()
         turns[0].text='In Python, are lists mutable?'
         turns[1].text='Python lists are immutable.'
@@ -39,10 +43,15 @@ def manager(f,provider=None):
 def test_pg_actual_api_graph_results_idempotency_and_deletion_fence(pg,monkeypatch):
     async def scenario(f):
         await seeded(f);m=manager(f)
+        from app.core.auth import database_session
+        async def sessions():
+            async with f.factory() as db:yield db
+        monkeypatch.setitem(app.dependency_overrides,database_session,sessions)
         monkeypatch.setattr(api,'available',lambda:True);monkeypatch.setattr(api,'manager',lambda:m)
         path=f'/api/v1/jobs/{f.job}/interviews/{f.interview}/analysis';op=uuid4()
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
             try:
+                assert (await client.get('/api/v1/jobs',headers=headers(f))).status_code==200
                 assert (await client.post(path,json={'operation_id':str(op)})).status_code in {403,422}
                 response=await client.post(path,json={'operation_id':str(op)},headers=headers(f))
                 assert response.status_code==202 and response.headers['cache-control']=='no-store'

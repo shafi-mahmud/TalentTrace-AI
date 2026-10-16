@@ -38,7 +38,10 @@ export default function InterviewAnalysis({jobId,interviewId,revision}:{jobId:st
           {d.evidence.map((q,i)=><blockquote key={i}>Transcript evidence: “{q.quote}” <small>turn {q.turn_id}</small></blockquote>)}</div>)}
         {a?.technical_citations.map((r,i)=><p key={i}>Technical reference {r.reference_id}: “{r.quote}”</p>)}
         <p>Suggested follow-up: {a?.follow_up}</p></article>;})}
-      <h3>Confirmed requirement coverage</h3>{result.requirements.map(r=><div key={r.criterion_id}><strong>{r.description}: {r.coverage.replaceAll('_',' ')}</strong><p>{r.explanation}</p><p>{r.follow_up}</p></div>)}
+      <h3>Confirmed requirement coverage</h3>{result.requirements.map(r=><div key={r.criterion_id}><strong>{r.description}: {r.coverage.replaceAll('_',' ')}</strong><p>{r.explanation}</p>
+        {result.assessment.answers.filter(a=>r.qa_ids.includes(a.qa_id)).map(a=><div key={a.qa_id}><p>Linked answer assessment — no requirement-level pass/fail inferred.</p>
+          {a.dimensions.map(d=><p key={d.dimension}>{d.dimension}: {d.status} — {d.justification}</p>)}</div>)}
+        {!r.qa_ids.length&&<p>No associated answer assessment; this is an evidence gap, not lack of skill.</p>}<p>{r.follow_up}</p></div>)}
       <h3>Evidence-linked strengths</h3>{result.strengths.length?result.strengths.map((s,i)=><p key={i}>{s.dimension}: {s.interpretation} (Q&A {s.qa_id})</p>):<p>No supported strengths established.</p>}
       <h3>Gaps and uncertainty</h3>{result.gaps.map(g=><p key={g.criterion_id}>{g.criterion_id}: {g.coverage} — {g.follow_up}</p>)}
       {!!result.unpaired_turn_ids.length&&<p>{result.unpaired_turn_ids.length} source turns were not confidently paired; review the source transcript.</p>}

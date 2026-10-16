@@ -81,3 +81,25 @@ def test_groq_adapter_strict_output_and_no_network_retry():
             return N(choices=[N(message=N(content=assessment(pairs).model_dump_json()))])
     result=asyncio.run(GroqInterviewAssessment('synthetic-test-secret','configured-model',Client).assess(source,pairs,(),()))
     assert result.answers and len(calls)==1 and calls[0]['temperature']==0
+
+
+@pytest.mark.parametrize('failure',['invalid_json','timeout','rate_limit'])
+def test_groq_failures_are_sanitized_and_never_automatically_retried(failure):
+    import httpx
+    from groq import APITimeoutError,RateLimitError
+    from types import SimpleNamespace as N
+    from app.integrations.llm.interview_evaluation import GroqInterviewAssessment
+    source=dialogue([('recruiter','What is Python?'),('candidate','A language.')]);calls=[]
+    class Client:
+        def __init__(self,**kwargs):self.chat=N(completions=self)
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def create(self,**kwargs):
+            calls.append(1)
+            request=httpx.Request('POST','https://synthetic.invalid')
+            if failure=='timeout':raise APITimeoutError(request=request)
+            if failure=='rate_limit':raise RateLimitError('private provider text',response=httpx.Response(429,request=request),body=None)
+            return N(choices=[N(message=N(content='private invalid provider output'))])
+    with pytest.raises(AssessmentError) as error:
+        asyncio.run(GroqInterviewAssessment('synthetic-secret','configured',Client).assess(source,pair_transcript(source),(),()))
+    assert 'private' not in str(error.value) and len(calls)==1

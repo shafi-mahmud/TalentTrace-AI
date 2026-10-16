@@ -87,7 +87,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     finally {if(current===generation.current)setBusy(false);}
   }
   return <main className="app-shell"><section className="card" aria-label="Synthetic interview proof">
-    <h1>{candidate?"Candidate interview":"Recruiter interview"}</h1><p>Synthetic development testing only. No recording or saved transcript.</p>
+    <h1>{candidate?"Candidate interview":"Recruiter interview"}</h1><p>Synthetic development testing only. No audio/video recording. Optional text storage has separate consent controls below.</p>
     {!candidate && <section aria-label="Candidate invitation"><h2>Candidate invitation</h2><p>One-use link. Treat it as a secret. Join window: 10 minutes before until 15 minutes after the interview.</p>
       <button disabled={inviteBusy} onClick={()=>void createInvite()}>Generate replacement invitation</button>
       <button disabled={inviteBusy} onClick={()=>void revoke()}>Revoke candidate access</button>

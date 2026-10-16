@@ -1,5 +1,10 @@
 # F5: authorized finalized interview input
 
+The later isolated Milestone 3 branch adds Q&A, mapping, a real LangGraph/Groq
+assessment and recruiter UI. See [Milestone 3 interview analysis](milestone3_interview_analysis.md)
+for implemented behavior and explicit synthetic-only/ephemeral limitations.
+The following describes the original deterministic input increment.
+
 ## Evidence and requirements
 
 Inspected on 16 October 2026. The local official source is

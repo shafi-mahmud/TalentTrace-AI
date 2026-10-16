@@ -42,7 +42,9 @@ def pair_transcript(source: EvaluationInput) -> tuple[QAPair, ...]:
         if question is not None and turn.session_id != question.session_id:
             warnings.append('capture_boundary_no_association');flush();question=None;answers=[];warnings=[]
         if turn.role=='recruiter' and is_question(turn.text):
+            pending_without_answer=question is not None and not answers
             flush();question=turn;answers=[];warnings=[]
+            if pending_without_answer:warnings.append('preceding_unanswered_question_requires_review')
             if turn.text.count('?')>1:warnings.append('multipart_question_requires_review')
         elif question is not None and turn.role=='candidate':
             if is_question(turn.text):

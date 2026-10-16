@@ -44,3 +44,15 @@ def test_hallucinated_or_wrong_role_references_rejected(change):
 def test_nonquestion_dialogue_is_not_invented_question():
     data=dialogue([('recruiter','Welcome to this interview.'),('candidate','Thank you.')])
     assert pair_transcript(data)==()
+
+
+def test_duplicate_reference_within_one_pair_is_rejected():
+    data=dialogue([('recruiter','What is Python?'),('candidate','A language.')]);pair=pair_transcript(data)[0]
+    with pytest.raises(EvaluationInputError,match='qa_duplicate_identity'):
+        validate_pairs(data,(pair.model_copy(update={'answer_turns':pair.answer_turns*2,'answer':pair.answer+'\n'+pair.answer}),))
+
+
+def test_stacked_questions_do_not_claim_certain_answer_association():
+    data=dialogue([('recruiter','What is Python?'),('recruiter','How are tuples different?'),('candidate','They are immutable.')])
+    pairs=pair_transcript(data)
+    assert pairs[0].status=='unanswered' and pairs[1].status=='uncertain'

@@ -27,18 +27,26 @@ export function isAnalysisOperation(v:any):v is AnalysisOperation{
   if(!uuid.test(v?.operation_id??'')||!['running','completed','failed','unavailable'].includes(v.status)||v.persistence!=='ephemeral_single_worker')return false;
   if(v.status!=='completed')return v.result===null;
   const r=v.result;
+  const text=(s:unknown,max=2000)=>typeof s==='string'&&s.length<=max;
+  const ids=(a:any)=>Array.isArray(a)&&a.length<=1500&&a.every((id:any)=>typeof id==='string'&&uuid.test(id));
+  const quotes=(a:any)=>Array.isArray(a)&&a.length<=8&&a.every((q:any)=>uuid.test(q?.turn_id??'')&&text(q.quote,1000));
   return !!r&&r.advisory===true&&r.scope==='accepted_audio_only'&&r.asr_review==='unverified'
     &&typeof r.provider==='string'&&typeof r.model==='string'&&typeof r.warning==='string'
     &&r.rubric_version==='interview-evidence-v1'&&Array.isArray(r.pairs)&&r.pairs.length<=50
     &&r.pairs.every((p:any)=>uuid.test(p.id)&&typeof p.question==='string'&&typeof p.answer==='string'
-      &&Array.isArray(p.question_turns)&&Array.isArray(p.answer_turns)&&Array.isArray(p.warnings))
+      &&ids(p.question_turns)&&ids(p.answer_turns)&&Array.isArray(p.warnings)&&p.warnings.every((w:any)=>text(w))
+      &&['answered','unanswered','uncertain'].includes(p.status)&&Number.isInteger(p.start_ms)&&Number.isInteger(p.end_ms)&&p.end_ms>=p.start_ms)
     &&Array.isArray(r.turns)&&r.turns.length<=1500&&r.turns.every((t:any)=>uuid.test(t.id)&&['candidate','recruiter'].includes(t.role)&&typeof t.text==='string')
-    &&Array.isArray(r.requirements)&&r.requirements.length<=50&&Array.isArray(r.technical_references)
-    &&Array.isArray(r.strengths)&&Array.isArray(r.gaps)&&Array.isArray(r.unpaired_turn_ids)
+    &&Array.isArray(r.requirements)&&r.requirements.length<=50&&r.requirements.every((m:any)=>text(m?.criterion_id,64)&&text(m.description,500)
+      &&['partial','not_evidenced','uncertain'].includes(m.coverage)&&text(m.explanation)&&text(m.follow_up)&&ids(m.qa_ids)&&ids(m.turn_ids))
+    &&Array.isArray(r.technical_references)&&r.technical_references.length<=10&&r.technical_references.every((t:any)=>text(t?.id,100)&&text(t.text)&&text(t.topic)&&t.provenance==='synthetic_demo')
+    &&Array.isArray(r.strengths)&&r.strengths.length<=200&&r.strengths.every((s:any)=>uuid.test(s?.qa_id??'')&&text(s.dimension)&&text(s.interpretation)&&quotes(s.evidence))
+    &&Array.isArray(r.gaps)&&r.gaps.length<=50&&r.gaps.every((g:any)=>text(g?.criterion_id)&&text(g.coverage)&&text(g.follow_up))&&ids(r.unpaired_turn_ids)
     &&Array.isArray(r.assessment?.answers)&&r.assessment.answers.length===r.pairs.length
     &&r.assessment.answers.every((a:any)=>uuid.test(a.qa_id)&&Array.isArray(a.dimensions)&&a.dimensions.length===4
+      &&text(a.follow_up)&&Array.isArray(a.technical_citations)&&a.technical_citations.length<=5&&a.technical_citations.every((c:any)=>text(c?.reference_id)&&text(c.quote,1000))
       &&a.dimensions.every((d:any)=>['relevance','technical_accuracy','completeness','articulation'].includes(d.dimension)
-        &&['supported','partial','concern','uncertain','not_assessed'].includes(d.status)&&typeof d.justification==='string'&&Array.isArray(d.evidence)));
+        &&['supported','partial','concern','uncertain','not_assessed'].includes(d.status)&&text(d.justification,800)&&quotes(d.evidence)));
 }
 export async function startAnalysis(job:string,interview:string,revision:number,id:string):Promise<AnalysisOperation>{
   if(!uuid.test(id)||!Number.isInteger(revision)||revision<1)throw Error('Invalid analysis context.');
