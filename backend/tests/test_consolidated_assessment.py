@@ -69,7 +69,7 @@ async def home_fixture(monkeypatch):
     if os.environ.get('F6_HOME_PG_TEST')!='1':pytest.skip('Opt in to rollback-only home PostgreSQL tests')
     from sqlalchemy.engine import make_url
     url=make_url(settings.database_url.get_secret_value())
-    assert (url.host,url.port,url.database)==('127.0.0.1',5432,'talenttrace_home'),'Explicit synthetic home DB required'
+    assert url.host=='127.0.0.1' and url.port==5432 and (url.database=='talenttrace_home' or url.database.startswith('f6_test_')),'Explicit synthetic home DB required'
     engine=create_async_engine(url,echo=False,hide_parameters=True)
     f=await asyncio.to_thread(artifacts);owner,foreign=uuid4(),uuid4();cookie,other=secrets.token_urlsafe(32),secrets.token_urlsafe(32)
     now=f.captures[0].started_at

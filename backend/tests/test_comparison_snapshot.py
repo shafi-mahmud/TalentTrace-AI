@@ -29,7 +29,7 @@ from test_candidate_comparison import path
 async def committed_fixture(monkeypatch):
     if os.environ.get('F6_HOME_PG_TEST')!='1':pytest.skip('Opt in to isolated synthetic home PostgreSQL tests')
     url=make_url(settings.database_url.get_secret_value())
-    assert (url.host,url.port,url.database)==('127.0.0.1',5432,'talenttrace_home')
+    assert url.host=='127.0.0.1' and url.port==5432 and (url.database=='talenttrace_home' or url.database.startswith('f6_test_'))
     engine=create_async_engine(url,echo=False,hide_parameters=True)
     factory=async_sessionmaker(engine,expire_on_commit=False)
     a,b=await asyncio.to_thread(artifacts),await asyncio.to_thread(artifacts)

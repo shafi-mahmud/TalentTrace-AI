@@ -31,6 +31,8 @@ PUBLIC_VALIDATION_MESSAGES: Final[dict[str, str]] = {
 
 @asynccontextmanager
 async def lifespan(app):
+    from app.services.confirmation_runtime import maintenance_loop as confirmation_maintenance
+    confirmations=asyncio.create_task(confirmation_maintenance()) if settings.database_url else None
     task = asyncio.create_task(maintenance_loop()) if settings.transcript_storage_enabled else None
     from app.api.routers.interview_analysis import available,manager
     analysis=manager() if available() else None
@@ -38,6 +40,9 @@ async def lifespan(app):
     try:
         yield
     finally:
+        if confirmations:
+            confirmations.cancel()
+            await asyncio.gather(confirmations,return_exceptions=True)
         if analysis_cleanup:
             analysis_cleanup.cancel()
             await asyncio.gather(analysis_cleanup,return_exceptions=True)

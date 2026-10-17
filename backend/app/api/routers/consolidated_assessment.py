@@ -6,8 +6,24 @@ from app.core.auth import current_recruiter, database_session
 from app.core.config import settings
 from app.schemas.consolidated_assessment import ConsolidatedAssessment, CandidateComparison, ApplicationDiscovery
 from app.services.consolidated_assessment import consolidated_assessment
+from app.schemas.reviewer_confirmation import ConfirmationInput, ConfirmationView
 
 router = APIRouter(tags=['Consolidated candidate assessment'])
+
+
+@router.put('/jobs/{job_id}/batches/{batch_id}/candidates/{upload_id}/assessment/confirmation', response_model=ConfirmationView)
+async def confirmation(job_id: UUID, batch_id: UUID, upload_id: UUID, request: Request,
+                       body: ConfirmationInput, user=Depends(current_recruiter), session=Depends(database_session)):
+    if not settings.reviewer_confirmation_enabled or settings.environment!='development':
+        raise HTTPException(503,'Reviewer confirmation is not enabled for this environment.')
+    from app.services.reviewer_confirmation import confirm
+    try:
+        view = await confirm(session,request,user,job_id,batch_id,upload_id,body,
+            storage_enabled=settings.transcript_storage_enabled)
+        await session.commit()
+        return view
+    except SQLAlchemyError:
+        raise HTTPException(503,'Confirmation outcome is uncertain. Refresh before reconciling; do not automatically retry.') from None
 
 
 async def snapshot_session(session=Depends(database_session)):

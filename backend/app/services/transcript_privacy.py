@@ -124,6 +124,11 @@ class TranscriptPrivacyService:
                 if row.transcript_storage_revoked_at is None:
                     raise TranscriptError('deletion_not_authorized')
                 captures = select(Capture.id).where(Capture.interview_id == interview_id)
+                from app.services.reviewer_confirmation import purge_interview_confirmations
+                try:
+                    await purge_interview_confirmations(db,interview_id)
+                except Exception:
+                    raise TranscriptError('deletion_unverified') from None
                 # Cleanup also works when analysis serving is disabled. Legacy 0013
                 # installations have no derived table; never assume a feature flag
                 # means previously saved sensitive text no longer needs deletion.

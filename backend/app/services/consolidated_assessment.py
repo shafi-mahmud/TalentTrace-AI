@@ -124,9 +124,14 @@ async def consolidated_assessment(db, request, owner, job_id, batch_id, upload_i
     cv = persisted_cv(job, upload_id, row=None if interview else row, interview=interview)
     evidence = (await interview_evidence(db, request, job, interview, storage_enabled=storage_enabled)
                 if interview else InterviewEvidence(state='not_scheduled'))
-    return ConsolidatedAssessment(job_id=job.id, job_title=job.job_title, job_reference=job.job_reference,
+    report = ConsolidatedAssessment(job_id=job.id, job_title=job.job_title, job_reference=job.job_reference,
         batch_id=batch_id, upload_id=upload_id, criteria_revision=revision,
         cv_source=origin, cv=cv, confirmed_requirements=report_requirements(job, revision, cv), interview=evidence)
+    from app.core.config import settings
+    from app.services.reviewer_confirmation import project_confirmation
+    view = await project_confirmation(db, report, job,
+        enabled=settings.reviewer_confirmation_enabled and settings.environment=='development')
+    return report.model_copy(update={'confirmation': view})
 
 
 def report_requirements(job, revision, cv):
@@ -170,4 +175,10 @@ async def compare_assessments(db, request, owner, job_id, selections, *, storage
         if report.interview.state == 'available' and deadline is not None and utc_now() >= deadline:
             reports[index] = report.model_copy(update={'interview': InterviewEvidence(
                 state='expired', interview_id=report.interview.interview_id)})
+        if reports[index].confirmation.state=='confirmed' and (
+                reports[index].confirmation.expires_at<=utc_now() or
+                reports[index].confirmation.scope=='cv_interview' and reports[index].interview.state!='available'):
+            from app.schemas.reviewer_confirmation import ConfirmationView
+            reports[index]=reports[index].model_copy(update={'confirmation':ConfirmationView(
+                enabled=report.confirmation.enabled,state='restricted',version=report.confirmation.version)})
     return CandidateComparison(job_id=job.id, criteria_revision=job.revision, reports=tuple(reports))
