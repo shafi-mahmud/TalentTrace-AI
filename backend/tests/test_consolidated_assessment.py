@@ -162,6 +162,7 @@ def test_pg_evidence_states(monkeypatch,case):
             expected={'complete':'available','cv_only':'not_scheduled','snapshot_only':'available','tampered':'unavailable',
                 'unsupported_consent':'unavailable','rerun_replaced':'available','source_changed':'stale','failed':'unavailable'}.get(case,case)
             value=a.json();assert value['interview']['state']==expected
+            assert value['confirmed_requirements']==([] if case=='stale' else f.snapshot['criteria'])
             assert value['cv']['score']==100 and value['review_required'] is True
             if expected!='available':
                 assert value['interview']['assessment'] is None and value['interview']['turns']==[]
@@ -169,6 +170,20 @@ def test_pg_evidence_states(monkeypatch,case):
             else:assert value['interview']['assessment']['answers'][0]['dimensions'][0]['status']=='supported'
             assert not any(s.startswith(('insert ','update ','delete ')) for s in statements)
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('case',['current','historical','unconfirmed','invalid','wrong_job','wrong_category'])
+def test_requirement_names_use_only_matching_confirmed_revision(case):
+    from copy import deepcopy
+    from app.services.consolidated_assessment import report_requirements
+    f=artifacts();job=N(revision=2,job_reference=f.snapshot['job_reference'],confirmed_snapshot=deepcopy(f.snapshot))
+    revision=1 if case=='historical' else 2
+    if case=='unconfirmed':job.confirmed_snapshot=None
+    if case=='invalid':job.confirmed_snapshot={'criteria':'not a snapshot'}
+    if case=='wrong_job':job.job_reference='TT-JOB-FFFFFFFFFFFFFFFF'
+    if case=='wrong_category':job.confirmed_snapshot['criteria'][0]['category']='education'
+    result=report_requirements(job,revision,f.score)
+    assert [r.model_dump() for r in result]==(f.snapshot['criteria'] if case=='current' else [])
 
 
 def test_pg_auth_identity_invalid_snapshot(monkeypatch):

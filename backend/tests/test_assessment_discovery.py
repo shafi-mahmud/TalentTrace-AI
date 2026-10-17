@@ -65,6 +65,11 @@ def test_pg_discovery_states_and_read_only(monkeypatch,case):
             if case=='withdrawn':
                 r=await f.client.get(f.path,headers=f.headers)
                 assert r.json()['interview']['state']=='withdrawn' and 'ordered collection' not in r.text
+            if case in {'unscored','historical_snapshot','snapshot_only'}:
+                r=await f.client.get(f.path,headers=f.headers)
+                assert r.status_code==200
+                assert r.json()['confirmed_requirements']==([] if case=='historical_snapshot' else f.snapshot['criteria'])
+                if case=='unscored':assert r.json()['cv']['score'] is None and r.json()['cv']['dimensions']==[]
     asyncio.run(scenario())
 
 

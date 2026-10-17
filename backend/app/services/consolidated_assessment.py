@@ -126,7 +126,27 @@ async def consolidated_assessment(db, request, owner, job_id, batch_id, upload_i
                 if interview else InterviewEvidence(state='not_scheduled'))
     return ConsolidatedAssessment(job_id=job.id, job_title=job.job_title, job_reference=job.job_reference,
         batch_id=batch_id, upload_id=upload_id, criteria_revision=revision,
-        cv_source=origin, cv=cv, interview=evidence)
+        cv_source=origin, cv=cv, confirmed_requirements=report_requirements(job, revision, cv), interview=evidence)
+
+
+def report_requirements(job, revision, cv):
+    """Read names only from the exact confirmed revision; no historical guessing."""
+    from app.schemas.batch_screening import ReviewedJobSnapshot
+    if revision != job.revision or job.confirmed_snapshot is None:
+        return ()
+    try:
+        snapshot = ReviewedJobSnapshot.model_validate(job.confirmed_snapshot)
+        if snapshot.job_reference != job.job_reference:
+            return ()
+        by_id = {c.criterion_id: c for c in snapshot.criteria}
+        for dimension in cv.dimensions:
+            for match in dimension.matches:
+                criterion = by_id.get(match.criterion_id)
+                if criterion is None or criterion.category != dimension.category:
+                    return ()
+        return tuple(snapshot.criteria)
+    except (ValueError, TypeError, AttributeError, KeyError):
+        return ()
 
 
 async def compare_assessments(db, request, owner, job_id, selections, *, storage_enabled):

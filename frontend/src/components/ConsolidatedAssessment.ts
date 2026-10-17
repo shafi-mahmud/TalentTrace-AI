@@ -4,6 +4,7 @@ import {createElement as h,useEffect,useId,useLayoutEffect,useRef,useState} from
 import {fetchReport} from '../api/consolidatedAssessment.ts';
 import type {ConsolidatedReport,EvidenceState} from '../api/consolidatedAssessment';
 import {ScoreDetails} from './scorePresentation.ts';
+import SuitabilityEvidence from './SuitabilityEvidence.ts';
 
 const messages:Record<EvidenceState,string>={
  available:'Saved interview assessment available.',not_scheduled:'No interview is scheduled for this application.',
@@ -22,15 +23,17 @@ export function AssessmentView({report:r,preparedAt}:{report:ConsolidatedReport;
  const quote=(q:{turn_id:string;quote:string},n:number)=>h('li',{key:n},sourceLink(q.turn_id,`“${q.quote}” — source turn ${q.turn_id}`));
  return h('section',{className:'card consolidated-assessment','aria-label':'Consolidated candidate assessment'},
   h('header',{className:'assessment-heading'},h('p',{className:'assessment-brand'},'TalentTrace AI · Confidential recruiter report'),h('h3',null,'Consolidated candidate assessment'),h('p',null,r.job_title)),
-  h('p',null,`Job ${r.job_reference} · ${r.job_id}`),
+  h('p',null,`Job ${r.job_reference} · criteria revision ${r.criteria_revision}`),
   preparedAt&&h('div',{className:'assessment-print-context'},h('p',null,`Print view prepared (UTC): ${preparedAt}`),h('p',null,'Fresh authorized retrieval of saved evidence. This preparation did not rerun screening or interview evaluation.'),h('p',null,'Confidential: printed and PDF copies are outside application retention and cannot be revoked. Store securely and dispose according to your policy.')),
-  h('p',null,`Application ${r.upload_id} · batch ${r.batch_id} · criteria revision ${r.criteria_revision}`),
+  h('details',null,h('summary',null,'Application audit identifiers'),h('p',null,`Job ${r.job_id} · application ${r.upload_id} · batch ${r.batch_id} · criteria revision ${r.criteria_revision}`)),
   h('p',{className:'helper-text'},r.notice),
+  h(SuitabilityEvidence,{report:r,link:sourceLink}),
   h('h4',null,'CV screening and F2'),
   h('p',null,`${r.cv.screening_decision??'No screening decision'} · ${r.cv_source==='interview_selection_snapshot'?'Saved at interview selection; later screening reruns are not substituted.':'Current saved screening result.'}`),
   h(ScoreDetails,{score:r.cv}),
-  ...r.cv.dimensions.flatMap(d=>d.matches.map(m=>h('details',{key:m.criterion_id},
-   h('summary',null,`${m.criterion_id} · ${m.match_status==='supported'?'CV evidence strength': 'Needs verification'} · ${m.match_status}`),
+  ...r.cv.dimensions.flatMap(d=>d.matches.map(m=>h('details',{key:m.criterion_id,id:`${prefix}-cv-${m.criterion_id}`},
+   h('summary',null,`${r.confirmed_requirements.find(c=>c.criterion_id===m.criterion_id)?.description??'Saved CV requirement (description unavailable)'} · ${m.match_status==='supported'?'CV evidence strength': 'Needs verification'} · ${m.match_status}`),
+   h('p',null,`Requirement audit ID: ${m.criterion_id}`),
    h('p',null,m.explanation),...m.evidence.map((e,n)=>h('p',{key:n},`${e.value} — ${e.source.kind} ${e.source.number} (${e.source.method})`))))),
   r.cv.dimensions.length===0&&h('p',null,'No persisted F2 dimension evidence is available; no breakdown is invented.'),
   h('h4',null,'Interview evidence and F5'),h('p',{role:'status'},messages[r.interview.state]),
@@ -42,9 +45,9 @@ export function AssessmentView({report:r,preparedAt}:{report:ConsolidatedReport;
    ...r.interview.requirements.map(m=>h('article',{key:m.criterion_id},h('h5',null,`${m.description} · ${m.coverage}`),
     h('p',null,m.explanation),h('p',null,m.follow_up),...m.turn_ids.map(id=>sourceLink(id,`Source ${id} `)))),
    h('h4',null,'Rubric, evidence-linked strengths and verification areas'),
-   ...r.interview.assessment!.answers.map(a=>h('article',{key:a.qa_id},
+   ...r.interview.assessment!.answers.map(a=>h('article',{key:a.qa_id,id:`${prefix}-qa-${a.qa_id}`},
     h('h5',null,r.interview.pairs.find(p=>p.id===a.qa_id)?.question??'Saved question'),
-    ...a.dimensions.map(d=>h('div',{key:d.dimension},h('strong',null,`${d.dimension} · ${d.status} · ${d.status==='supported'?'Evidence-linked strength':'Further verification / review'}`),
+    ...a.dimensions.map(d=>h('div',{key:d.dimension},h('strong',null,`${d.dimension.replaceAll('_',' ')} (${d.dimension}) · ${d.status} · ${d.status==='supported'?'Evidence-linked strength':d.status==='concern'?'Documented concern':'Further verification / review'}`),
      h('p',null,d.justification),h('ul',null,...d.evidence.map(quote)))),
     h('p',null,a.follow_up),...a.technical_citations.map((c,n)=>h('p',{key:n},`${c.reference_id}: ${c.quote}`)))),
    h('details',null,h('summary',null,'Saved technical references'),...r.interview.references.map(ref=>h('article',{key:ref.id},h('strong',null,ref.id),h('p',null,ref.text),

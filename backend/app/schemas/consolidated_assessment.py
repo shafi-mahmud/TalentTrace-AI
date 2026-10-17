@@ -4,6 +4,7 @@ from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 from app.schemas.candidate_score import CandidateScore
+from app.schemas.screening import ScreeningCriterion
 from app.services.interview_qa import QAPair
 from app.services.interview_mapping import RequirementMapping, TechnicalReference
 from app.agents.evaluation.workflow import ModelAssessment
@@ -39,6 +40,9 @@ class ConsolidatedAssessment(Contract):
     criteria_revision: int
     cv_source: Literal['current_saved_score', 'interview_selection_snapshot']
     cv: CandidateScore
+    # Empty when the original confirmed revision cannot be established. Never
+    # relabel a historical selection using today's mutable job descriptions.
+    confirmed_requirements: tuple[ScreeningCriterion, ...] = ()
     interview: InterviewEvidence
     review_required: Literal[True] = True
     notice: str = ('Recruiter review required. F2 measures demonstrated CV requirement coverage; '

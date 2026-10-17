@@ -522,6 +522,14 @@ body { background: var(--page); color: var(--ink); }
 .consolidated-assessment h4 { border-bottom: 1px solid #ccd6d1; padding-bottom: 6px; margin-top: 24px; }
 .assessment-print-context { border: 1px solid #ccd6d1; padding: 10px 14px; font-size: 12px; }
 .assessment-print-root { display: none; }
+.suitability-evidence { margin-block: 20px; }
+.suitability-evidence dt { font-weight: 600; }
+.suitability-evidence dd { margin: 4px 0 12px; }
+.evidence-table-scroll { overflow-x: auto; }
+.evidence-profile-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.evidence-profile-table :is(th,td) { text-align: left; vertical-align: top; padding: 10px; border: 1px solid #ccd6d1; overflow-wrap: anywhere; }
+.evidence-profile-table :is(small,a) { display: block; margin-block: 6px; }
+.evidence-profile-table caption { text-align: left; font-weight: 600; padding-block: 8px; }
 @page { size: auto; margin: 16mm; }
 @media print {
   /* A direct-body portal prevents hidden ancestors, dashboard layout and blank gaps. */
@@ -544,6 +552,7 @@ body { background: var(--page); color: var(--ink); }
   #talenttrace-assessment-print table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   #talenttrace-assessment-print thead { display: table-header-group; }
   #talenttrace-assessment-print tr { break-inside: avoid; }
+  #talenttrace-assessment-print .evidence-profile-table tr { break-inside: auto; }
   #talenttrace-assessment-print :is(td,th) { padding: 5pt; border: 1px solid #aaa; overflow-wrap: anywhere; }
   #talenttrace-assessment-print .assessment-heading { break-inside: avoid; }
 }

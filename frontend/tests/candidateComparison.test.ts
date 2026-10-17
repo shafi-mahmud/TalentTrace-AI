@@ -11,7 +11,7 @@ const job='00000000-0000-4000-8000-000000000001',upload='00000000-0000-4000-8000
 const selections:ApplicationIdentity[]=[{job_id:job,batch_id:job,upload_id:job},{job_id:job,batch_id:job,upload_id:upload}];
 function report(id:string):ConsolidatedReport{return {
  version:'f6-increment-1',job_id:job,job_title:'Synthetic role',job_reference:'TT-JOB-0000000000000001',batch_id:job,upload_id:id,
- criteria_revision:2,cv_source:'current_saved_score',review_required:true,notice:'Recruiter review required. Missing evidence is not poor performance.',
+ confirmed_requirements:[],criteria_revision:2,cv_source:'current_saved_score',review_required:true,notice:'Recruiter review required. Missing evidence is not poor performance.',
  cv:{job_reference:'TT-JOB-0000000000000001',upload_id:id,screening_decision:'eligible',status:'not_evaluated',reason:'uncertain_evidence',
  weights:{skill:100,experience:0,education:0},score:null,dimensions:[]},
  interview:{state:'not_scheduled',interview_id:null,operation_id:null,rubric_version:null,retention_deadline:null,warning:null,

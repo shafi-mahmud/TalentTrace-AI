@@ -1,4 +1,4 @@
-# F6 consolidated candidate assessment — Increments 1–4
+# F6 consolidated candidate assessment — Increments 1–5A
 
 Implemented on `feature/f6-consolidated-report`, based on verified M3
 `2967ae9ef36748d33a5b3107d0122a70d8418979`. This is **not full F6 completion**.
@@ -672,3 +672,185 @@ persisted identities, validate their CV artifacts, and distinguish current score
 unscored decisions and selection snapshots. I cannot reconstruct requirement
 quotes that were never saved. Comparison now reads one repeatable database snapshot;
 concurrent withdrawal conflicts fail closed through the existing privacy locks.”
+
+## F6 Increment 5A — suitability evidence profile (17 October 2026)
+
+Branch `feature/f6-suitability-evidence` starts at verified, published Increment 4
+`01a277b5e1ac0620e8d633c55bfced6c16566143` in the original project directory.
+No worktree, merge, migration, inference, new dependency or persisted judgment is
+introduced. Earlier increment sections above retain their historical findings.
+
+### Requirement authority and the genuine implementation gap
+
+The owner's Increment 5A request supplies the F6 Section 5.4.1 requirements:
+combine CV screening, requirement scoring and interview analysis; make the overall
+position component-supported rather than an opaque number; summarize strengths,
+weaknesses, gaps and verification; support print/export/comparison and traceability.
+This is owner-supplied requirement text, not a newly located original BID PDF or
+trainer approval of a formula. The original PDF is still not independently verified.
+
+Existing F6 already renders F2 components, source references, authorized F5
+question findings, requirement topic coverage, follow-ups and restricted states.
+Duplicating that evidence or building another report endpoint was unnecessary.
+The genuine gap was a concise cross-source requirement index, trustworthy plain
+requirement labels for CV/unscored rows, and an explicit pending-judgment message.
+
+### Implementation and workflow
+
+Open any existing consolidated report. A **Suitability evidence profile** now states
+**Overall suitability position: pending recruiter confirmation.** It distinguishes:
+
+- CV score: the unchanged F2 weighted requirement coverage, or explicitly not scored.
+- Interview findings: existing qualitative F5 interpretations, with unverified ASR.
+- Evidence completeness: available persisted CV match and authorized Q&A counts;
+  absence is described as unavailable, not a zero performance result. Counts are
+  not coverage of all possible interview questions and are not an overall rating.
+- Overall suitability: a recruiter-confirmed judgment, not implemented here.
+
+A requirement index shows confirmed description and mandatory/preferred flag,
+original CV match status, original interview topic status and mapped question
+wording, and the existing requirement follow-up where available. Missing mappings
+are marked unassessed. Literal topic mention is never promoted to competence;
+absence of a literal match is not proof of missing skill. Generic verification
+prompts are static UI instructions, not new candidate findings. Recorded F5 status
+counts are an index into the unchanged answer-level justifications, not a score.
+Supported findings remain evidence-linked strengths; `concern` is explicitly
+labelled a documented concern. Partial/uncertain/not-assessed findings retain
+review labels. An unavailable source generates no interview findings or questions.
+
+CV links open the original CV evidence disclosure; question links reach the saved
+answer/rubric section; existing transcript links retain exact quotations and
+source timestamps. Requirement IDs sit in audit disclosures, and full application
+IDs remain accessible in an audit disclosure. Native printing already expands
+all disclosures, including these. No evidence is removed from the printed report.
+
+The additive report field `confirmed_requirements` reuses `ScreeningCriterion`.
+It comes from the validated `ReviewedJobSnapshot` only when the job reference and
+report/job revisions match and saved CV match IDs/categories belong to that
+snapshot. Otherwise it is empty. No new database query is needed: the owned job
+was already loaded under the existing lock. Unscored reports may therefore list
+confirmed requirements while explicitly withholding all nonexistent CV matches.
+Older selection snapshots keep their original F2 evidence but cannot borrow
+current names. Valid authorized F5 mappings may supply their already-validated
+requirement descriptions; no protected F5 data is used in restricted states.
+
+`SuitabilityEvidence` is a presentation component over the authorized report,
+not a second business-rule/evaluation service. `AssessmentView` includes it once,
+so report, direct-body print copy and both comparison columns use the same source
+and interpretation. The table wraps text, scrolls horizontally if needed on narrow
+screens, and permits long rows to paginate in print. The client requires bounded,
+well-shaped, uniquely identified confirmed requirements. Deploy the matching
+backend/frontend together; an old backend without this context is rejected by
+the updated client rather than guessing requirement names.
+
+### Privacy and consistency
+
+Existing job/recruiter ownership, exact application identity, consent, retention,
+withdrawal/deletion, revision, fingerprint and saved-analysis validation remain
+unchanged. Non-available interview responses still contain no derived text.
+The profile additionally gates all interview use on `state == available`; tests
+also exercise stale in-memory objects with a restricted state. There is no new
+record, browser storage, cache, download endpoint, background request or inference.
+Comparison retains request-scoped REPEATABLE READ and existing privacy locks.
+Its final expiry replacement automatically removes F5 profile material because
+the profile is derived from the final returned report, not a separately cached
+summary. Already delivered PDF/paper/browser snapshots cannot be revoked.
+
+### Executed verification
+
+```bash
+cd /home/shafi/Projects/TalentTrace-AI/backend
+F6_HOME_PG_TEST=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+ .venv/bin/python -m pytest tests/test_consolidated_assessment.py \
+ tests/test_candidate_comparison.py tests/test_assessment_discovery.py \
+ tests/test_comparison_snapshot.py -q --tb=short
+cd /home/shafi/Projects/TalentTrace-AI/frontend
+pnpm test
+pnpm build
+```
+
+- Backend: **65 passed, 0 failed/skipped**: 11 unit checks and the existing 54
+  executed PostgreSQL cases. Six new unit cases cover current/historical/unconfirmed/
+  malformed/foreign/category-mismatched requirement context. Existing database cases
+  now assert requirement-context consistency for authorized F5, CV-only, current
+  snapshots, unscored records and old snapshots. Authorization, ambiguity, consent,
+  withdrawal/deletion/expiry, SQL no-write assertions, inference traps and actual
+  two-connection comparison/withdrawal cases all passed.
+- Frontend: **224 passed, 0 failed/skipped**, including seven new profile checks:
+  concept separation, plain labels, original components, strengths/concerns,
+  unanswered requirements, all restricted states, historical context absence,
+  malformed context, working evidence targets, and screen/print/comparison parity.
+  TypeScript and production build passed. Existing LiveKit chunk warning remains.
+- An initial TypeScript check caught a string-index typing mismatch in the topic
+  label map; it was corrected before the passing checks. No production rule was
+  relaxed to pass tests.
+- PostgreSQL checks reuse the explicit synthetic home fixtures: rollback-only
+  cases leave no rows; separate-connection cases commit only random synthetic
+  records and delete their own rows afterward. Existing private records are not
+  changed. Older office-container gates and a full backend regression were not run.
+- No Groq, Whisper/CUDA, paid API, image/model download or schema migration ran.
+  Native print-dialog cancellation and full long F5 PDF pagination remain outside
+  this increment; markup parity does not prove browser pagination.
+- Authenticated browser smoke check passed against the running production routes
+  using the existing synthetic unscored application. The new profile displayed
+  pending recruiter confirmation, null-score/missing-evidence wording and the
+  unchanged print action. No new candidate fixture or analysis was saved for this
+  walkthrough. Screenshot: ignored local
+  `data/home/f6-suitability-evidence-verified.png`. The synthetic job's actual
+  confirmed description is `skill-0`; the UI preserves it rather than inventing a
+  friendlier description. Plain descriptive names are separately tested with
+  synthetic Python programming / SQL transactions criteria.
+
+### Smallest proposed 5B record — design only
+
+One versioned recruiter-confirmation record can hold:
+
+- UUID; exact job/batch/upload; owning recruiter; authenticated reviewer ID and UTC
+  confirmation time. Never accept a client-supplied reviewer identity.
+- Approved qualitative position (including insufficient basis), bounded rationale
+  and evidence references (criterion IDs, CV references, F5 Q&A/dimension IDs).
+  No numeric total or automatic hire/reject field.
+- Criteria revision and canonical criteria/weights digest; CV source kind,
+  scoring version and validated payload digest; optional F5 operation ID, transcript
+  input digest, rubric/model/corpus versions and effective retention deadline.
+  Null F5 explicitly means a CV-only scope, not a failed interview.
+- Version counter for optimistic confirmation/update; status confirmed/stale/
+  invalidated. Define the approved position vocabulary before creating a migration.
+
+Save must revalidate all dependencies under the existing job/interview privacy
+protocol and reject a changed source, foreign reference or expired authorization.
+Read must revalidate too: criteria/CV/analysis changes mark the position stale and
+require deliberate reconfirmation; no automatic recomputation or silent version
+substitution. A new confirmation records a new reviewed version, rather than
+pretending an old judgment covered changed evidence. This is a proposed contract,
+not a new write endpoint or implemented audit-history guarantee.
+
+Treat free-text rationale as potentially derived protected data even if the UI
+asks reviewers not to copy transcript quotations. When it depends on F5, use the
+same or shorter retention boundary; withdrawal fences must immediately deny the
+rationale/position/evidence links and cleanup must erase dependent rationale along
+with source-derived material. An invalidation tombstone may retain minimal
+non-content audit metadata only under an agreed policy. Keep a purely CV-based
+confirmation separate from an invalidated mixed-source one; do not silently strip
+F5 and claim the previous judgment remains valid. Hashes detect staleness; they do
+not grant access or make protected rationale anonymous. The lifecycle design and
+its privacy/concurrency tests must precede implementation.
+
+### Limitations, changed files and viva
+
+This increment is an evidence foundation, not full F6 acceptance. Recruiter
+confirmation/persistence is not implemented. Full unscored F2 matches, historical
+criterion descriptions without a retained snapshot, genuine CV-absent interviews,
+explicit F5 analysis-version selection, portable PostgreSQL fixtures and full
+native print/cancellation acceptance remain separate work. No missing evidence
+was reconstructed or silently backfilled.
+
+Changed files: backend report schema/service and report/discovery tests; frontend
+report API contract, shared `ConsolidatedAssessment` view, new `SuitabilityEvidence`
+component, print/screen CSS and report/comparison test fixtures; this document.
+
+Viva: “F2 measures CV requirement coverage. F5 supplies saved qualitative findings.
+The profile puts those authorized records beside each requirement, preserving
+source links and missing-evidence labels. The system assembles evidence; the
+recruiter makes and later confirms the overall judgment. An unavailable source
+is missing information, not poor performance.”
