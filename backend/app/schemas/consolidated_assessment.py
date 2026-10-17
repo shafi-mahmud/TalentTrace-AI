@@ -54,3 +54,25 @@ class CandidateComparison(Contract):
     review_required: Literal[True] = True
     notice: str = ('Same-job saved evidence only. Different interviews may assess different questions. '
                    'Missing evidence is not poor performance. No combined score, ranking or hiring recommendation.')
+
+
+class DiscoveredApplication(Contract):
+    job_id: UUID
+    batch_id: UUID
+    upload_id: UUID
+    kind: Literal['scored', 'unscored', 'historical_snapshot', 'unavailable']
+    label: str
+    detail: str
+    evidence_revision: int | None = None
+    recorded_revisions: tuple[int, ...] = ()
+    report_available: bool = False
+    comparison_available: bool = False
+
+
+class ApplicationDiscovery(Contract):
+    job_id: UUID
+    criteria_revision: int
+    applications: tuple[DiscoveredApplication, ...]
+    notice: str = ('Persisted score, selection snapshot and local intake-ledger records only. '
+                   'Unscreened filesystem-only uploads are not an application registry. '
+                   'Discovery does not authorize interview evidence; each report revalidates access.')

@@ -90,6 +90,11 @@ async def home_fixture(monkeypatch):
                 async def sessions():
                     async with factory() as db:yield db
                 monkeypatch.setitem(app.dependency_overrides,database_session,sessions)
+                from app.api.routers.consolidated_assessment import snapshot_session
+                from fastapi import Depends
+                async def bound_snapshot(session=Depends(database_session)):
+                    return session
+                monkeypatch.setitem(app.dependency_overrides,snapshot_session,bound_snapshot)
                 monkeypatch.setattr(settings,'transcript_storage_enabled',True)
                 def forbidden(*a,**kw):raise AssertionError('Report must not run inference')
                 monkeypatch.setattr(InterviewEvaluationWorkflow,'run',forbidden)

@@ -88,23 +88,9 @@ async def interview_evidence(db, request, job, interview, *, storage_enabled, cl
         return status('unavailable')  # Never leak text or private exception details.
 
 
-async def consolidated_assessment(db, request, owner, job_id, batch_id, upload_id, *, storage_enabled):
-    # Same exact job/batch/upload identity used when selecting an interview.
-    job = await owned_job(db, owner.id, job_id, lock=True)
-    interview = await db.scalar(select(InterviewSchedule).where(
-        InterviewSchedule.job_id == job.id, InterviewSchedule.recruiter_id == owner.id,
-        InterviewSchedule.batch_id == batch_id, InterviewSchedule.upload_id == upload_id)
-        .with_for_update().execution_options(populate_existing=True))
-    if interview:
-        payload, revision, origin = interview.screening_snapshot, interview.criteria_revision, 'interview_selection_snapshot'
-    else:
-        row = await db.scalar(select(CandidateScoreRecord).where(CandidateScoreRecord.job_id == job.id,
-            CandidateScoreRecord.batch_id == batch_id, CandidateScoreRecord.upload_id == upload_id,
-            CandidateScoreRecord.criteria_revision == job.revision,
-            CandidateScoreRecord.scoring_version == SCORING_VERSION))
-        if row is None:
-            raise HTTPException(404, 'Saved candidate assessment not found.')
-        payload, revision, origin = row.payload, row.criteria_revision, 'current_saved_score'
+def persisted_cv(job, upload_id, *, row=None, interview=None):
+    """Shared CV association/selection validation; never reconstruct lost evidence."""
+    payload = interview.screening_snapshot if interview else row.payload
     try:
         cv = checked_cv(payload, job, upload_id)
         if interview and (interview.scoring_version != SCORING_VERSION or cv.screening_decision != 'eligible'
@@ -113,8 +99,29 @@ async def consolidated_assessment(db, request, owner, job_id, batch_id, upload_i
         if not interview and (cv.score != row.score or job.confirmed_snapshot is None
                 or cv.weights.model_dump() != job.scoring_weights):
             raise ValueError('Invalid stored score')
+        return cv
     except (ValueError, TypeError, KeyError, AttributeError):
         raise HTTPException(409, 'Saved candidate assessment is unavailable.') from None
+
+
+async def consolidated_assessment(db, request, owner, job_id, batch_id, upload_id, *, storage_enabled):
+    # Same exact job/batch/upload identity used when selecting an interview.
+    job = await owned_job(db, owner.id, job_id, lock=True)
+    interview = await db.scalar(select(InterviewSchedule).where(
+        InterviewSchedule.job_id == job.id, InterviewSchedule.recruiter_id == owner.id,
+        InterviewSchedule.batch_id == batch_id, InterviewSchedule.upload_id == upload_id)
+        .with_for_update().execution_options(populate_existing=True))
+    if interview:
+        revision, origin = interview.criteria_revision, 'interview_selection_snapshot'
+    else:
+        row = await db.scalar(select(CandidateScoreRecord).where(CandidateScoreRecord.job_id == job.id,
+            CandidateScoreRecord.batch_id == batch_id, CandidateScoreRecord.upload_id == upload_id,
+            CandidateScoreRecord.criteria_revision == job.revision,
+            CandidateScoreRecord.scoring_version == SCORING_VERSION))
+        if row is None:
+            raise HTTPException(404, 'Saved candidate assessment not found.')
+        revision, origin = row.criteria_revision, 'current_saved_score'
+    cv = persisted_cv(job, upload_id, row=None if interview else row, interview=interview)
     evidence = (await interview_evidence(db, request, job, interview, storage_enabled=storage_enabled)
                 if interview else InterviewEvidence(state='not_scheduled'))
     return ConsolidatedAssessment(job_id=job.id, job_title=job.job_title, job_reference=job.job_reference,

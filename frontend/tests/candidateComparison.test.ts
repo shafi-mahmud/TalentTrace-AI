@@ -63,7 +63,7 @@ test('invalid selections never request data; authorization errors never expose p
  await assert.rejects(fetchComparison(job,2,selections),e=>e instanceof Error&&!e.message.includes('private'));assert.equal(calls,1);}finally{globalThis.fetch=old;}
 });
 test('selectors require explicit choice and comparison; a single saved application has an honest empty state',()=>{
- const html=renderToStaticMarkup(h(CandidateComparison,{jobId:job,revision:2,batches:[]}));
+ const html=renderToStaticMarkup(h(CandidateComparison,{jobId:job,revision:2,applications:[]}));
  assert.match(html,/At least two current saved applications/);assert.match(html,/Compare selected applications/);assert.match(html,/disabled/);
  assert.doesNotMatch(html,/Candidate comparison results/);
 });

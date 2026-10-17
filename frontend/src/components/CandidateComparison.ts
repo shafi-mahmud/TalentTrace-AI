@@ -1,7 +1,6 @@
 import {createElement as h,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {fetchComparison} from '../api/candidateComparison.ts';
 import type {ApplicationIdentity,Comparison} from '../api/candidateComparison';
-import type {ScoringBatch} from '../types/screening';
 import {AssessmentView} from './ConsolidatedAssessment.ts';
 
 export function ComparisonView({comparison:c}:{comparison:Comparison}){
@@ -22,14 +21,14 @@ export function ComparisonView({comparison:c}:{comparison:Comparison}){
    h('h3',null,`Application ${i===0?'A':'B'}`),h(AssessmentView,{report})))));
 }
 
-export default function CandidateComparison({jobId,revision,batches}:{jobId:string;revision:number;batches:ScoringBatch[]}){
+export default function CandidateComparison({jobId,revision,applications}:{jobId:string;revision:number;applications:ApplicationIdentity[]}){
  const [left,setLeft]=useState(''),[right,setRight]=useState(''),[value,setValue]=useState<Comparison|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const sequence=useRef(0),request=useRef<AbortController|null>(null);
- const options=batches.flatMap(b=>b.candidates.map(c=>({job_id:b.job_id,batch_id:b.batch_id,upload_id:c.upload_id})));
+ const options=applications;
  const key=(a:ApplicationIdentity)=>`${a.batch_id}/${a.upload_id}`;
  const selected=[options.find(a=>key(a)===left),options.find(a=>key(a)===right)];
  function clear(){sequence.current++;request.current?.abort();setValue(null);setBusy(false);setError('');}
- useLayoutEffect(()=>{clear();setLeft('');setRight('');return()=>{sequence.current++;request.current?.abort();};},[jobId,revision,batches]);
+ useLayoutEffect(()=>{clear();setLeft('');setRight('');return()=>{sequence.current++;request.current?.abort();};},[jobId,revision,applications]);
  useEffect(()=>{
   const hidden=()=>{if(document.hidden)clear();};window.addEventListener('hashchange',clear);document.addEventListener('visibilitychange',hidden);
   let timer:ReturnType<typeof setTimeout>|undefined;

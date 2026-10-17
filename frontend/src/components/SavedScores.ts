@@ -1,4 +1,4 @@
-import CandidateComparison from './CandidateComparison.ts';
+import ApplicationDiscovery from './ApplicationDiscovery.ts';
 import ConsolidatedAssessment from './ConsolidatedAssessment.ts';
 import {createElement as h,useLayoutEffect,useRef,useState} from 'react';
 import {authenticatedFetch} from '../api/session.ts';
@@ -17,5 +17,5 @@ export default function SavedScores({jobId,revision,onSelectCandidate}:{jobId:st
  const [batches,setBatches]=useState<ScoringBatch[]|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);const generation=useRef(0),pending=useRef(false);
  useLayoutEffect(()=>{generation.current++;setBatches(null);setError('');setBusy(false);pending.current=false;return()=>{generation.current++;};},[jobId,revision]);
  async function load(){if(pending.current)return;pending.current=true;setBusy(true);setError('');const n=++generation.current;try{const v=await fetchSavedBatches(jobId,revision);if(n===generation.current)setBatches(v);}catch(e){if(n===generation.current)setError((e as Error).message);}finally{if(n===generation.current){pending.current=false;setBusy(false);}}}
- return h('section',{className:'card saved-scores','aria-label':'Previously saved scores'},h('h2',null,'Previously saved candidate scores'),h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>void load()},busy?'Loading…':'Load saved scores'),h('p',null,'Loading saved scores is read-only and makes no CV upload or AI call.'),error&&h('p',{role:'alert'},error),batches&&h(CandidateComparison,{jobId,revision,batches}),batches&&h(SavedScoreCards,{batches,onSelect:(batch,candidate)=>onSelectCandidate({batch,candidate})}),batches?.length===0&&h('p',null,'No saved results for this revision.'));
+ return h('section',{className:'card saved-scores','aria-label':'Previously saved scores'},h('h2',null,'Previously saved candidate scores'),h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>void load()},busy?'Loading…':'Load saved scores'),h('p',null,'Loading saved scores is read-only and makes no CV upload or AI call.'),error&&h('p',{role:'alert'},error),h(ApplicationDiscovery,{jobId,revision}),batches&&h(SavedScoreCards,{batches,onSelect:(batch,candidate)=>onSelectCandidate({batch,candidate})}),batches?.length===0&&h('p',null,'No saved results for this revision.'));
 }

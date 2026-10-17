@@ -1,4 +1,4 @@
-# F6 consolidated candidate assessment — Increments 1–3
+# F6 consolidated candidate assessment — Increments 1–4
 
 Implemented on `feature/f6-consolidated-report`, based on verified M3
 `2967ae9ef36748d33a5b3107d0122a70d8418979`. This is **not full F6 completion**.
@@ -481,3 +481,194 @@ missing persisted CV-evidence coverage. No dependency or model download was need
    version selection rather than inventing or arbitrarily choosing evidence.
 3. **Why no combined score or winner?** F2 is CV requirement coverage and F5 is
    advisory question-specific evidence; combining them requires an approved design.
+
+## F6 Increment 4 — persisted application discovery and snapshot consistency
+
+Implemented 17 October 2026 on `feature/f6-evidence-completeness`, from verified
+Increment 3 `9099e50072ffeffbbcc467f5bf33d8cc674e9a1d`. No migrations, inference,
+score formulas, backfill, model downloads or unrelated branch integration.
+The official BID PDF remains unavailable in the inspected local locations;
+traceability scope follows the owner's explicit request and verified contracts.
+This increment does not claim full F6 acceptance.
+
+### Persistence audit and state distinctions
+
+- `candidate_scores` is keyed by job/batch/upload/revision/scoring version. A valid
+  scored payload retains the original requirement matches, explanations, page/block
+  references and component breakdown. Its numerical/identity contract is validated.
+- An unscored payload may preserve a screening decision/reason but **always has no
+  dimensions** under the existing `CandidateScore` contract. The full matching
+  result returned during screening is not independently persisted by `persist_scores`.
+  Thus a decision is evidence that screening occurred, not recoverable complete
+  requirement-level evidence. Processing failures may have no decision at all.
+- `interview_schedules` has a unique job/batch/upload key and immutable selection
+  snapshot. This survives mutable score replacement/deletion. A valid snapshot is
+  reportable even without a score row. Its revision/weights must match current
+  confirmed criteria to participate in comparison; older snapshots remain visible
+  and reportable with the existing stale/restricted F5 behavior.
+- Historical F2 rows without a selection snapshot are listed explicitly, including
+  recorded revisions, but no arbitrary historical payload is silently substituted
+  for the current report. Invalid CV artifacts have no report action.
+- The local `external_cv_submissions` ledger proves a persisted application identity,
+  not a profile, consent grant, score or available source file. Ledger-only entries
+  are labelled unavailable; contact fields are never loaded by discovery.
+- Native intake stores files on disk before screening; there is no universal durable
+  application registry or application-wide withdrawn/deleted marker in these models.
+  Filesystem-only, unscreened uploads are outside this bounded database listing.
+  Empty listing does not mean no CV files exist. No missing application or withdrawal
+  flag is invented. Foreign/missing jobs are denied, and nonexistent identities are
+  not manufactured. Interview withdrawal remains separate from CV evidence lifecycle.
+
+### Discovery behavior
+
+Authenticated GET `/api/v1/jobs/{job_id}/assessment-applications` returns a typed,
+metadata-only union of owned job score rows (including historical revisions), owned
+interview selection identities and local ledger identities. Deduplication and sort
+use exact `(job_id, batch_id, upload_id)`. It does not query F5 analysis/transcript
+text, access another intake database, scan files, parse CVs or call models.
+
+Existing CV association/eligibility checks were extracted into `persisted_cv` and
+are shared by discovery and the unchanged report policy. Each discovered identity
+has an explicit state/label, detail, recorded revisions, evidence revision, report
+availability and comparison availability:
+
+| Label | Meaning |
+| --- | --- |
+| Scored | Valid current F2 score and original component evidence |
+| Screening evidence available; not scored | Persisted decision/reason; missing requirement breakdown disclosed |
+| Historical selection snapshot | Preserved selection-time CV evidence, with its actual revision |
+| Evidence unavailable or restricted | Ledger-only, historical-only, failed processing or invalid CV evidence; reason disclosed safely |
+
+“Historical selection snapshot” denotes provenance, even when its revision remains
+current. Invalid snapshots do not fall back to a different mutable score silently.
+Interview consent/withdrawal/retention are revalidated only through the existing
+report boundary; metadata and enabled buttons are not authorization capabilities.
+
+Discovery is capped at 200 distinct identities and 500 score-history rows. Exceeding
+a bound returns 409 with no partial list. Pagination is future work. Only IDs,
+revision metadata and fixed explanations are returned, never emails, raw payloads
+or private exception details.
+
+The new **Load application evidence** action is independent of **Load saved scores**:
+missing/invalid current score batches no longer hide discovery. Valid evidence
+cards reuse the report/print component. Comparison selectors now consume the
+current-compatible discovered identities, including snapshot-only applications.
+Selections remain explicit; job/revision changes and refresh discard old data and
+abort stale requests. No persistent browser storage or automatic inference is used.
+Existing report/print privacy lifecycles remain intact; discovery metadata does not
+clear the parent during native print visibility events and erase its print copy.
+
+### Transaction consistency audit and correction
+
+The running database reports `default_transaction_isolation = read committed`.
+The engine previously specified no isolation override. Increment 3's job lock
+stabilizes criteria/weights; existing interview locks protect each interview after
+its lock is obtained. They **do not produce a common MVCC snapshot**: a conforming
+F5 worker can lock interview B and commit its analysis while the request is still
+reading A. One transaction alone was not sufficient evidence of snapshot consistency.
+
+The smallest correction is request-scoped **REPEATABLE READ** for discovery and
+comparison. `snapshot_session` acquires the connection with this isolation setting
+before `current_recruiter` executes its authentication SELECT. FastAPI's cached
+`database_session` supplies the same session to both dependencies. Subsequent
+report/source reads see that transaction's snapshot. Single-report/print endpoints
+and the engine/database default remain unchanged. There are no new locks or global
+serialization; discovery itself is an unlocked snapshot read, and comparison keeps
+only its existing owned-job/interview locks.
+
+Privacy fences are retained. If interview B's withdrawal changes its parent row
+after the snapshot begins but before the request locks it, PostgreSQL raises a
+serialization failure; the endpoint returns a generic 503 with no partial A/B
+report text. The client must explicitly retrieve again. No automatic retry or
+inference occurs. A fresh request sees the new result/withdrawal. Clock-based
+retention checks still run, including the existing final pair deadline guard.
+
+A snapshot is current as of this request's first query, not continuously live.
+Parent-fenced privacy writers follow the existing protocol. Direct maintenance
+SQL that edits/deletes sensitive child rows without the required parent privacy
+fence is not newly supported. Already delivered content cannot be revoked.
+
+### Verification — executed checks
+
+```bash
+cd /home/shafi/Projects/TalentTrace-AI/backend
+F6_HOME_PG_TEST=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+ .venv/bin/python -m pytest tests/test_consolidated_assessment.py \
+ tests/test_candidate_comparison.py tests/test_assessment_discovery.py \
+ tests/test_comparison_snapshot.py -q
+cd /home/shafi/Projects/TalentTrace-AI/frontend
+pnpm test
+pnpm build
+```
+
+- Backend: **59 passed, 0 failed, 0 skipped** in the final run: 5 unit checks and
+  **54 executed PostgreSQL cases**, including 15 new discovery checks and 3 new
+  independent-connection isolation/privacy cases.
+- Discovery checks cover scored/unscored/failed, snapshot-only/current and historical,
+  old F2-only history, invalid snapshots, missing records, ledger-only/deduplicated
+  identities, foreign/different jobs, unauthorized/candidate access, explicit limits,
+  withdrawn interview exclusion from reports and read-only stable retrieval.
+- Real concurrency tests use two distinct `pg_backend_pid()` values. A deterministic
+  writer commits B's F5 analysis between A and B reads. READ COMMITTED control returns
+  mixed states; production REPEATABLE READ returns both original states. Reload sees
+  the committed result. A concurrent parent withdrawal produces safe 503, followed
+  by a fresh report showing B withdrawn with no B text.
+- Existing rollback fixtures explicitly share one bound session for authentication
+  and snapshot dependencies. Independent-connection tests use the production
+  dependency and assert `SHOW transaction_isolation = repeatable read`. Their own
+  random fixture rows must be committed for another connection to see them; cleanup
+  removes only those test-created identities. Existing development data is preserved.
+- Frontend: **217 passed, 0 failed, 0 skipped**, including 6 new discovery checks.
+  TypeScript and production build passed; existing LiveKit chunk warning remains.
+- Authenticated browser smoke check used the existing synthetic F6 job against the
+  running backend: discovery loaded before saved-score batches were requested,
+  displayed scored/unscored labels, compared both applications, and opened the
+  unscored report with its existing Print / Save as PDF action. Snapshot-only and
+  concurrent-change cases were verified through PostgreSQL tests. Screenshot:
+  `data/home/f6-discovery-verified.png` (ignored local artifact). The native print
+  dialog was not exercised again in this increment.
+- SQL write-statement assertions and manager/workflow invocation traps remain enabled
+  for discovery/report reads. No scoring/evaluation is triggered by viewing.
+- Initial database runs failed because Docker Desktop/PostgreSQL were stopped.
+  The existing user service/container were restarted, not recreated. An early fixture
+  dependency override caused overlapping savepoints and was corrected to reuse the
+  same cached session. The final results above are the corrected executed runs.
+- Older office-container-dependent gates were not enabled; full database and F6
+  acceptance are not claimed. Native print cancellation remains a separate follow-up;
+  the print implementation is unchanged.
+- Free space measured about **3.4 GiB**, lower than the prior session. No dependencies,
+  images, models or caches were installed/deleted by this increment.
+
+### Missing evidence contract — proposed follow-up, not implemented
+
+Persist a bounded, versioned original screening-result artifact independently of
+whether numerical scoring succeeds. Key it by the existing job/batch/upload,
+confirmed criteria revision and screening run/version; retain the reviewed criteria,
+source fingerprint, parse status, original requirement matches/explanations/source
+references, screening decision and failure reasons. Save it atomically with score
+persistence under the existing job lock. Define CV retention/deletion and access
+rules before implementation. Preserve original evidence rather than recomputing it
+on report GET. Existing unscored rows cannot be backfilled from a decision alone;
+any future re-screening would need a separate explicit authorized action.
+
+No such table, migration, backfill or application registry is added now. A broader
+registry with application-wide withdrawal/deletion would be a separate design.
+This increment improves discoverability without claiming to restore lost evidence.
+
+### Changed files and viva explanation
+
+Backend: `api/routers/consolidated_assessment.py`,
+`schemas/consolidated_assessment.py`, `services/consolidated_assessment.py`,
+new `services/assessment_discovery.py`, rollback fixture
+`tests/test_consolidated_assessment.py`, and new
+`tests/test_assessment_discovery.py` / `tests/test_comparison_snapshot.py`.
+Frontend: new `api/applicationDiscovery.ts`, `components/ApplicationDiscovery.ts`
+and `tests/applicationDiscovery.test.ts`; updated `components/SavedScores.ts`,
+`components/CandidateComparison.ts` and `tests/candidateComparison.test.ts`.
+Documentation: this file.
+
+Viva: “An application is an exact job/batch/upload identity. I union existing
+persisted identities, validate their CV artifacts, and distinguish current scores,
+unscored decisions and selection snapshots. I cannot reconstruct requirement
+quotes that were never saved. Comparison now reads one repeatable database snapshot;
+concurrent withdrawal conflicts fail closed through the existing privacy locks.”
