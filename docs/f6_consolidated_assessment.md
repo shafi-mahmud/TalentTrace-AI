@@ -1,4 +1,4 @@
-# F6 consolidated candidate assessment — Increments 1–5A
+# F6 consolidated candidate assessment — Increments 1–5B
 
 Implemented on `feature/f6-consolidated-report`, based on verified M3
 `2967ae9ef36748d33a5b3107d0122a70d8418979`. This is **not full F6 completion**.
@@ -854,3 +854,196 @@ The profile puts those authorized records beside each requirement, preserving
 source links and missing-evidence labels. The system assembles evidence; the
 recruiter makes and later confirms the overall judgment. An unavailable source
 is missing information, not poor performance.”
+
+## F6 Increment 5B — explicit recruiter confirmation (17 October 2026)
+
+Implemented on `feature/f6-reviewer-confirmation` from verified Increment 5A
+`5ef7e22317174b4cff8c948102b26215e5cee349`, in the primary checkout. The prior
+5A pending-judgment text is historical: enabled reports now show the actual
+pending/confirmed/stale/restricted projection. No numeric combination, ranking or
+hire/reject action is introduced. Full F6 acceptance is not claimed.
+
+Architecture and retention decisions: [reviewer confirmation ADR](architecture/ADR_f6_reviewer_confirmation.md).
+
+### Retention audit before migration
+
+`CandidateScoreRecord`, `InterviewSchedule.screening_snapshot`, filesystem CV
+intake and the existing intake ledger were inspected. CV/application records have
+no retention deadline or application-wide deletion route. Upload failure cleanup
+is not candidate deletion. Interview sources already have consent, withdrawal,
+retention and verified cleanup. No existing tighter CV retention policy conflicted
+with the owner's approved development policy: confirmation maximum 30 days;
+interview-dependent expiry is shortened to the source deadline. This is a project
+engineering decision, not a trainer-approved or legal retention requirement.
+
+There is still no application registry/deletion API. The new migration removes
+confirmation after the exact application's last persisted score/snapshot is
+deleted; it does not misrepresent deleting a filesystem CV as deleting surviving
+historical evidence. Any future application/CV deadline must be integrated before
+production acceptance. Existing private home databases were not migrated.
+
+### Persistence and API execution
+
+Migration `0015_reviewer_confirmation`, parent `0014_interview_analysis`, creates
+`reviewer_confirmations`, one unique job/batch/upload row. It stores authenticated
+reviewer ID, qualitative position, explicit requirement/source scope, typed reason
+and evidence references, server time/expiry, criteria/source fingerprints, F5
+version/dependency metadata and optimistic version. It stores no copied source
+text, unrestricted rationale, names, contact fields or numeric total. F2 rows are
+replaceable; therefore no confirmation FK points at them. Analysis IDs are
+metadata and never prevent transcript-derived cleanup. There is no history table.
+
+One explicit authenticated mutation:
+
+```text
+PUT /api/v1/jobs/{job_id}/batches/{batch_id}/candidates/{upload_id}/assessment/confirmation
+```
+
+Input: expected version (0 for no row), fresh report evidence token, position
+`alignment|mixed|insufficient`, scope `cv_only|cv_interview`, reviewed requirement
+IDs and typed references `{criterion_id, kind, reason, qa_id?, dimension?}`.
+Free-text rationale or client reviewer identity are rejected as unknown fields.
+
+The existing report reader freshly validates exact identity and sources under
+job/interview locks. Mutation then locks the confirmation, checks version/token,
+validates scope/references and computes dependency fingerprints. It flushes and
+validates the safe response before committing. A mismatch returns 409, unsupported
+claim 422, unauthorized recruiter/candidate 404/401, disabled/storage failure 503.
+A commit/network outcome may be uncertain; the client must refresh and reconcile,
+not automatically retry. The job lock plus unique key protects the no-row case.
+
+### Evidence gates and source states
+
+- Every mandatory requirement must be included, even for limited scope.
+- Every scoped requirement needs an explicit evidence or gap rationale; the saved
+  summary lists the complete reviewed scope, not only positively cited items.
+- Alignment requires supported evidence for every scoped requirement. Excluded
+  screening, ambiguous CV matches and scoped F5 concerns block alignment. A CV
+  reference must be an original supported match. F5 support needs a supported
+  completeness/technical-accuracy dimension, exact mapped question and non-uncertain
+  topic mapping; relevance/articulation/topic mention alone cannot justify it.
+- Mixed requires a concern/partial/uncertain finding, not merely missing evidence.
+- Insufficient requires a validated missing/unassessed reference. It is abstention,
+  never rejection. A fully unscored application cannot invent positive CV matches.
+- CV-only scope is explicit and does not depend on F5. A newly available interview
+  is outside that recorded scope until explicitly reviewed. No old mixed judgment
+  is silently changed to CV-only after restriction.
+- Missing/ambiguous/withdrawn/deleted/expired F5 cannot support interview scope.
+  CV-only may still be independently confirmed from authorized CV evidence.
+- Historical selection evidence remains reportable, but new confirmation requires
+  matching current confirmed criteria. Truly missing applications still return 404.
+
+### Read-time privacy, consistency and cleanup
+
+Existing report GET now includes `confirmation`: pending, confirmed, stale or
+restricted. Default-disabled serving returns pending with `enabled=false` without
+querying the new table. Activation is development-only via
+`REVIEWER_CONFIRMATION_ENABLED=true`; migrate the chosen synthetic database first.
+No local .env or private home database was changed to activate it.
+
+Every enabled GET validates current dependencies. Changed effective F2 evidence,
+criteria or F5 source/result/version makes it stale. Later mutable F2 replacement
+does not substitute a retained interview-selection snapshot. Expiry, withdrawal,
+deleted/unavailable protected input, tampered dependency metadata or reviewer
+association makes it restricted. Stale/restricted responses contain no active
+position, scope, rationale references or reviewer identity/timestamps. GET performs
+no writes, lease expiration changes, inference or external calls.
+
+Withdrawal retains its durable interview fence. Confirmation-first commits can
+become inaccessible immediately after withdrawal commits; withdrawal-first denies
+confirmation. Existing cleanup deletes dependent confirmations before derived
+analysis/source rows and verifies deletion. Failure leaves the fence denying reads.
+A separate bounded maintenance loop removes expired/restricted/orphan confirmations,
+even when confirmation/transcript serving is disabled. Reads do not depend on its
+success. Runtime status is fixed operational text without content/SQL logging.
+
+Deferred source-deletion triggers distinguish an F2 replace transaction from last-
+source deletion. Job/reviewer/interview FK cascades and bounded orphan cleanup add
+further protection. A physical purge removes the current version; a later eligible
+read may be pending rather than a retained tombstone. No long-lived history is added.
+
+### Recruiter workflow and rendering
+
+Enable only in an approved migrated synthetic development environment. Open a
+fresh consolidated report; choose reviewed sources, position, requirements and
+original evidence/structured reasons. Mandatory requirements cannot be unchecked.
+A separate acknowledgment and **Confirm reviewed suitability** click are required.
+The server validates all choices; UI availability is not the authorization boundary.
+
+Success refreshes the report. An uncertain result locks resubmission and provides
+**Refresh and reconcile current state**. There is no background save, browser
+storage or free-text field. The active confirmation shows source scope, reviewer,
+time, expiry and reason labels, with original evidence IDs in audit details.
+Single report, comparison and native print share the same summary, not independent
+interpretations. Confirmation expiry also clears screen/comparison memory and
+bounds the prepared print copy. Existing print preparation freshly reauthorizes.
+Already delivered browser previews, PDFs or paper cannot be recalled.
+
+### Executed tests and limits
+
+A temporary local `f6_test_*` database was created on the already installed home
+PostgreSQL server. It was upgraded base-to-head, downgraded to 0014, and re-upgraded
+to 0015. The existing `talenttrace_home` database/schema and private records were
+not modified. F6 fixture guards now also permit explicitly opted-in local
+`f6_test_*` names; the legacy home guard remains available. No image/dependency or
+model downloads were needed. Credentials were never logged or committed.
+
+Focused backend command (with the temporary DATABASE_URL, F6_HOME_PG_TEST=1,
+HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1):
+
+```text
+.venv/bin/python -m pytest tests/test_consolidated_assessment.py
+ tests/test_candidate_comparison.py tests/test_assessment_discovery.py
+ tests/test_comparison_snapshot.py tests/test_reviewer_confirmation.py -q --tb=short
+```
+
+**111 passed, 0 failed/skipped**: 26 unit cases and **85 PostgreSQL cases**.
+New coverage includes three positions; supported/unsupported claims; mandatory
+scope; forged questions/requirements; relevance/articulation exclusion; no free
+text/reviewer spoofing; missing/unscored/history; CV-only; ambiguity; unauthorized
+access; criteria/rescore/source/result changes; expiry; database retention bound;
+restricted/stale projection; deferred deletion versus replacement; verified cleanup
+and failed physical cleanup; stable no-write GET and no inference traps. Real
+independent-connection cases cover simultaneous version updates and both orderings
+of confirmation/withdrawal. Prior comparison MVCC/privacy tests also passed.
+
+Frontend `pnpm test`: **231 passed, 0 failed/skipped**. Seven new tests cover safe
+projection, all positions in report/print/comparison, stale/restricted suppression,
+explicit UI/mandatory scope, one credentialed PUT without retry, confirmation print
+expiry and memory-only uncertainty handling. `pnpm build` passed TypeScript and
+Vite; the existing >500 kB LiveKit chunk warning remains. Early collection caught
+a service parenthesis typo; it was fixed before the final passing commands. No
+production constraint was weakened. Full backend/older office PostgreSQL gates
+were not run. Native print-dialog cancellation and actual long F5 PDF pagination
+are still not acceptance-verified by these markup tests.
+
+An authenticated browser walkthrough used a separately seeded synthetic account
+and CV-only application in the disposable database. Selecting the position,
+requirement, original supported CV reference and acknowledgment enabled the
+explicit mutation. The refreshed report showed the confirmed position, CV-only
+scope, reviewer/time/expiry, structured reason and version 1. No actual interview,
+new model call or real candidate was used. Screenshot: ignored local
+`data/home/f6-reviewer-confirmation-verified.png`. This confirms the explicit
+workflow, not native print-dialog behavior. After verification the temporary
+backend/database were removed and the normal backend restored with confirmation
+disabled; local .env and the existing home schema were left unchanged.
+
+### Files and remaining acceptance
+
+Backend: migration 0015; reviewer-confirmation model/schema/service/runtime;
+model registration; config/main; report schema/service/router; transcript privacy
+cleanup; new confirmation tests and two existing F6 fixture guards. Frontend:
+confirmation API/component/tests; report contract/view/profile; comparison expiry
+and native print deadline handling. Documentation: this file and the ADR above.
+
+Remaining: full print cancellation/pagination, lost unscored F2 evidence, explicit
+analysis-version selection, genuine CV-absent applications, full application-wide
+retention/deletion policy, delegated reviewers, durable confirmation history and
+production privacy/activation acceptance. The implemented record is a human
+judgment over a specified evidence version, not proof of hiring suitability.
+
+Viva: “The system validates the evidence, but the recruiter chooses the position.
+The saved record identifies who reviewed which requirements and source versions.
+Fingerprints detect changed evidence; authorization and retention still run on
+every read. Withdrawal hides the dependent judgment immediately, even if physical
+cleanup has to retry. Missing evidence is never converted into a low score.”

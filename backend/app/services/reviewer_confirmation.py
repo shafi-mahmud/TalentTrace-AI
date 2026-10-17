@@ -41,6 +41,8 @@ def validate_claims(report, body):
     scope = set(body.requirement_ids)
     if not criteria or not scope.issubset(criteria) or not {c.criterion_id for c in criteria.values() if c.is_hard}.issubset(scope):
         raise HTTPException(422, 'Use current confirmed requirements and include every mandatory requirement.')
+    if {r.criterion_id for r in body.references} != scope:
+        raise HTTPException(422, 'Give an evidence or gap rationale for every reviewed requirement.')
     cv = {m.criterion_id:m for d in report.cv.dimensions for m in d.matches}
     interview = report.interview if body.scope == 'cv_interview' and report.interview.state == 'available' else None
     if body.scope == 'cv_interview' and interview is None:

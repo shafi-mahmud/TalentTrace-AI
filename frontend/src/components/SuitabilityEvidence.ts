@@ -15,7 +15,9 @@ export default function SuitabilityEvidence({report:r,link}:{report:Consolidated
  const cvCount=matches.filter(m=>m.match_status==='supported').length;
  return h('section',{'aria-label':'Suitability evidence profile',className:'suitability-evidence'},
   h('h4',null,'Suitability evidence profile'),
-  h('p',null,h('strong',null,'Overall suitability position: pending recruiter confirmation.')),
+  h('p',null,h('strong',null,r.confirmation?.state==='confirmed'?'Overall suitability position: recruiter-confirmed; reviewed scope and rationale follow below.':
+   r.confirmation?.state==='stale'?'Overall suitability position: stale; fresh recruiter confirmation required.':
+   r.confirmation?.state==='restricted'?'Overall suitability position: restricted; no active judgment is disclosed.':'Overall suitability position: pending recruiter confirmation.')),
   h('p',null,'This system-assembled evidence profile is not a suitability judgment or hiring recommendation.'),
   h('dl',null,
    h('dt',null,'CV score'),h('dd',null,r.cv.score===null?'Not scored; no numerical value is substituted.':`${r.cv.score.toFixed(2)} / 100 — existing F2 weighted CV requirement coverage.`),

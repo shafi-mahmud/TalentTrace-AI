@@ -5,6 +5,7 @@ import {fetchReport} from '../api/consolidatedAssessment.ts';
 import type {ConsolidatedReport,EvidenceState} from '../api/consolidatedAssessment';
 import {ScoreDetails} from './scorePresentation.ts';
 import SuitabilityEvidence from './SuitabilityEvidence.ts';
+import ReviewerConfirmation,{ConfirmationSummary} from './ReviewerConfirmation.ts';
 
 const messages:Record<EvidenceState,string>={
  available:'Saved interview assessment available.',not_scheduled:'No interview is scheduled for this application.',
@@ -28,6 +29,7 @@ export function AssessmentView({report:r,preparedAt}:{report:ConsolidatedReport;
   h('details',null,h('summary',null,'Application audit identifiers'),h('p',null,`Job ${r.job_id} · application ${r.upload_id} · batch ${r.batch_id} · criteria revision ${r.criteria_revision}`)),
   h('p',{className:'helper-text'},r.notice),
   h(SuitabilityEvidence,{report:r,link:sourceLink}),
+  h(ConfirmationSummary,{report:r}),
   h('h4',null,'CV screening and F2'),
   h('p',null,`${r.cv.screening_decision??'No screening decision'} · ${r.cv_source==='interview_selection_snapshot'?'Saved at interview selection; later screening reruns are not substituted.':'Current saved screening result.'}`),
   h(ScoreDetails,{score:r.cv}),
@@ -66,11 +68,12 @@ export default function ConsolidatedAssessment({jobId,batchId,uploadId}:{jobId:s
   const clear=()=>{generation.current++;controller.current?.abort();printController.current?.abort();setReport(null);setBusy(false);};
   const hidden=()=>{if(document.hidden){if(!printingPrepared.current)printController.current?.abort();generation.current++;controller.current?.abort();setReport(null);setBusy(false);}};
   window.addEventListener('hashchange',clear);document.addEventListener('visibilitychange',hidden);
-  const remaining=report?.interview.retention_deadline?Date.parse(report.interview.retention_deadline)-Date.now():null;
+  const deadlines=[report?.interview.retention_deadline,report?.confirmation?.state==='confirmed'?report.confirmation.expires_at:null].filter((v):v is string=>!!v).map(Date.parse);
+  const deadline=deadlines.length?Math.min(...deadlines):null;
   // Retention may exceed the browser's 32-bit timeout limit; recheck at most daily.
   let timer:ReturnType<typeof setTimeout>|undefined;
-  function expire(){const left=Date.parse(report!.interview.retention_deadline!)-Date.now();if(left<=0)clear();else timer=setTimeout(expire,Math.min(left,86400000));}
-  if(remaining!==null)expire();
+  function expire(){const left=deadline!-Date.now();if(left<=0)clear();else timer=setTimeout(expire,Math.min(left,86400000));}
+  if(deadline!==null)expire();
   return()=>{window.removeEventListener('hashchange',clear);document.removeEventListener('visibilitychange',hidden);if(timer!==undefined)clearTimeout(timer);};
  },[report]);
  async function printReport(){
@@ -105,5 +108,5 @@ export default function ConsolidatedAssessment({jobId,batchId,uploadId}:{jobId:s
   finally{clearTimeout(timeout);if(n===generation.current)setBusy(false);}
  }
  return h('div',null,h('button',{type:'button',className:'button button-secondary',disabled:busy||printing,onClick:()=>void load()},busy?'Loading assessment…':'View consolidated assessment'),
-  error&&h('p',{role:'alert'},error),report&&h('button',{type:'button',onClick:()=>{generation.current++;controller.current?.abort();setReport(null);setBusy(false);}},'Close assessment'),report&&h('button',{type:'button',className:'button button-secondary',disabled:printing,onClick:()=>void printReport()},'Print / Save as PDF'),printing&&h('p',{role:'status'},'Preparing or displaying the browser print dialog…'),printing&&h('button',{type:'button',onClick:()=>{printController.current?.abort();setPrinting(false);}},'Clear prepared print copy'),report&&h('p',{className:'helper-text'},'Printing refreshes authorization and evidence. Saved copies are confidential and cannot be revoked by the application.'),report&&h(AssessmentView,{report}),printView&&createPortal(h('div',{id:'talenttrace-assessment-print',className:'assessment-print-root'},h(AssessmentView,printView)),document.body));
+  error&&h('p',{role:'alert'},error),report&&h('button',{type:'button',onClick:()=>{generation.current++;controller.current?.abort();setReport(null);setBusy(false);}},'Close assessment'),report&&h('button',{type:'button',className:'button button-secondary',disabled:printing,onClick:()=>void printReport()},'Print / Save as PDF'),printing&&h('p',{role:'status'},'Preparing or displaying the browser print dialog…'),printing&&h('button',{type:'button',onClick:()=>{printController.current?.abort();setPrinting(false);}},'Clear prepared print copy'),report&&h('p',{className:'helper-text'},'Printing refreshes authorization and evidence. Saved copies are confidential and cannot be revoked by the application.'),report&&h(AssessmentView,{report}),report&&controller.current&&h(ReviewerConfirmation,{key:report.confirmation?.evidence_token??'disabled',report,refresh:()=>void load(),signal:controller.current.signal}),printView&&createPortal(h('div',{id:'talenttrace-assessment-print',className:'assessment-print-root'},h(AssessmentView,printView)),document.body));
 }

@@ -3,6 +3,8 @@ import {isAnalysisOperation} from './interviewAnalysis.ts';
 import type {AnalysisResult} from './interviewAnalysis';
 import type {CandidateScore,ScreeningCriterion} from '../types/screening';
 import {validSavedBatches} from './savedScoreValidation.ts';
+import {validConfirmation} from './reviewerConfirmation.ts';
+import type {ConfirmationView} from './reviewerConfirmation';
 
 export const evidenceStates=['available','not_scheduled','disabled','withdrawn','expired','deleted','stale','missing_analysis','pending','unavailable','ambiguous'] as const;
 export type EvidenceState=typeof evidenceStates[number];
@@ -10,6 +12,7 @@ export interface ConsolidatedReport {
  version:'f6-increment-1';job_id:string;job_title:string;job_reference:string;batch_id:string;upload_id:string;
  criteria_revision:number;cv_source:'current_saved_score'|'interview_selection_snapshot';cv:CandidateScore;
  confirmed_requirements:ScreeningCriterion[];
+ confirmation?:ConfirmationView;
  interview:{state:EvidenceState;interview_id:string|null;operation_id:string|null;rubric_version:string|null;retention_deadline:string|null;warning:string|null;
  pairs:AnalysisResult['pairs'];requirements:AnalysisResult['requirements'];assessment:AnalysisResult['assessment']|null;
  references:AnalysisResult['technical_references'];turns:AnalysisResult['turns']};review_required:true;notice:string;
@@ -28,6 +31,9 @@ export function validReport(value:unknown,job:string,batch:string,upload:string)
  if(!validSavedBatches([{job_id:job,job_reference:r.job_reference,batch_id:batch,criteria_revision:r.criteria_revision,
   scoring_version:'f2-coverage-v1',weights:r.cv.weights,candidates:[r.cv],ranking:[]}],job,r.criteria_revision))return false;
  const i=r.interview;
+ if(r.confirmation!==undefined&&(!validConfirmation(r.confirmation)||r.confirmation.state==='confirmed'&&(
+  !r.confirmation.requirement_ids.every(id=>r.confirmed_requirements.some(c=>c.criterion_id===id))
+  ||r.confirmation.scope==='cv_interview'&&i?.state!=='available')))return false;
  if(!i||!evidenceStates.includes(i.state)||!(i.interview_id===null||uuid.test(i.interview_id)))return false;
  if(i.state!=='available')return i.operation_id===null&&i.assessment===null&&i.rubric_version===null&&i.retention_deadline===null&&i.warning===null
   &&[i.pairs,i.requirements,i.references,i.turns].every(a=>Array.isArray(a)&&a.length===0);

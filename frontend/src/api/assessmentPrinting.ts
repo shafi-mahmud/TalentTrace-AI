@@ -21,8 +21,8 @@ export async function printAssessment(load:()=>Promise<ConsolidatedReport>,host:
  const now=host.now??Date.now;
  const report=await load();
  if(signal.aborted)throw new Error('Print context changed.');
- const deadline=report.interview.state==='available'?Date.parse(report.interview.retention_deadline!):Infinity;
- if((report.interview.state==='available'&&!Number.isFinite(deadline))||deadline<=now())throw new Error('Interview evidence expired.');
+ const deadline=Math.min(report.interview.state==='available'?Date.parse(report.interview.retention_deadline!):Infinity,report.confirmation?.state==='confirmed'?Date.parse(report.confirmation.expires_at!):Infinity);
+ if(((report.interview.state==='available'||report.confirmation?.state==='confirmed')&&!Number.isFinite(deadline))||deadline<=now())throw new Error('Interview evidence expired.');
  let disposed=false;
  const releases:(()=>void)[]=[];
  const cleanup=()=>{if(disposed)return;disposed=true;activePrint=false;for(const release of releases)release();host.finished();};

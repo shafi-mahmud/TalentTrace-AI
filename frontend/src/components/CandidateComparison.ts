@@ -32,7 +32,7 @@ export default function CandidateComparison({jobId,revision,applications}:{jobId
  useEffect(()=>{
   const hidden=()=>{if(document.hidden)clear();};window.addEventListener('hashchange',clear);document.addEventListener('visibilitychange',hidden);
   let timer:ReturnType<typeof setTimeout>|undefined;
-  const deadlines=value?.reports.filter(r=>r.interview.state==='available').map(r=>Date.parse(r.interview.retention_deadline!))??[];
+  const deadlines=value?.reports.flatMap(r=>[r.interview.state==='available'?r.interview.retention_deadline:null,r.confirmation?.state==='confirmed'?r.confirmation.expires_at:null].filter((v):v is string=>!!v).map(Date.parse))??[];
   function expire(){const left=Math.min(...deadlines)-Date.now();if(left<=0)clear();else timer=setTimeout(expire,Math.min(left,86400000));}
   if(deadlines.length)expire();
   return()=>{window.removeEventListener('hashchange',clear);document.removeEventListener('visibilitychange',hidden);if(timer!==undefined)clearTimeout(timer);};
