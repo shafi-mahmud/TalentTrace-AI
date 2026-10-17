@@ -1077,3 +1077,121 @@ Paths are relative to `/home/shafi/Projects/TalentTrace-AI` (25 files):
 - `frontend/src/components/ReviewerConfirmation.ts`
 - `frontend/src/components/SuitabilityEvidence.ts`
 - `frontend/tests/reviewerConfirmation.test.ts`
+
+## Verified synthetic-home activation and development freeze — 18 October 2026
+
+This records the separately approved final activation, not a new implementation
+increment. It supersedes the earlier home-disabled deployment state; earlier
+verification sections remain historical. Scope is synthetic development only.
+
+### Backup, migration and data preservation
+
+Preflight verified `talenttrace_home` on localhost:5432, migration
+`0014_interview_analysis`, one expected recruiter, two synthetic jobs, two existing
+F2 records (one scored 100 and one unscored), and no interview/analysis records.
+Source fingerprints matched the previous release audit. No concurrent schema
+activity was found. Host free space was 3,722,600,448 bytes; PostgreSQL filesystem
+free space was 73,283,964,928 bytes.
+
+Before stopping the backend, a private 60,369-byte custom PostgreSQL archive was
+created at ignored local
+`data/home/f6-home-activation-20261018/talenttrace_home-pre-0015.dump`.
+Directory mode is 0700; archive and evidence files are 0600. Archive listing passed;
+restoration into separate `f6_test_recovery_20261018` passed with identical counts
+and fingerprints for all 20 tables, including Alembic revision 0014. This is a
+full-data recovery check, not a schema-only preservation claim. The recovery DB
+and private backup were retained. No credentials or archive data are committed.
+
+The original backend was stopped cleanly. Exactly
+`alembic upgrade 0015_reviewer_confirmation` was applied using existing configured
+home credentials without logging them. Verification found current revision 0015,
+10 constraints, 5 indexes and both deferred deletion triggers. Every pre-existing
+table's data was unchanged immediately after migration, except the intended
+Alembic version row. No unrelated migration, downgrade or destructive restore ran.
+
+After functional verification, all original recruiter/job/F2/interview/analysis/
+transcript source fingerprints remained unchanged. Expected new activity consists
+of one reviewer confirmation and ordinary authentication-session changes. No home
+interview data, F5 analysis, CV screening rerun or external inference was generated.
+
+### Active local runtime and restart verification
+
+One backend serves `127.0.0.1:8000`; the existing frontend remains on port 5173.
+Activation is session-local. Project-root `.env` is byte-for-byte unchanged.
+Runtime settings are `ENVIRONMENT=development`,
+`REVIEWER_CONFIRMATION_ENABLED=true`, with interview evaluation, durable evaluation,
+transcript storage, LiveKit synthetic/local development and email disabled.
+HF/Transformers offline settings remain enabled. No Docker rebuild, package/model
+download, external AI service or live interview was needed.
+
+The approved startup command, from the backend directory, is:
+
+```bash
+ENVIRONMENT=development REVIEWER_CONFIRMATION_ENABLED=true \
+INTERVIEW_EVALUATION_ENABLED=false INTERVIEW_EVALUATION_DURABLE_ENABLED=false \
+TRANSCRIPT_STORAGE_ENABLED=false LIVEKIT_SYNTHETIC_DEMO_ENABLED=false \
+LIVEKIT_LOCAL_DEVELOPMENT_ENABLED=false INTERVIEW_EMAIL_ENABLED=false \
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Stop the existing backend cleanly before using that command; do not start a second
+instance on port 8000. A future launch without the session-local flag will default
+to disabled confirmation. This is not an OS startup-service or permanent .env change.
+
+A synthetic recruiter authenticated successfully. Both existing saved F2 results,
+individual F6 reports and same-job comparison remained accessible. One explicit
+CV-only alignment confirmation was saved against original supported CV evidence.
+Reviewer identity, reviewed scope, structured rationale, source references and
+version 1 were validated. Unsupported concern/forged-reference submissions returned
+422 and did not alter the stored judgment. Anonymous report access returned 401.
+
+The activated backend was then cleanly stopped and restarted with the same flags
+(actual process IDs 145418 then 146702). A fresh authenticated read returned the
+identical confirmation, including reviewer, timestamps, position, scope, references
+and version. Comparison also retained it after restart. Browser sign-in/discovery
+and the visible confirmed report passed on the normal home frontend. Screenshot:
+ignored local `data/home/f6-home-activation-20261018/home-confirmation-verified.png`.
+
+### Executed final checks
+
+Existing regression fixtures were run ONLY against retained disposable
+`f6_test_release_20261017`, not by modifying home source records:
+
+```text
+F6_HOME_PG_TEST=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+.venv/bin/python -m pytest tests/test_consolidated_assessment.py
+ tests/test_candidate_comparison.py tests/test_assessment_discovery.py
+ tests/test_comparison_snapshot.py tests/test_reviewer_confirmation.py -q --tb=short
+```
+
+The private launcher supplied that exact disposable DATABASE_URL from existing
+credentials without printing them. Result: **111 passed, 0 failed/skipped**,
+including staleness, consent/withdrawal, deletion, expiry, authorization, cleanup
+failure and independent-connection concurrency cases. No new live interview data
+was captured or generated; the suite used its existing synthetic test artifacts.
+
+Frontend `pnpm test`: **231 passed, 0 failed/skipped**. `pnpm build`: TypeScript and
+Vite passed; existing LiveKit chunk warning remains. Two instrumented home read
+checks, before and after restart, covered eight report/score/comparison GETs with
+46 SQL statements: **zero writes and zero inference invocations**. Authentication
+and explicit confirmation are intentional mutations, distinct from these GETs.
+
+Private activation results and logs are under ignored
+`data/home/f6-home-activation-20261018/`. Final host free space measured
+3,716,378,624 bytes. The backup/recovery clone were preserved without touching
+existing Docker volumes or deleting development records.
+
+### Freeze and acceptance limits
+
+**F6 SYNTHETIC HOME ACTIVATION PASSED.** Feature development is frozen for BJIT viva
+preparation. Only this activation documentation/ADR is changed by the final task;
+no new implementation increment is started, and no further push/merge is approved.
+
+This is not full F6 BID or production acceptance. Native PDF/cancellation/pagination
+acceptance, lost historical/unscored F2 requirement evidence, explicit analysis-
+version selection, application-wide CV retention/deletion policy, non-synthetic
+activation controls and production privacy acceptance remain outstanding. Existing
+home interview evidence is absent and transcript serving remains disabled; its
+privacy cases were verified on disposable synthetic fixtures, not asserted as a
+new home interview demonstration. External saved PDFs/paper cannot be revoked.

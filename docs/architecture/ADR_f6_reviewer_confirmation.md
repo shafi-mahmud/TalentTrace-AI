@@ -102,3 +102,18 @@ on the existing PostgreSQL image. No production/private home data is migrated.
 No model or external API calls are needed. Full native print acceptance, F2 lost
 unscored matches, application-wide deletion/retention policy, delegated reviewers,
 full history and explicit ambiguous-analysis selection remain separate work.
+
+## Deployment update — 18 October 2026, synthetic home only
+
+Following separately approved backup/recovery verification, the normal
+`talenttrace_home` database is now at `0015_reviewer_confirmation`. The original
+source records and project-root `.env` were preserved. Session-local development
+activation is enabled; inference, transcript storage, email and LiveKit demos
+remain disabled. One CV-only confirmation survived an actual home backend restart.
+The full private pre-migration backup was restored and verified in a separate
+recovery DB before migration. See the final activation section of
+`../f6_consolidated_assessment.md` for commands, counts and limitations.
+
+This updates the earlier deployment state, not the evidence/privacy architecture.
+It is neither permanent OS startup configuration nor non-synthetic acceptance.
+Feature development is frozen for BJIT viva preparation; no new feature is implied.
