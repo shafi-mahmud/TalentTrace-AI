@@ -1047,3 +1047,33 @@ The saved record identifies who reviewed which requirements and source versions.
 Fingerprints detect changed evidence; authorization and retention still run on
 every read. Withdrawal hides the dependent judgment immediately, even if physical
 cleanup has to retry. Missing evidence is never converted into a low score.”
+
+### Exact Increment 5B changed-file manifest
+
+Paths are relative to `/home/shafi/Projects/TalentTrace-AI` (25 files):
+
+- `backend/alembic/versions/0015_reviewer_confirmation.py`
+- `backend/app/api/routers/consolidated_assessment.py`
+- `backend/app/core/config.py`
+- `backend/app/db/models/__init__.py`
+- `backend/app/db/models/reviewer_confirmation.py`
+- `backend/app/main.py`
+- `backend/app/schemas/consolidated_assessment.py`
+- `backend/app/schemas/reviewer_confirmation.py`
+- `backend/app/services/confirmation_runtime.py`
+- `backend/app/services/consolidated_assessment.py`
+- `backend/app/services/reviewer_confirmation.py`
+- `backend/app/services/transcript_privacy.py`
+- `backend/tests/test_comparison_snapshot.py`
+- `backend/tests/test_consolidated_assessment.py`
+- `backend/tests/test_reviewer_confirmation.py`
+- `docs/architecture/ADR_f6_reviewer_confirmation.md`
+- `docs/f6_consolidated_assessment.md`
+- `frontend/src/api/assessmentPrinting.ts`
+- `frontend/src/api/consolidatedAssessment.ts`
+- `frontend/src/api/reviewerConfirmation.ts`
+- `frontend/src/components/CandidateComparison.ts`
+- `frontend/src/components/ConsolidatedAssessment.ts`
+- `frontend/src/components/ReviewerConfirmation.ts`
+- `frontend/src/components/SuitabilityEvidence.ts`
+- `frontend/tests/reviewerConfirmation.test.ts`
