@@ -59,3 +59,29 @@ provides separate, deployment-specific enforcement evidence.
 Existing LiveKit, F11, SMTP, inference and public-network services are not part
 of this lab. Cached LiveKit tokens for real interviews are not invalidated by
 these controls. External copies, backups and WAL are not erased by local cleanup.
+
+## Final-attempt checkpoint — PARTIAL
+
+Implemented and exercised: isolated provisioning through migration 0015,
+non-superuser application/maintenance roles, actual active-client refusal,
+application database admission denial, application storage denial, unexpected
+volume-mount refusal, and maintenance state surviving a worker restart.
+The deployed `check` command also passed after the control test. Only the newly
+created lab worker was restarted; preserved demo services were not targeted.
+Focused validation: 37 tests passed with `N19_TEST_PG=1` from `backend/`
+(`test_candidate_inventory`, `test_deletion_preflight`, `test_interview_access`,
+`test_livekit_interview`); syntax and `git diff --check` passed. An initial pytest
+invocation from the repository root failed collection because `app` was not on
+the import path; rerunning from the documented backend working directory passed.
+
+Not implemented: destructive candidate CLI, deletion journal/tombstones,
+import suppression, dependency-ordered database cleanup, file cleanup, interrupted
+cleanup recovery, and verified candidate-data absence. No candidate deletion was
+executed. The unfinished draft was removed before closure; no new migration or
+importer behavior is included in this increment. N19 remains incomplete.
+
+The lab remains blocked in maintenance mode. Do not restore application access
+or attach existing data. The next increment must implement and test the journal,
+conservative association checks, selective deletion and importer suppression
+inside this lab before claiming deletion acceptance. Generic inventory/preflight
+output remains a preview, never execution authorization.
