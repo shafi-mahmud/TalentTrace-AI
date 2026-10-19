@@ -197,3 +197,10 @@ current generation. Polling only reads a short-lived suggestion. Withdrawal chan
 that generation and clears the result, so a slow old calculation or HTTP response
 cannot legitimately restore it. The model-free graph offers a question, not a
 candidate judgment. Live recognition integration remains a separate increment.
+
+## Subsequent 5C implementation
+
+The scope/status statements above describe that increment at its original commit.
+The [5C integration record](f11_copilot_live.md) now documents the separately gated
+trusted F4 adapter, tests and blocked live-runtime prerequisites. Live F11
+acceptance remains unverified; default settings remain OFF.

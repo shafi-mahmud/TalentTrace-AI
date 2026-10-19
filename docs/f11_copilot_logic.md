@@ -310,3 +310,10 @@ gate and is a basis for a separately approved 5B, not live F11 acceptance.
 offline logic. It remains default off and has no live recognized-speech hook.
 The earlier planned 5B section describes the design intent; the delivery guide
 records the implemented scope, tests and process-local limitations.
+
+## Subsequent 5C implementation
+
+The scope/status statements above describe that increment at its original commit.
+The [5C integration record](f11_copilot_live.md) now documents the separately gated
+trusted F4 adapter, tests and blocked live-runtime prerequisites. Live F11
+acceptance remains unverified; default settings remain OFF.
