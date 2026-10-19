@@ -22,6 +22,7 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     if(name==="livekit-client")return {Room,RoomEvent:{},Track:{Source:{},Kind:{}},setLogLevel(){}};
     if(name==="../api/livekitInterview")return {interviewAccess:async()=>({server_url:"wss://synthetic.invalid",token:"synthetic"})};
     if(name==="./TranscriptPanel")return {__esModule:true,default:()=>null};
+    if(name==="./InterviewCopilot")return {__esModule:true,default:()=>null};
     if(name==="./InterviewAnalysis")return {__esModule:true,default:()=>null};
     if(name==="./InterviewCaptions")return {__esModule:true,default:Panel};
     if(name==="./syntheticInterviewMedia")return {syntheticInterviewMedia:()=>{throw Error("No generated/physical audio in this test");}};
@@ -62,7 +63,7 @@ test('disconnect during initial connect does not hide sanitized stage diagnostic
     if(name==='livekit-client')return {Room,RoomEvent:{Disconnected:'disconnected'},Track:{Source:{},Kind:{}},setLogLevel(){}};
     if(name==='../api/livekitInterview')return {interviewAccess:async()=>({server_url:'ws://127.0.0.1:7880',token:'synthetic'}),InterviewAccessError:class extends Error{}};
     if(name==='./syntheticInterviewMedia')return {syntheticInterviewMedia:()=>({dispose(){}})};
-    if(['./TranscriptPanel','./InterviewAnalysis','./InterviewCaptions'].includes(name))return {__esModule:true,default:()=>null};
+    if(['./TranscriptPanel','./InterviewAnalysis','./InterviewCaptions','./InterviewCopilot'].includes(name))return {__esModule:true,default:()=>null};
     return require(name);
   }});
   function render(){si=0;ri=0;return exports.default({jobId:'synthetic',interview:{id:'synthetic'},onBack(){}});}

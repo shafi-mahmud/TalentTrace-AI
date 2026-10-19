@@ -37,9 +37,19 @@ async def lifespan(app):
     from app.api.routers.interview_analysis import available,manager
     analysis=manager() if available() else None
     analysis_cleanup=asyncio.create_task(analysis.maintain()) if analysis else None
+    from app.services.copilot_delivery import delivery
+    async def copilot_cleanup():
+        while True:
+            delivery.sweep()
+            await asyncio.sleep(1)
+    copilot_task = asyncio.create_task(copilot_cleanup()) if settings.interview_copilot_enabled else None
     try:
         yield
     finally:
+        if copilot_task:
+            copilot_task.cancel()
+            await asyncio.gather(copilot_task, return_exceptions=True)
+        delivery.clear()
         if confirmations:
             confirmations.cancel()
             await asyncio.gather(confirmations,return_exceptions=True)

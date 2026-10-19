@@ -303,3 +303,10 @@ JUnit output `data/f11-5a-hardening-tests.xml`. The skipped real caption-worker 
 still requires an explicitly supplied local model; no model, provider, database,
 service or browser activation was performed. This passes the scoped offline quality
 gate and is a basis for a separately approved 5B, not live F11 acceptance.
+
+## Implemented 5B delivery follow-on
+
+[Secure delivery and independent consent](f11_copilot_delivery.md) now wraps this
+offline logic. It remains default off and has no live recognized-speech hook.
+The earlier planned 5B section describes the design intent; the delivery guide
+records the implemented scope, tests and process-local limitations.

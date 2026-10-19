@@ -90,6 +90,8 @@ class TranscriptPrivacyService:
                 row.transcript_storage_revoked_at = self.clock()
             if row.transcript_deletion_status != 'deleted':
                 row.transcript_deletion_status = 'pending'
+        from app.services.copilot_delivery import delivery
+        delivery.invalidate(interview_id)
         try:
             await self.delete_revoked(owner, interview_id)
         except TranscriptError:

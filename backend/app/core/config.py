@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     livekit_synthetic_demo_enabled: bool = False
     local_caption_model_path: Path | None = None
     local_caption_test_duration_seconds: int = Field(default=120, ge=120, le=300)
+    interview_copilot_enabled: bool = False
     transcript_storage_enabled: bool = False
     reviewer_confirmation_enabled: bool = False
     transcript_cleanup_interval_seconds: int = Field(default=60, ge=10, le=3600)
