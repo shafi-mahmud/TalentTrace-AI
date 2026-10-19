@@ -10,6 +10,7 @@
 ## Documentation Directory (/docs)
 
 * [N19 submission data inventory](docs/n19_candidate_inventory.md) — read-only administrative dry-run; deletion is not implemented.
+* [N19 maintenance preflight](docs/n19_maintenance_preflight.md) — read-only observations and manifest; exclusive maintenance and deletion remain blocked.
 * [F11 Increment 5C: trusted recognized-speech adapter](docs/f11_copilot_live.md) — default off; automated integration verified, live Docker/browser gate blocked.
 * [F11 Increment 5B: secure delivery and separate consent](docs/f11_copilot_delivery.md) — default off; internal synthetic events only, no live speech hook.
 * [F11 Increment 5A: offline contextual co-pilot logic](docs/f11_copilot_logic.md) — logic only; not a live or completed Innovation Feature.
