@@ -1,6 +1,18 @@
 # Isolated Docker synthetic startup
 
-> **19 October release clarification:** Release checkpoint: office baseline startup evidence below does not establish complete application startup on a clean machine. Live media/STT/evaluation prerequisites remain outside the enabled baseline; current-source rebuild and full-feature acceptance are pending. See the [release checkpoint](release_candidate_checkpoint.md).
+> **19 October release clarification:** Release checkpoint: office baseline startup evidence below does not establish complete application startup on a clean machine. Live media/STT/evaluation prerequisites remain outside the enabled baseline; current-source baseline rebuild passed at `b3c00db`; full-feature/clean-machine acceptance remains pending. See the [release checkpoint](release_candidate_checkpoint.md).
+
+## Later release-candidate validation — 19 October 2026
+
+Source `b3c00db` was built into a separate disposable Compose project. Empty
+PostgreSQL was explicitly migrated through 0015. Seven integration checks passed:
+private networking, schema identity, safe defaults, frontend/API/private-path
+routing, disabled-caption WebSocket rejection, synthetic authentication and full
+container recreation with database/session/file-marker persistence. Eight Docker
+helper tests and 31 selected backend tests passed. TypeScript/Vite build passed.
+Earlier office containers were unchanged. Subsequent commits through 5b6f172 are
+documentation only; this does not claim a fresh-machine or full-feature test.
+Private detailed logs remain outside Git. See the [home handover](office_home_handover.md).
 
 ## Implemented scope
 

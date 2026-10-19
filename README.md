@@ -9,6 +9,10 @@
 
 ## Pre-viva release-candidate checkpoint — 19 October 2026
 
+Published private release branch: `feature/pre-viva-release-docs` at `5b6f172`.
+[October 20–21 Linux home handover](docs/office_home_handover.md).
+Later handover documentation may remain local pending push approval.
+
 **PARTIAL BID acceptance.** Proposed code base: `176ba82` on
 `feature/f11-copilot-live-integration`. This documentation checkpoint does not
 activate features, migrate data or publish a release.
