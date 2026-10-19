@@ -62,7 +62,17 @@ class Event(Contract):
     source: Source
     role: Literal['recruiter', 'candidate']
     timestamp_ms: int = Field(ge=0)
+    audio_start_ms: int | None = Field(default=None, ge=0, le=300000)
+    audio_end_ms: int | None = Field(default=None, ge=0, le=300000)
     text: str = Field(max_length=1000, repr=False)
+
+    @model_validator(mode='after')
+    def audio_interval(self):
+        if (self.audio_start_ms is None) != (self.audio_end_ms is None):
+            raise ValueError('Both audio interval boundaries required.')
+        if self.audio_start_ms is not None and self.audio_end_ms < self.audio_start_ms:
+            raise ValueError('Invalid audio interval.')
+        return self
 
     @field_validator('text')
     @classmethod

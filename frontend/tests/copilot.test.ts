@@ -43,7 +43,7 @@ test('candidate rejects suggestion/coverage payloads and recruiter rejects unsaf
   assert.equal(api.validStatus(candidate,true),true);
   assert.equal(api.validStatus({...candidate,exploration:[]},true),false);
   for(const patch of [{status:'withdrawn'},{candidate_consented:false},{suggestion:{...suggestion,question:'x\x00'}},
-    {suggestion:{...suggestion,provisional:false}},{expires_in_ms:120001},{live_connected:true}])
+    {suggestion:{...suggestion,provisional:false}},{expires_in_ms:120001},{live_connected:'invalid'}])
     assert.equal(api.validStatus({...view(),...patch},false),false);
 });
 
@@ -134,4 +134,11 @@ test('withdrawal can interrupt a slow poll and late response cannot restore sugg
   resolve(view());await h.tick();tree=h.render();
   assert.equal(button(tree,'Dismiss / Ignore'),undefined);
   assert.ok(nodes(tree).some(n=>n.props?.role==='status'&&String(n.props.children).includes('withdrawn')));
+});
+
+
+test('live adapter status is supported without implying technical assessment',()=>{
+  assert.equal(api.validStatus({...view(),live_connected:true},false),true);
+  const {suggestion:_,processing:__,...candidate}=view();
+  assert.equal(api.validStatus({...candidate,live_connected:true},true),true);
 });

@@ -3,7 +3,7 @@ import * as api from '../api/copilot';
 import type {Context,Status} from '../api/copilot';
 
 export default function InterviewCopilot({candidate,jobId,interviewId,connected}:Context&{connected:boolean}){
-  const [enabled,setEnabled]=useState<boolean|null>(null);const [wording,setWording]=useState('');
+  const [enabled,setEnabled]=useState<boolean|null>(null);const [wording,setWording]=useState('');const [liveEnabled,setLiveEnabled]=useState(false);
   const [value,setValue]=useState<Status|null>(null);const [agreed,setAgreed]=useState(false);
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);
   const fence=useRef(new api.ResponseFence());const inflight=useRef<number|null>(null);
@@ -21,7 +21,7 @@ export default function InterviewCopilot({candidate,jobId,interviewId,connected}
   }
   useEffect(()=>{
     let active=true;fence.current.clear();setValue(null);current.current=null;setAgreed(false);setEnabled(null);
-    void api.config().then(v=>{if(active){setEnabled(v.enabled);setWording(v.wording);}})
+    void api.config().then(v=>{if(active){setEnabled(v.enabled);setWording(v.wording);setLiveEnabled(v.live_enabled===true);}})
       .catch(()=>{if(active)setError('Assistant configuration unavailable.');});
     return()=>{active=false;fence.current.clear();};
   },[candidate,jobId,interviewId]);
@@ -55,7 +55,7 @@ export default function InterviewCopilot({candidate,jobId,interviewId,connected}
   const own=candidate?value?.candidate_consented:value?.recruiter_consented;
   return <section className="card" aria-label={candidate?'Interview assistant consent':'Interviewer co-pilot'}>
     <h2>{candidate?'Interview assistant consent':'Interviewer co-pilot'}</h2>
-    <p>Live suggestions are not connected in Increment 5B. Internal synthetic tests only.</p>
+    <p>{liveEnabled?"Local F4 adapter enabled. Connect both caption participants, prepare this run and independently consent before synthetic speech. Recognition and relevance are not guaranteed.":"Live suggestions are not connected. Internal synthetic tests only."}</p>
     {error&&<p role="alert">{error}</p>}
     {enabled===null?<p>Assistant configuration unavailable.</p>:!enabled?<p>Interview assistant is disabled.</p>:<>
       <p>{wording}</p><p role="status">{!connected?'Join the interview to review consent.':value?`Assistant: ${value.status}`:'Assistant status unavailable.'}</p>
@@ -70,7 +70,7 @@ export default function InterviewCopilot({candidate,jobId,interviewId,connected}
       </>}
       {!candidate&&connected&&value?.status==='authorized'&&(value.suggestion?<article aria-label="Provisional question suggestion">
         <h3>Provisional follow-up</h3><p>{value.suggestion.question}</p><p>Requirement: {value.suggestion.requirement}</p><p>{value.suggestion.reason}</p>
-        <button disabled={busy} onClick={()=>void action('dismiss')}>Dismiss / Ignore</button></article>:<p>Waiting for context. Live speech is not connected.</p>)}
+        <button disabled={busy} onClick={()=>void action('dismiss')}>Dismiss / Ignore</button></article>:<p>{value.live_connected?"Waiting for authorized recognized speech or an eligible follow-up.":"Waiting for context. Live speech is not connected."}</p>)}
     </>}
   </section>;
 }

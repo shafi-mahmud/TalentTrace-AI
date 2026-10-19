@@ -1,6 +1,7 @@
-"""Bounded process-local delivery. No F4 ingestion, database writes or providers."""
+"""Bounded process-local delivery. No database writes or providers."""
 from dataclasses import dataclass, field
 import threading
+import math
 import time
 from uuid import UUID, uuid4
 
@@ -45,6 +46,7 @@ class Run:
     result: object = None
     result_until: float = 0
     busy: bool = False
+    live: bool = False
 
 
 class Delivery:
@@ -58,6 +60,16 @@ class Delivery:
         self.clock = clock
         self.lock = threading.RLock()
         self.runs = {}
+        self.listeners = {}
+
+    def listen(self, interview, callback):
+        with self.lock:
+            self.listeners[interview] = callback
+
+    def unlisten(self, interview, callback):
+        with self.lock:
+            if self.listeners.get(interview) == callback:
+                self.listeners.pop(interview, None)
 
     def clear_run(self, run):
         run.epoch += 1
@@ -69,6 +81,12 @@ class Delivery:
         run.logic = None
         run.result = None
         run.busy = False
+        callback = self.listeners.get(run.access.interview)
+        if callback:
+            try:
+                callback()
+            except Exception:
+                pass  # Assistant cleanup never propagates to F4/privacy.
 
     def invalidate(self, interview):
         with self.lock:
@@ -80,6 +98,7 @@ class Delivery:
             for run in self.runs.values():
                 self.clear_run(run)
             self.runs.clear()
+            self.listeners.clear()
 
     def sweep(self):
         with self.lock:
@@ -104,7 +123,7 @@ class Delivery:
             self.clear_run(run)
         return run
 
-    def prepare(self, access):
+    def prepare(self, access, *, caption_run_id=None):
         with self.lock:
             self.sweep()
             if access.blocked or self.clock() >= access.deadline:
@@ -112,10 +131,10 @@ class Delivery:
             if access.interview not in self.runs and len(self.runs) >= 32:
                 raise Unavailable('copilot_capacity')
             self.invalidate(access.interview)
-            binding = Binding(interview_id=access.interview, run_id=uuid4(), caption_run_id=uuid4(),
+            binding = Binding(interview_id=access.interview, run_id=uuid4(), caption_run_id=caption_run_id or uuid4(),
                 criteria_revision=access.revision, requirements=access.requirements)
             now = self.clock()
-            self.runs[access.interview] = Run(access, binding, now, min(now + 120, access.deadline))
+            self.runs[access.interview] = Run(access, binding, now, min(now + 120, access.deadline), live=caption_run_id is not None)
             return self.view(access)
 
     def identity(self, run, run_id, epoch):
@@ -135,7 +154,7 @@ class Delivery:
             else:
                 run.consents.add(role)
                 if len(run.consents) == 2 and run.logic is None:
-                    run.active_after_ms = int((self.clock() - run.born) * 1000)
+                    run.active_after_ms = math.ceil((self.clock() - run.born) * 1000)
                     run.logic = CopilotLogic(run.binding)
             return self.view(access)
 
@@ -144,7 +163,7 @@ class Delivery:
             run = self.checked(access)
             status = 'unavailable' if run is None else 'withdrawn' if run.revoked else (
                 'authorized' if len(run.consents) == 2 else 'awaiting_consent')
-            value = dict(enabled=True, live_connected=False, version=VERSION, wording=DISCLOSURE,
+            value = dict(enabled=True, live_connected=bool(run and run.live and not run.revoked), version=VERSION, wording=DISCLOSURE,
                 status=status, run_id=str(run.binding.run_id) if run else None,
                 epoch=run.epoch if run else 0, recruiter_consented=bool(run and 'recruiter' in run.consents),
                 candidate_consented=bool(run and 'candidate' in run.consents),
@@ -159,7 +178,7 @@ class Delivery:
                         requirement = next(r for r in run.binding.requirements if r.id == suggestion.criterion_id)
                         value['suggestion'] = dict(id=fingerprint(suggestion), question=suggestion.question,
                             requirement=requirement.description, provisional=True,
-                            reason='Internal synthetic source events '+', '.join(str(s.sequence) for s in suggestion.sources)
+                            reason=('Recognized caption source events ' if run.live else 'Internal synthetic source events ')+', '.join(str(s.sequence) for s in suggestion.sources)
                             +'; lexical association only, not a competence assessment.')
             return value
 
@@ -176,8 +195,38 @@ class Delivery:
             run.result = None
             return self.view(access, recruiter=True)
 
+    def live_context(self, interview, caption_run_id):
+        with self.lock:
+            self.sweep()
+            run = self.runs.get(interview)
+            if (not run or not run.live or run.revoked or len(run.consents) != 2
+                    or run.binding.caption_run_id != caption_run_id):
+                return None
+            return run.binding, run.epoch, run.born, run.born + run.active_after_ms / 1000
+
+    def hide_result(self, interview):
+        with self.lock:
+            run = self.runs.get(interview)
+            if run:
+                run.result = None
+
+    def publish_live(self, access, run_id, epoch, result, guard):
+        with self.lock:
+            run = self.checked(access)
+            self.identity(run, run_id, epoch)
+            if run.revoked or len(run.consents) != 2 or not guard():
+                raise Unavailable('copilot_context_changed')
+            run.result = result
+            run.result_until = min(run.expires, self.clock()+15)
+
+    def submit_live(self, access, update, guard):
+        return self._submit(access, update, live=True, guard=guard)
+
     def submit_synthetic(self, access, update: Update):
-        """Internal TEST seam only. No route imports or calls this method.
+        return self._submit(access, update)
+
+    def _submit(self, access, update: Update, *, live=False, guard=lambda: True):
+        """Internal bounded processor. Public routes never submit transcript events.
 
         Use original run-relative timestamps strictly after two-party consent;
         never remap pre-consent events to make them eligible.
@@ -186,6 +235,7 @@ class Delivery:
         with self.lock:
             run = self.checked(access)
             if (not run or run.revoked or len(run.consents) != 2 or not run.logic or run.busy
+                    or run.live != live or not guard()
                     or update.binding != run.binding or not update.events
                     or any(e.timestamp_ms <= run.active_after_ms for e in update.events)):
                 raise Unavailable('copilot_context_unavailable')
@@ -203,9 +253,13 @@ class Delivery:
             raise Unavailable('copilot_processing_unavailable') from None
         with self.lock:
             current = self.checked(access)
-            if current is not run or run.epoch != epoch or run.revoked:
+            if current is not run or run.epoch != epoch or run.revoked or not guard():
+                if current is run:
+                    run.busy = False
                 raise Unavailable('copilot_context_changed')
             run.busy = False
+            if live:
+                return result
             run.result = result
             run.result_until = min(run.expires, self.clock()+15)
             return self.view(access, recruiter=True)

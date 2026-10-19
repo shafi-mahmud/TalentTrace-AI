@@ -283,7 +283,7 @@ def test_singleton_storage_withdrawal_hook_clears_before_cleanup(monkeypatch,run
 def test_no_f4_shared_broadcast_or_public_capture_hook_and_capacity(runtime):
     from pathlib import Path
     source=Path('app/api/routers/interview_captions.py').read_text(encoding='utf-8')
-    assert 'copilot' not in source
+    assert 'submit_live(' not in source  # no public event-ingestion path
     manager,access,clock=runtime
     for _ in range(31):manager.prepare(replace(access,interview=uuid4()))
     with pytest.raises(Unavailable):manager.prepare(replace(access,interview=uuid4()))

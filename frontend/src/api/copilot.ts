@@ -4,7 +4,7 @@ const uuid=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 export const version='local-copilot-v1';
 export interface Context {candidate:boolean;jobId?:string;interviewId?:string;}
 export interface Suggestion {id:string;question:string;requirement:string;reason:string;provisional:true;}
-export interface Status {enabled:boolean;live_connected:false;version:string;wording:string;
+export interface Status {enabled:boolean;live_connected:boolean;version:string;wording:string;
   status:'unavailable'|'withdrawn'|'authorized'|'awaiting_consent';run_id:string|null;epoch:number;
   recruiter_consented:boolean;candidate_consented:boolean;expires_in_ms:number;suggestion?:Suggestion|null;processing?:string;}
 export class ResponseFence {
@@ -27,7 +27,7 @@ async function request(path:string,body?:unknown){
 }
 export function validStatus(v:any,candidate:boolean):v is Status {
   const text=(s:any,n:number)=>typeof s==='string'&&s.length<=n&&!/[\u0000-\u001f\u007f-\u009f]/.test(s);
-  return !!v&&v.enabled===true&&v.live_connected===false&&v.version===version&&text(v.wording,1500)
+  return !!v&&v.enabled===true&&typeof v.live_connected==='boolean'&&v.version===version&&text(v.wording,1500)
     &&['unavailable','withdrawn','authorized','awaiting_consent'].includes(v.status)
     &&(v.run_id===null||uuid.test(v.run_id))&&Number.isInteger(v.epoch)&&v.epoch>=0
     &&Number.isInteger(v.expires_in_ms)&&v.expires_in_ms>=0&&v.expires_in_ms<=120000
@@ -41,8 +41,8 @@ export function validStatus(v:any,candidate:boolean):v is Status {
 function checked(v:any,c:Context){if(!validStatus(v,c.candidate))throw Error('Assistant response unavailable.');return v;}
 export async function config(){
   const v=await request('/interview-copilot/config');
-  if(typeof v?.enabled!=='boolean'||v.live_connected!==false||v.version!==version||typeof v.wording!=='string'||v.wording.length>1500)throw Error('Assistant configuration unavailable.');
-  return v as {enabled:boolean;live_connected:false;version:string;wording:string};
+  if(typeof v?.enabled!=='boolean'||typeof v.live_connected!=='boolean'||v.version!==version||typeof v.wording!=='string'||v.wording.length>1500)throw Error('Assistant configuration unavailable.');
+  return v as {enabled:boolean;live_connected:boolean;version:string;wording:string;live_enabled?:boolean};
 }
 export async function status(c:Context){return checked(await request(path(c)),c);}
 export async function prepare(c:Context){if(c.candidate)throw Error('Recruiter only.');return checked(await request(path(c)+'/prepare',{}),c);}

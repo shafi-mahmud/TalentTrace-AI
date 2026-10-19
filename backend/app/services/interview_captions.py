@@ -2,6 +2,7 @@
 import asyncio
 import time
 from collections import deque
+from uuid import uuid4
 from app.integrations.stt.local_whisper import MAX_CHUNK_BYTES
 
 ROLES = {"recruiter", "candidate"}
@@ -14,6 +15,10 @@ class CaptionSession:
     def __init__(self, provider_factory, clock=time.monotonic, duration_seconds=120, authorization_deadline=None, storage=None):
         if isinstance(duration_seconds, bool) or not isinstance(duration_seconds, int) or not 120 <= duration_seconds <= 300:
             raise ValueError("Bounded caption duration required")
+        self.caption_run_id = uuid4()
+        self.started_wall = None
+        self.assistant = None
+        self.assistant_access = None
         self.duration_seconds = duration_seconds
         self.authorization_deadline = authorization_deadline
         self.factory, self.clock = provider_factory, clock
@@ -79,6 +84,7 @@ class CaptionSession:
                     if self.storage:
                         await self.storage.start()
                     self.started = self.clock()
+                    self.started_wall = time.time()
                     await self.broadcast({"kind": "active", "duration_seconds": self.duration_seconds})
                 except Exception:
                     await self.stop()
@@ -92,6 +98,7 @@ class CaptionSession:
                 await asyncio.shield(self.cleanup_task)
             return
         self.stopped = True
+        self._close_assistant()
         self.consent.clear()
         for buffer in self.buffers.values():
             buffer.clear()
@@ -101,6 +108,13 @@ class CaptionSession:
         if self.finalizer and self.finalizer is not asyncio.current_task():
             self.finalizer.cancel()
         await asyncio.shield(self.cleanup_task)
+
+    def _close_assistant(self):
+        if self.assistant:
+            try:
+                self.assistant.close()
+            except Exception:
+                pass  # Optional assistant cannot break captions or finalization.
 
     async def _cleanup(self):
         await asyncio.gather(*(asyncio.wait_for(p.close(), 2) for p in self.providers.values()), return_exceptions=True)
@@ -128,6 +142,7 @@ class CaptionSession:
             raise ValueError('Normal finalization unavailable')
         if self.finishing:
             return
+        self._close_assistant()
         if self.storage:
             await self.storage.begin_finish()
             if self.storage.grace_until is not None:
@@ -203,6 +218,11 @@ class CaptionSession:
             self.sequence += 1
             event = {"kind":"caption", "role":role, "sequence":self.sequence,
                      "start":start, "end":end, "text":text}
+            if self.assistant:
+                try:
+                    self.assistant.offer(self.caption_run_id, self.started_wall, event)
+                except Exception:
+                    self._close_assistant()
             await self.broadcast(event)
             self.caption_events[role] += 1
             if self.storage:

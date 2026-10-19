@@ -46,6 +46,7 @@ def enabled():
 @router.get('/interview-copilot/config')
 async def configuration():
     return dict(enabled=settings.interview_copilot_enabled, live_connected=False,
+        live_enabled=settings.interview_copilot_live_enabled,
         version=VERSION, wording=DISCLOSURE)
 
 
@@ -128,7 +129,15 @@ async def candidate_status(request: Request, db=Depends(database_session)):
 async def prepare(job: UUID, interview: UUID, request: Request, body: Empty, db=Depends(database_session)):
     await protect_mutation(request)
     scope = await access(request, db, job, interview)
-    return apply(delivery.prepare, scope)
+    caption_run_id = None
+    if settings.interview_copilot_live_enabled:
+        from app.api.routers.interview_captions import sessions
+        caption = sessions.get(interview)
+        if (caption is None or caption.stopped or caption.finishing or caption.assistant is None or caption.assistant.closed
+                or not settings.livekit_synthetic_demo_enabled or settings.environment != 'development'):
+            raise HTTPException(409, 'Connect the authorized synthetic caption participants before preparing the assistant.')
+        caption_run_id = caption.caption_run_id
+    return apply(delivery.prepare, scope, caption_run_id=caption_run_id)
 
 
 async def decide(request, db, body, job=None, interview=None):

@@ -90,6 +90,27 @@ async def serve(socket, job_id=None, interview_id=None):
                 duration_seconds=settings.local_caption_test_duration_seconds,
                 storage=CaptionTranscript(runtime(),key) if settings.transcript_storage_enabled else None)
         session = sessions[key]
+        try:
+            if settings.interview_copilot_enabled and settings.interview_copilot_live_enabled and session.assistant is None:
+                from app.services.copilot_delivery import delivery
+                from app.services.copilot_live import LiveBridge
+                async def assistant_scope():
+                    await session._check_access()
+                    if session.assistant_access is None:
+                        raise ValueError('Recruiter assistant authorization unavailable')
+                    return await session.assistant_access()
+                session.assistant = LiveBridge(key, session.caption_run_id, delivery, assistant_scope)
+        except Exception:
+            # Optional integration setup cannot reject an otherwise valid F4 socket.
+            session._close_assistant()
+            session.assistant = None
+        if role == 'recruiter':
+            async def assistant_access():
+                from app.api.routers.interview_copilot import access
+                request = Request({**socket.scope, 'type':'http', 'method':'GET'})
+                async with session_factory()() as db:
+                    return await access(request, db, job_id, interview_id)
+            session.assistant_access = assistant_access
         deadline = time.monotonic() + max(0, (expires - datetime.now(timezone.utc)).total_seconds())
         session.authorization_deadline = min(session.authorization_deadline, deadline) if session.authorization_deadline is not None else deadline
         await socket.accept()
