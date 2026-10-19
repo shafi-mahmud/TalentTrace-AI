@@ -1,5 +1,7 @@
 # F11 Increment 5C: trusted F4 recognized-speech integration
 
+> **19 October release clarification:** Release checkpoint: the live adapter and automated synthetic integration are implemented. The later local Windows runtime was prepared and media connectivity tested, but physical speech-to-F11 suggestion acceptance remains pending. Earlier Docker-runtime inspection below is historical, not a claim that no local host STT runtime exists. See the [release checkpoint](release_candidate_checkpoint.md).
+
 ## Status and activation gate
 
 Implemented on `feature/f11-copilot-live-integration`, based on 5B `8c3957e`.

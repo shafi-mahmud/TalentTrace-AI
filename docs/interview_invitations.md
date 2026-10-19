@@ -1,5 +1,7 @@
 # F3 Increment 2B — two-role interview access
 
+> **19 October release clarification:** Self-hosted LiveKit security qualification: the Cloud-oriented removal descriptions below are historical implementation notes, not a guarantee for self-hosted 1.13.10. Already-issued/refreshed JWTs may remain usable after local revocation or participant removal. No durable room-generation isolation is implemented. Do not treat rotation as proven secure media-token invalidation. See the [release checkpoint](release_candidate_checkpoint.md).
+
 ## Implemented
 
 The recruiter opens a current owned schedule, generates an invitation and copies

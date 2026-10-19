@@ -1,5 +1,7 @@
 # Isolated Docker synthetic startup
 
+> **19 October release clarification:** Release checkpoint: office baseline startup evidence below does not establish complete application startup on a clean machine. Live media/STT/evaluation prerequisites remain outside the enabled baseline; current-source rebuild and full-feature acceptance are pending. See the [release checkpoint](release_candidate_checkpoint.md).
+
 ## Implemented scope
 
 Increment 1 adds three services without changing hiring logic:

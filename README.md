@@ -7,18 +7,40 @@
 * **BID Reference**: Version 1.0 (Pages 1–34)
 * **Author**: Shafi Mahmud
 
-## Documentation Directory (/docs)
-* [F11 Increment 5C: trusted recognized-speech adapter](docs/f11_copilot_live.md) — default off; automated integration verified, live Docker/browser gate blocked.
-* [F11 Increment 5B: secure delivery and separate consent](docs/f11_copilot_delivery.md) — default off; internal synthetic events only, no live speech hook.
-* [F11 Increment 5A: offline contextual co-pilot logic](docs/f11_copilot_logic.md) — logic only; not a live or completed Innovation Feature.
-* [Isolated Docker synthetic startup and verification](docs/docker_startup.md)
-* [F6 Increment 1: read-only consolidated candidate assessment](docs/f6_consolidated_assessment.md)
-* [Milestone 3 closure: verified demonstration and remaining gaps](docs/milestone3_closure.md)
-* [Project Naming & Positioning (P1.1)](docs/project_naming.md)
-* [Requirement Clarifications (P1.2)](docs/clarifications.md) *(In progress)*
-* [Work Breakdown Structure (P1.3)](docs/wbs.md) *(In progress)*
-* [High-Level Architecture (P1.4)](docs/architecture.md) *(In progress)*
-* [Risk Register (P1.5)](docs/risk_register.md) *(In progress)*
+## Pre-viva release-candidate checkpoint — 19 October 2026
+
+**PARTIAL BID acceptance.** Proposed code base: `176ba82` on
+`feature/f11-copilot-live-integration`. This documentation checkpoint does not
+activate features, migrate data or publish a release.
+
+- [Release inventory and validation gates](docs/release_candidate_checkpoint.md)
+- [BID requirement-to-evidence matrix](docs/release_traceability.md)
+- [Innovation Feature: Dynamic Interviewer Co-Pilot — rationale](docs/f11_innovation_rationale_draft.md)
+
+F11 is implemented through the trusted live adapter and automated integration;
+physical speech-to-suggestion acceptance remains pending. The rationale documents
+AI assistance and does not establish originality or independent-design compliance. N19 remains
+PARTIAL and its administrative tooling exists only on the separate N19 branch.
+N1 still lacks the required measured 20-CV end-to-end benchmark in this README.
+N21 has office baseline startup evidence, not full clean-machine acceptance.
+
+## Documentation directory
+
+- [F11 current integration and historical test evidence](docs/f11_copilot_live.md)
+- [F11 delivery and independent consent](docs/f11_copilot_delivery.md)
+- [F11 model-free contextual logic](docs/f11_copilot_logic.md)
+- [Docker setup and its full-application acceptance gap](docs/docker_startup.md)
+- [F6 consolidated assessment and reviewer confirmation](docs/f6_consolidated_assessment.md)
+- [Controlled Milestone 3 closure](docs/milestone3_closure.md)
+- [Product identity](docs/project_naming.md)
+- [Architecture diagrams and ADRs](docs/architecture/)
+- [Risk register](docs/risk_register.md)
+- [Interview access and self-hosted token limitation](docs/interview_invitations.md)
+
+The previously linked `docs/clarifications.md`, `docs/wbs.md` and
+`docs/architecture.md` are absent. Their links have been removed rather than
+creating invented trainer clarifications or a substitute official WBS. Architecture
+PDFs are design records; implemented behavior must be checked against code.
 
 ## Isolated Docker startup — synthetic development
 
