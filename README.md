@@ -8,6 +8,7 @@
 * **Author**: Shafi Mahmud
 
 ## Documentation Directory (/docs)
+* [F11 Increment 5A: offline contextual co-pilot logic](docs/f11_copilot_logic.md) — logic only; not a live or completed Innovation Feature.
 * [Isolated Docker synthetic startup and verification](docs/docker_startup.md)
 * [F6 Increment 1: read-only consolidated candidate assessment](docs/f6_consolidated_assessment.md)
 * [Milestone 3 closure: verified demonstration and remaining gaps](docs/milestone3_closure.md)
