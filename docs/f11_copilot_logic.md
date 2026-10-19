@@ -4,8 +4,8 @@
 
 Baseline: Docker commit `e33d26b`, branch `feature/f11-copilot-logic`.
 This increment implements a model-free bounded LangGraph workflow over supplied
-**synthetic** caption events. It can invite a concrete example, suggest clarifying
-an unfinished/ambiguous exchange, or move to an unobserved confirmed requirement.
+**synthetic** caption events. It can invite a concrete example or move to an unobserved confirmed requirement.
+Unfinished exchanges wait; ambiguous or explicitly uncertain exchanges abstain.
 It can also wait or abstain. It does not evaluate competence or create scores,
 decisions, hiring advice or personality/communication diagnoses.
 
@@ -93,12 +93,14 @@ is retained.
    `response_observed` and `uncertain_association`. These describe literal topic
    association within this bounded context, not full-interview understanding.
 4. **select_follow_up:** invite an example for a settled uniquely associated
-   response; offer clarification for uncertain/unfinished exchanges. An explicit
+   response; abstain on uncertain association and wait for unfinished exchanges. An explicit
    example marker suppresses that example prompt and permits exploration of a
    currently unobserved requirement. It does not validate example quality.
-5. **validate_output:** re-derive the permissible contextual candidate and require
-   exact template, criterion and event-reference agreement. Merely matching a
-   Pydantic output shape does not authorize arbitrary model-like statements.
+5. **validate_output:** independently resolve original events, current question,
+   speaker roles, binding/revision, full source references and usable response
+   evidence. Check the fixed template and permitted kind; do not invoke the
+   selector or trust its coverage record. Invalid outputs abstain without returning
+   the proposed text. Shared lexical safety predicates are not semantic proof.
 
 ## State lifecycle and bounds
 
@@ -111,7 +113,7 @@ introduced. Callers must serialize access; this is not a cross-process runtime.
 | --- | --- |
 | Events / text | At most 15 events / 12,000 characters per snapshot. Smaller internal limits can be injected for tests; input cannot set them. |
 | Age | Oldest supplied event must be at most 120 seconds old. An expired window is refused, not silently truncated into a misleading partial dialogue. |
-| Fragment settling | Wait at least 3 seconds after the newest event; an unfinished settled phrase can invite clarification. A pause does not prove a complete answer. |
+| Fragment settling | Wait at least 3 seconds after the newest event; an unfinished phrase continues waiting until a later linked completion or expiry. A pause does not prove a complete answer. |
 | Suggestions | At most **one** new suggestion per processed update (a stricter subset of the reviewed maximum three). |
 | Cooldown | At least 15 seconds between emissions; default cannot be overridden by input. |
 | Dedup/dismissal | Up to 64 fingerprints, bounded by the 120-second lifetime. This is not a permanent lifetime ban on repeating a question. |
@@ -155,8 +157,7 @@ This is an abbreviated presentation of the actual schema, not an API payload.
 It invites an example; it does **not** assert that the candidate failed to provide
 one. If a later event says “For example, append adds an item,” a newer snapshot
 suppresses the Python example prompt and can offer SQL exploration after cooldown.
-Ambiguous Python-and-SQL association abstains; a candidate clarification can prompt
-restating the question. These changes make the logic contextual rather than a
+Ambiguous Python-and-SQL association and candidate clarification questions abstain. These changes make the logic contextual rather than a
 fixed checklist, while retaining its lexical limitations.
 
 ## Why LangGraph, and how this differs from F5
@@ -237,3 +238,68 @@ Tests prohibit network connections, guard provider/database/file-write paths,
 exercise inherited tracing settings, and inject unsupported output for rejection.
 Python compilation and Git whitespace checks passed. No live service activation,
 database operation, inference or browser rehearsal is part of this increment.
+
+
+## Implemented 5A hardening — 19 October 2026
+
+Branch `feature/f11-copilot-logic-hardening`, based on `70956e1`.
+The previous 46 passing tests did not test contrastive unrelated-answer inputs.
+They established contract/lifecycle coverage, not sufficient contextual usefulness.
+The gate exposed three defects: any candidate speech was attached to a matching
+question; uncertainty/ellipsis handling was incomplete; output validation repeated
+the selector's assumptions by calling it again.
+
+Response association now requires a unique confirmed requirement in the recruiter
+question and a surface topic link in **every** candidate turn. Lowercase token
+normalization includes simple trailing-s normalization (lists/list), not synonyms,
+semantic entailment or technical knowledge. A turn must overlap question or earlier
+linked response tokens; event adjacency alone never suffices. This remains a
+lexical heuristic: shared incidental words can produce false associations, and
+valid indirect answers can be rejected. Neither response_observed nor a suggestion
+means correct, complete, competent or genuinely understood.
+
+Bracketed ASR annotations and explicit uncertainty/noise markers conservatively
+abstain. Candidate questions, competing requirement mentions and intervening
+recruiter comments abstain. Trailing ellipses (including Unicode ellipsis), dashes
+and unfinished connector phrases wait. Uncertainty is not erased by later text in
+the same current exchange. An unanchored continuation such as “mutable ordered
+sequences” alone is refused rather than attached solely because a previous turn
+ended “are”. A linked continuation (“Lists are mutable ordered sequences”) is
+accepted with its original source identity. Existing tests formerly expecting
+clarification now expect wait/abstention; this is the explicitly approved safety
+behavior change, not proof of candidate inability. The clarify schema/template is
+retained for compatibility but is not currently emitted.
+
+The validator no longer calls choose(). It verifies event identity, role,
+interview/run/revision, latest question boundaries, exact current source sequence,
+response safety, known requirement and canonical question template. It checks
+unobserved exploration against recruiter events rather than selector-owned state.
+Tests inject forged output, stale dialogue, swapped roles and invalid references,
+and disable choose() after selection to verify independence.
+
+Actual offline gate outputs:
+
+| Synthetic scenario | Before | After |
+| --- | --- | --- |
+| Python definition | Python example | Python example, sources 1/2 |
+| Later explicit list example; SQL unobserved | SQL exploration | SQL exploration, sources 1/2/3 |
+| Unrelated latest recruiter question | Abstain | abstained / ambiguous_association |
+| Bus journey answer to Python question | Python example (wrong) | abstained / insufficient_context |
+| [uncertain speech] | Python example (wrong) | abstained / insufficient_context |
+| Python lists are ... | Python example (wrong) | waiting / fragments_pending |
+| Dismissed repeat | Suppressed | abstained / already_seen |
+| Lists definition without repeating Python | Not previously gated | Python example |
+| Unrelated answer beginning For example | Not previously gated | Abstain |
+
+Additional counterexamples cover competing SQL mentions, low-confidence annotations,
+unintelligible speech, unrelated completed turns after a valid answer, lower-case
+unrelated continuations and unanchored continuations. These are conservative
+association tests, not technical-answer correctness tests.
+
+Verification: **170 passed, 1 skipped**, including **72 co-pilot tests** (original
+46 cases plus 26 new cases; earlier positive fixture texts were clarified to retain
+explicit lexical links). Same focused regression command as above, with private
+JUnit output `data/f11-5a-hardening-tests.xml`. The skipped real caption-worker test
+still requires an explicitly supplied local model; no model, provider, database,
+service or browser activation was performed. This passes the scoped offline quality
+gate and is a basis for a separately approved 5B, not live F11 acceptance.

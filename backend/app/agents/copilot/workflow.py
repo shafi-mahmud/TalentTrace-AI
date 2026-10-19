@@ -49,6 +49,8 @@ IGNORED = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'with', 'to', 'for',
 NOISE = re.compile(r'^(?:[.?!\s]*|\[?(?:inaudible|silence|noise)\]?)$', re.I)
 QUESTION = re.compile(r'^(?:explain|describe|what|why|how|tell me|can you|could you|do you|is|are)\b', re.I)
 EXAMPLE = re.compile(r'\b(?:for example|for instance|here is an example|e\.g\.)', re.I)
+UNCERTAIN = re.compile(r'\b(?:uncertain|inaudible|unintelligible|unrecognized|noise|silence)\b|\[(?:[^]]*)\]', re.I)
+QUESTION_WORDS = {'explain', 'describe', 'what', 'why', 'how', 'tell', 'me', 'can', 'could', 'you', 'do', 'is', 'are', 'about', 'please'}
 UNFINISHED = re.compile(r'\b(?:and|or|because|the|a|to|with|if|so|is|are|can)\s*[,.]?$', re.I)
 
 
@@ -63,6 +65,49 @@ def text(events):
 def associated(binding, question):
     observed = tokens(text(question))
     return [r for r in binding.requirements if tokens(r.description) and tokens(r.description) <= observed]
+
+
+def unfinished(value):
+    return bool(re.search(r'(?:\.{2,}|…|[-–—])\s*$', value) or UNFINISHED.search(value))
+
+
+def topic_tokens(value):
+    # Only surface normalization, not a synonym/technical-knowledge dictionary.
+    return {t[:-1] if len(t) > 3 and t.endswith('s') else t
+            for t in tokens(value) - QUESTION_WORDS}
+
+
+def response_evidence(binding, question, answer):
+    """Conservative surface association; never evidence of technical correctness."""
+    if not question or not answer or any(e.role != 'recruiter' for e in question) or any(
+            e.role != 'candidate' for e in answer):
+        return False
+    if any(UNCERTAIN.search(e.text) or NOISE.fullmatch(e.text) or '?' in e.text
+           or QUESTION.match(e.text) for e in answer):
+        return False
+    if any(UNCERTAIN.search(e.text) for e in question):
+        return False
+    return response_topics(binding, question, answer)
+
+
+def response_topics(binding, question, answer):
+    matches = associated(binding, question)
+    if len(matches) != 1:
+        return False
+    anchors = topic_tokens(text(question))
+    observed = set()
+    for event in answer:
+        words = topic_tokens(event.text)
+        # Every turn needs a surface link. Adjacency after an unfinished phrase
+        # alone cannot establish relevance; do not join arbitrary continuations.
+        if not (words & (anchors | observed)):
+            return False
+        # Explicit competing requirement makes the association ambiguous.
+        if any(r.id != matches[0].id and tokens(r.description) <= tokens(event.text)
+               for r in binding.requirements if tokens(r.description)):
+            return False
+        observed |= words
+    return True
 
 
 def references(events):
@@ -106,9 +151,11 @@ def validate_context(state):
 def assemble_dialogue(state):
     question, answer, uncertain = [], [], False
     for event in state['events']:
-        if not event.text or NOISE.fullmatch(event.text):
+        if not event.text or NOISE.fullmatch(event.text) or UNCERTAIN.search(event.text):
             if question:
                 uncertain = True
+                if event.role == 'candidate':
+                    answer.append(event)
             continue
         if event.role == 'recruiter':
             if QUESTION.match(event.text) or '?' in event.text:
@@ -126,7 +173,7 @@ def assemble_dialogue(state):
     dialogue = Dialogue(tuple(question), tuple(answer), uncertain)
     if not question:
         return {'dialogue': dialogue, 'result': outcome(state, 'abstained', 'insufficient_context')}
-    if not answer or state['now_ms'] - state['events'][-1].timestamp_ms < state['limits'].settle_ms:
+    if (answer and unfinished(answer[-1].text)) or not answer or state['now_ms'] - state['events'][-1].timestamp_ms < state['limits'].settle_ms:
         return {'dialogue': dialogue, 'waiting': True}
     return {'dialogue': dialogue}
 
@@ -139,7 +186,7 @@ def track_exploration(state):
     def record():
         matches = associated(binding, question)
         for requirement in matches:
-            uncertain = len(matches) != 1 or any('?' in e.text for e in answers)
+            uncertain = len(matches) != 1 or (bool(answers) and not response_evidence(binding, tuple(question), tuple(answers)))
             status = 'uncertain_association' if uncertain else 'response_observed' if answers else 'question_observed'
             states[requirement.id] = (status, references(tuple(question + answers)))
     for event in events:
@@ -167,9 +214,9 @@ def choose(state):
     if len(matches) != 1:
         return None
     requirement = matches[0]
-    if dialogue.uncertain or UNFINISHED.search(text(dialogue.answer)):
-        kind = 'clarify'
-    elif not EXAMPLE.search(text(dialogue.answer)):
+    if dialogue.uncertain or not response_evidence(binding, dialogue.question, dialogue.answer):
+        return None
+    if not EXAMPLE.search(text(dialogue.answer)):
         # An invitation, never a claim that the candidate failed to give an example.
         kind = 'example'
     else:
@@ -193,13 +240,46 @@ def select_follow_up(state):
 
 def validate_output(state):
     choice = state.get('choice')
-    # Re-derive the allowed contextual candidate, not just a valid-looking schema.
-    expected = choose(state)
-    if choice is None or expected is None or choice != expected:
-        return {'result': outcome(state, 'rejected', 'unsupported_output')}
-    valid_sources = {e.source for e in state['events']}
-    if not set(choice.sources) <= valid_sources:
-        return {'result': outcome(state, 'rejected', 'unsupported_output')}
+    # Independent safety contract: never call choose() here. Resolve references
+    # against original events and verify the current question and complete answer.
+    binding, dialogue = state['binding'], state['dialogue']
+    requirement = next((r for r in binding.requirements if choice and r.id == choice.criterion_id), None)
+    events = state['events']
+    by_source = {e.source: e for e in events}
+    safe = choice is not None and requirement is not None and not dialogue.uncertain
+    safe = safe and state['update'].binding == binding and all(
+        e.interview_id == binding.interview_id and e.run_id == binding.run_id
+        and e.criteria_revision == binding.criteria_revision
+        and e.generation == state['update'].generation
+        and e.source.caption_run_id == binding.caption_run_id for e in events)
+    expected_sources = references(dialogue.question + dialogue.answer)
+    safe = safe and choice.sources == expected_sources and all(s in by_source for s in choice.sources)
+    # Reject injected/stale dialogue even if it uses plausible role labels.
+    safe = safe and all(by_source.get(e.source) == e for e in dialogue.question + dialogue.answer)
+    question_starts = [i for i, e in enumerate(events) if e.role == 'recruiter'
+                       and (QUESTION.match(e.text) or '?' in e.text)]
+    if question_starts:
+        tail = events[question_starts[-1]:]
+        first_answer = next((i for i, e in enumerate(tail) if e.role == 'candidate'), len(tail))
+        safe = safe and dialogue.question == tail[:first_answer] and dialogue.answer == tail[first_answer:]
+    else:
+        safe = False
+    safe = safe and bool(dialogue.answer) and not unfinished(dialogue.answer[-1].text)
+    safe = safe and response_evidence(binding, dialogue.question, dialogue.answer)
+    if safe:
+        matches = associated(binding, dialogue.question)
+        has_example = bool(EXAMPLE.search(text(dialogue.answer)))
+        if choice.kind == 'example':
+            safe = not has_example and matches[0].id == requirement.id
+        elif choice.kind == 'explore':
+            # Check actual recruiter questions, not selector-owned coverage state.
+            safe = has_example and not any(e.role == 'recruiter' and
+                tokens(requirement.description) <= tokens(e.text) for e in events)
+        else:
+            safe = False  # Ambiguous dialogue abstains; no unsupported clarification.
+        safe = safe and choice.question == render(choice.kind, requirement.description) and choice.provisional is True
+    if not safe:
+        return {'result': outcome(state, 'abstained', 'unsupported_output')}
     return {'result': Result(status='suggested', reason='valid_suggestion', generation=state['update'].generation,
                              exploration=state['exploration'], suggestions=(choice,))}
 

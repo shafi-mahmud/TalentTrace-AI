@@ -74,21 +74,23 @@ def test_recruiter_question_without_response_waits(binding):
 
 def test_fragment_settling_then_grouping(binding):
     rows = [('recruiter', 'Explain'), ('recruiter', 'Python.'),
-            ('candidate', 'Python lists are'), ('candidate', 'mutable ordered sequences.')]
+            ('candidate', 'Python lists are'), ('candidate', 'Lists are mutable ordered sequences.')]
     assert execute(binding, rows, now=4000)[1].reason == 'fragments_pending'
     _, result = execute(binding, rows, now=7000)
     assert result.suggestions[0].kind == 'example'
     assert len(result.suggestions[0].sources) == 4
 
 
-def test_settled_unfinished_response_offers_clarification(binding):
+def test_settled_unfinished_response_waits(binding):
     _, result = execute(binding, [('recruiter', 'Explain Python.'), ('candidate', 'Python lists are mutable because')])
-    assert result.suggestions[0].kind == 'clarify'
+    assert not result.suggestions
+    assert result.status in {'waiting', 'abstained'}
 
 
 def test_candidate_question_is_uncertain_not_a_technical_answer(binding):
     _, result = execute(binding, [('recruiter', 'Explain Python.'), ('candidate', 'Do you mean lists or tuples?')])
-    assert result.suggestions[0].kind == 'clarify'
+    assert not result.suggestions
+    assert result.status in {'waiting', 'abstained'}
     assert result.exploration[0].state == 'uncertain_association'
 
 
@@ -173,7 +175,7 @@ def test_single_replaceable_pending_snapshot(binding):
 def test_cooldown_applies_to_changed_context(binding):
     logic, _ = execute(binding)
     rows = [('recruiter', 'Explain Python.'), ('candidate', 'Python lists are mutable ordered sequences.'),
-            ('candidate', 'For example, append adds an item.')]
+            ('candidate', 'For example, append adds an item to a list.')]
     logic.submit(update(binding, rows, generation=2))
     assert logic.process(now_ms=7000).reason == 'cooldown'
     logic.submit(update(binding, rows, generation=3))
@@ -276,7 +278,7 @@ def test_dedup_and_source_history_are_bounded_and_evicted_sources_cannot_replay(
     logic = CopilotLogic(binding, limits=Limits(history_size=2, cooldown_ms=0))
     for generation in range(1, 5):
         topic = 'Python' if generation % 2 else 'SQL'
-        response = 'A definition about the topic.' if generation <= 2 else 'Could you clarify?'
+        response = topic + (' is used in a project.' if generation <= 2 else ' is used for example in a project.')
         value = update(binding, [('recruiter', 'Explain ' + topic + '.'), ('candidate', response)], generation=generation)
         value = value.model_copy(update={'events': tuple(e.model_copy(update={
             'source': Source(caption_run_id=binding.caption_run_id, sequence=e.source.sequence + generation * 2)}) for e in value.events)})
@@ -315,3 +317,112 @@ def test_expired_dismissal_cannot_renew_old_suggestion(binding):
     logic, result = execute(binding)
     assert not logic.dismiss(result.suggestions[0], now_ms=130001)
     assert not logic._history
+
+
+@pytest.mark.parametrize('answer,status', [
+    ('I travelled by bus this morning.', 'abstained'),
+    ('[uncertain speech]', 'abstained'),
+    ('Python lists are [inaudible].', 'abstained'),
+    ('Python lists are ...', 'waiting'),
+    ('Python lists are', 'waiting'),
+    ('SQL queries return rows.', 'abstained'),
+    ('Do you mean lists or tuples?', 'abstained'),
+])
+def test_quality_gate_unsafe_response(binding, answer, status):
+    result = execute(binding, [('recruiter', 'Explain Python lists.'), ('candidate', answer)])[1]
+    assert result.status == status
+    assert not result.suggestions
+    if status == 'abstained':
+        assert result.exploration[0].state == 'uncertain_association'
+
+
+def test_subtopic_without_requirement_repetition(binding):
+    result = execute(binding, [('recruiter', 'Explain Python lists.'),
+        ('candidate', 'Lists are mutable ordered sequences.')])[1]
+    assert result.suggestions[0].kind == 'example'
+
+
+def test_completed_fragment_preserves_sources(binding):
+    rows = [('recruiter', 'Explain Python lists.'), ('candidate', 'Python lists are ...')]
+    assert execute(binding, rows)[1].status == 'waiting'
+    rows.append(('candidate', 'Lists are mutable ordered sequences.'))
+    result = execute(binding, rows, now=8000)[1]
+    assert result.suggestions[0].kind == 'example'
+    assert [x.sequence for x in result.suggestions[0].sources] == [1, 2, 3]
+
+
+def test_unrelated_completed_turn_cannot_be_concatenated(binding):
+    result = execute(binding, [('recruiter', 'Explain Python lists.'),
+        ('candidate', 'Python lists are mutable.'), ('candidate', 'I travelled by bus.')])[1]
+    assert result.status == 'abstained' and not result.suggestions
+
+
+def test_latest_unrelated_question_changes_outcome(binding):
+    rows = [('recruiter', 'Explain Python lists.'), ('candidate', 'Lists are mutable.')]
+    assert execute(binding, rows)[1].status == 'suggested'
+    rows += [('recruiter', 'How was your journey?'), ('candidate', 'I travelled by bus.')]
+    assert execute(binding, rows, now=9000)[1].status == 'abstained'
+
+
+@pytest.mark.parametrize('answer', ['For example, I travelled by bus.',
+    'Python and SQL were both mentioned.', 'Unintelligible speech', '[low confidence] lists are mutable'])
+def test_independent_counterexamples(binding, answer):
+    result = execute(binding, [('recruiter', 'Explain Python lists.'), ('candidate', answer)])[1]
+    assert result.status == 'abstained' and not result.suggestions
+
+
+def test_validator_does_not_call_selector(binding, monkeypatch):
+    original = workflow.choose
+    def select_then_disable(state):
+        choice = original(state)
+        monkeypatch.setattr(workflow, 'choose', lambda _: (_ for _ in ()).throw(AssertionError('selector repeated')))
+        return {'choice': choice}
+    monkeypatch.setattr(workflow, 'select_follow_up', select_then_disable)
+    assert execute(binding)[1].status == 'suggested'
+
+
+@pytest.mark.parametrize('answer', ['I travelled by bus.', '[uncertain speech]', 'SQL returns rows.'])
+def test_validator_rejects_forged_selector_association(binding, monkeypatch, answer):
+    def forged(state):
+        return {'choice': Suggestion(criterion_id='python', kind='example',
+            question=workflow.render('example', 'Python'),
+            sources=workflow.references(state['dialogue'].question + state['dialogue'].answer))}
+    monkeypatch.setattr(workflow, 'select_follow_up', forged)
+    result = execute(binding, [('recruiter', 'Explain Python lists.'), ('candidate', answer)])[1]
+    assert result.status == 'abstained' and not result.suggestions
+
+
+@pytest.mark.parametrize('continuation', ['I travelled by bus.', 'SQL returns rows.', 'travelled by bus.', 'mutable ordered sequences.'])
+def test_unfinished_fragment_does_not_justify_unrelated_continuation(binding, continuation):
+    result = execute(binding, [('recruiter', 'Explain Python lists.'),
+        ('candidate', 'Python lists are ...'), ('candidate', continuation)], now=8000)[1]
+    assert result.status == 'abstained' and not result.suggestions
+
+
+def test_independent_validator_rejects_stale_dialogue(binding):
+    value = update(binding, [('recruiter', 'Explain Python lists.'), ('candidate', 'Lists are mutable.'),
+        ('recruiter', 'How was your journey?'), ('candidate', 'I travelled by bus.')])
+    state = {'binding': binding, 'update': value, 'events': value.events,
+        'dialogue': workflow.Dialogue(value.events[:1], value.events[1:2]), 'exploration': (),
+        'choice': Suggestion(criterion_id='python', kind='example', question=workflow.render('example', 'Python'),
+            sources=workflow.references(value.events[:2]))}
+    result = workflow.validate_output(state)['result']
+    assert result.status == 'abstained' and result.reason == 'unsupported_output'
+
+
+def test_validator_refuses_role_swapped_dialogue(binding):
+    value = update(binding)
+    question = value.events[0].model_copy(update={'role': 'candidate'})
+    state = {'binding': binding, 'update': value, 'events': value.events,
+        'dialogue': workflow.Dialogue((question,), value.events[1:]), 'exploration': (),
+        'choice': Suggestion(criterion_id='python', kind='example', question=workflow.render('example', 'Python'),
+            sources=workflow.references(value.events))}
+    assert workflow.validate_output(state)['result'].status == 'abstained'
+
+
+
+def test_different_subtopic_question_does_not_reuse_previous_association(binding):
+    answer = ('candidate', 'Lists are mutable ordered sequences.')
+    assert execute(binding, [('recruiter', 'Explain Python lists.'), answer])[1].status == 'suggested'
+    result = execute(binding, [('recruiter', 'Explain Python decorators.'), answer])[1]
+    assert result.status == 'abstained' and not result.suggestions
