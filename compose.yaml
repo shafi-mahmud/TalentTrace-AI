@@ -1,0 +1,84 @@
+name: talenttrace-docker-demo
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.6-pg17-bookworm@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    environment:
+      POSTGRES_DB: talenttrace_docker_demo
+      POSTGRES_USER: talenttrace_demo
+      POSTGRES_PASSWORD: ${TALENTTRACE_DB_PASSWORD:?Create the private Docker demo env file first}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://talenttrace_demo:${TALENTTRACE_DB_PASSWORD:?Private Docker password required}@db:5432/talenttrace_docker_demo
+      CV_UPLOAD_ROOT: /app/data/cv_uploads
+      CORS_ORIGINS: '["http://127.0.0.1:${TALENTTRACE_HTTP_PORT:-5188}"]'
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      INTERVIEW_EMAIL_ENABLED: 'false'
+      INTERVIEW_EVALUATION_ENABLED: 'false'
+      INTERVIEW_EVALUATION_DURABLE_ENABLED: 'false'
+      LIVEKIT_SYNTHETIC_DEMO_ENABLED: 'false'
+      LIVEKIT_LOCAL_DEVELOPMENT_ENABLED: 'false'
+      TRANSCRIPT_STORAGE_ENABLED: 'false'
+      REVIEWER_CONFIRMATION_ENABLED: 'false'
+    volumes:
+      - application_data:/app/data
+    networks: [private]
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, python, /app/docker/backend_ready.py]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    ports:
+      - '127.0.0.1:${TALENTTRACE_HTTP_PORT:-5188}:8080'
+    networks: [edge, private]
+    depends_on:
+      backend:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+networks:
+  edge:
+  private:
+    internal: true
+
+# New project-scoped volumes; no external volumes, bind mounts or host DB ports.
+volumes:
+  postgres_data:
+  application_data:
