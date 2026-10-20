@@ -1,5 +1,11 @@
 # Office → Linux Mint home handover — 19 October 2026
 
+## Final integration checkpoint — 20 October 2026
+
+See [final release integration evidence](final_release_integration_20261020.md)
+for the separate integration branch, measured synthetic F4/F11 evidence, privacy
+limitations and publication gates. The original release baseline remains intact.
+
 ## Start here
 
 Repository: `shafi-mahmud/TalentTrace-AI` on private GitHub.
