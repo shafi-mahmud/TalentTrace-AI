@@ -41,8 +41,8 @@ export function validStatus(v:any,candidate:boolean):v is Status {
 function checked(v:any,c:Context){if(!validStatus(v,c.candidate))throw Error('Assistant response unavailable.');return v;}
 export async function config(){
   const v=await request('/interview-copilot/config');
-  if(typeof v?.enabled!=='boolean'||typeof v.live_connected!=='boolean'||v.version!==version||typeof v.wording!=='string'||v.wording.length>1500)throw Error('Assistant configuration unavailable.');
-  return v as {enabled:boolean;live_connected:boolean;version:string;wording:string;live_enabled?:boolean};
+  if(typeof v?.enabled!=='boolean'||typeof v.live_connected!=='boolean'||v.version!==version||typeof v.wording!=='string'||v.wording.length>1500||(v.synthetic_cloud!==undefined&&typeof v.synthetic_cloud!=='boolean'))throw Error('Assistant configuration unavailable.');
+  return v as {enabled:boolean;live_connected:boolean;version:string;wording:string;live_enabled?:boolean;synthetic_cloud?:boolean};
 }
 export async function status(c:Context){return checked(await request(path(c)),c);}
 export async function prepare(c:Context){if(c.candidate)throw Error('Recruiter only.');return checked(await request(path(c)+'/prepare',{}),c);}

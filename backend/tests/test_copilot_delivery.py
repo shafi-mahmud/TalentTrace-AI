@@ -289,3 +289,19 @@ def test_no_f4_shared_broadcast_or_public_capture_hook_and_capacity(runtime):
     with pytest.raises(Unavailable):manager.prepare(replace(access,interview=uuid4()))
     assert len(manager.runs)==32
     manager.clear();assert not manager.runs
+
+
+@pytest.mark.parametrize('cloud',[False,True])
+def test_copilot_disclosure_matches_active_recognizer_without_private_state(monkeypatch,runtime,cloud):
+    from app.services import copilot_delivery as module
+    monkeypatch.setattr(module,'settings',module.settings.model_copy(update={'assemblyai_synthetic_enabled':cloud}))
+    monkeypatch.setattr(route,'settings',route.settings.model_copy(update={'assemblyai_synthetic_enabled':cloud}))
+    config=asyncio.run(route.configuration())
+    manager,access,_=runtime
+    wording=manager.view(access,recruiter=True)['wording']
+    assert config['wording']==wording and config['synthetic_cloud']==cloud
+    if cloud:
+        assert 'AssemblyAI' in wording and 'model training' in wording
+        assert 'without sending it to an external' not in wording
+        assert 'Physical microphone audio is not sent' in wording
+    else:assert wording==module.DISCLOSURE

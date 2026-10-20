@@ -250,3 +250,63 @@ recognition. Unsupported long/narrative introductions, quoted technical identifi
 or reported/negated phrasing may abstain even when a human could understand them.
 ASR errors, missing requirement tokens or uncertain/irrelevant answers can still
 prevent suggestions. Free-tier training exposure and LiveKit JWT limitations remain.
+
+## Final offline UI verification — 20 October 2026
+
+No provider request, microphone capture, interview replay, database reset or live
+backend restart. Original final-attempt evidence and exclusive attempt lock remain.
+Source before this check:fb6221f. The previous real attempt's rendering remains
+unestablished; the following is new OFFLINE verification, not a live retest.
+
+Real `api.validStatus` and `InterviewCopilot` handlers were exercised with controlled
+synthetic status responses and virtual timers. Successful polls render the article
+across eight samples of a15s server-result window, then remove it on the next poll.
+No competing manual refresh bypasses the one-request guard. A prior failed prepare
+can recover on a later valid poll. Withdrawal clears the article synchronously;
+late polls/leave cleanup cannot restore it. Existing run-expiry cleanup and candidate
+field rejection remain verified. No TTL, response-fence or authorization changes.
+
+The real React component, production API validator and production CSS were also
+bundled into a disposable local browser fixture using existing packages. All fetches
+were mocked, CSP connect-src none blocked real network connections, and no live
+interview/account/session endpoints were used. Browser DOM/screenshot confirmed a
+visible recruiter Provisional follow-up, candidate article count0, removal after
+the result window, and article count0 immediately after withdrawal. Temporary tab
+and fixture server5199 were closed after verification. The ignored private proof
+is data/f11-ui-offline-20261020/suggestion-visible.png.
+
+No independent rendering defect reproduced. Actual LiveInterviewPage places F11
+above transcript/analysis/captions; it can be offscreen while watching captions.
+The15s result lifetime can explain missed human observation, but retained evidence
+cannot prove why the earlier browser did not show it. No autoscroll, toast, TTL
+extension or privacy relaxation was added merely to force live acceptance.
+
+A separate disclosure defect DID reproduce: cloud synthetic mode still returned
+F11 wording claiming no external AI provider, and a Local F4 header. Fixed only that
+confirmed issue. `disclosure()` now supplies consistent mode-specific config/status
+wording; config exposes non-sensitive `synthetic_cloud`. The UI distinguishes
+AssemblyAI's fixed synthetic transcription/model-training exposure from local F11
+processing and uses mode-aware consent wording. Local mode retains its original
+wording. Both consents and default-disabled provider gate remain unchanged.
+
+User confirmed sign-out in the existing synthetic recruiter profile. Read-only
+isolated DB metadata showed active synthetic sessions5->4; remaining historical
+sessions were not revoked. The actual exposed cookie was never reused/revealed.
+The existing offline logout regression signs out, reuses a synthetic test cookie
+and verifies401; this confirms route behavior without transmitting the exposed
+credential. It is not an independent replay check of that actual cookie.
+
+Tests:
+- `node --experimental-strip-types --test frontend/tests/copilot.test.ts`:
+  **16 passed** (includes5 new handler/privacy cases).
+- Backend from backend directory, existing optional-STT Python:
+  `python -B -m pytest -p no:cacheprovider tests/test_copilot_delivery.py tests/test_copilot_live.py tests/test_copilot_prefaced_questions.py tests/test_interview_copilot.py tests/test_assemblyai_synthetic.py tests/test_interview_captions.py tests/test_recruiter_records.py -q --tb=short`:
+  **229 passed,1 skipped** (47.43s); skip remains explicitly configured real Whisper.
+  Includes2 new mode-specific disclosure cases and real logout-route synthetic regression.
+- Full frontend `pnpm test`: **249 passed,0 failed,0 skipped**.
+- `pnpm build`: TypeScript/production build passed; existing >500kB chunk warning.
+- Diff checks passed. Source and tests contain no credentials or private recordings.
+
+Conclusion: offline React UI rendering/lifecycle PASS; misleading cloud disclosures
+fixed. Live user-visible acceptance/latency for the prior provider run remains
+PARTIAL/unverified. No new external attempt is authorized by this verification.

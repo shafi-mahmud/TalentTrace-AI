@@ -52,10 +52,11 @@ test('response fences block stale polls after withdrawal, leave and replacement'
   const current=fence.next();assert.equal(fence.accepts(current),true);fence.next();assert.equal(fence.accepts(current),false);
 });
 
-function harness(candidate=false){
+function harness(candidate=false,cloud=false){
   let index=0;const slots:any[]=[];const effects:any[]=[];const intervals=new Map<number,()=>void>();
-  const timers=new Map<number,()=>void>();let timer=0;const calls:any[]=[];
-  let nextStatus:()=>Promise<any>=async()=>view();
+  const timers=new Map<number,()=>void>();let timer=0;let now=0;const calls:any[]=[];const due=new Map<number,number>();const intervalDue=new Map<number,{next:number;period:number}>();
+  let nextStatus:()=>Promise<any>=async()=>{const v:any=view();if(candidate){delete v.suggestion;delete v.processing;}return v;};
+  let nextPrepare=async()=>({...view(),status:'awaiting_consent',suggestion:null,recruiter_consented:false,candidate_consented:false});
   const hooks={
     useState(initial:any){const n=index++;if(!(n in slots))slots[n]=initial;return [slots[n],(v:any)=>{slots[n]=typeof v==='function'?v(slots[n]):v;}];},
     useRef(initial:any){const n=index++;if(!(n in slots))slots[n]={current:initial};return slots[n];},
@@ -63,22 +64,32 @@ function harness(candidate=false){
       slots[n]={deps,cleanup:before?.cleanup};effects.push(()=>{slots[n].cleanup?.();slots[n].cleanup=fn();});}}
   };
   const fake={ResponseFence:api.ResponseFence,
-    config:async()=>({enabled:true,live_connected:false,version:api.version,wording:'Independent temporary processing disclosure.'}),
-    status:async()=>{calls.push('status');return nextStatus();},
-    prepare:async()=>{calls.push('prepare');return {...view(),status:'awaiting_consent',suggestion:null,recruiter_consented:false,candidate_consented:false};},
+    config:async()=>({enabled:true,live_connected:false,version:api.version,wording:cloud?'AssemblyAI receives only fixed synthetic eSpeak audio; model-training use is possible.':'Independent temporary processing disclosure.',synthetic_cloud:cloud}),
+    status:async()=>{calls.push('status');const v=await nextStatus();if(!api.validStatus(v,candidate))throw Error('Invalid status');return v;},
+    prepare:async()=>{calls.push('prepare');return nextPrepare();},
     decide:async(_c:any,_s:any,decision:string)=>{calls.push(decision);return {...view(),status:decision==='accept'?'authorized':'withdrawn',epoch:2,suggestion:null};},
     dismiss:async()=>{calls.push('dismiss');return {...view(),suggestion:null};}};
   const source=ts.transpileModule(readFileSync(new URL('../src/components/InterviewCopilot.tsx',import.meta.url),'utf8'),
     {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   const exports:any={},require=createRequire(import.meta.url);
-  const window={setInterval(fn:()=>void){intervals.set(++timer,fn);return timer;},clearInterval(n:number){intervals.delete(n);},
-    setTimeout(fn:()=>void){timers.set(++timer,fn);return timer;},clearTimeout(n:number){timers.delete(n);}};
+  const window={setInterval(fn:()=>void,ms:number){intervals.set(++timer,fn);intervalDue.set(timer,{next:now+ms,period:ms});return timer;},clearInterval(n:number){intervals.delete(n);intervalDue.delete(n);},
+    setTimeout(fn:()=>void,ms:number){timers.set(++timer,fn);due.set(timer,now+ms);return timer;},clearTimeout(n:number){timers.delete(n);due.delete(n);}};
   runInNewContext(source,{exports,require:(name:string)=>name==='react'?hooks:name==='../api/copilot'?fake:require(name),window});
   let connected=true;
   const render=()=>{index=0;const tree=exports.default({...context,candidate,connected});while(effects.length)effects.shift()();return tree;};
   const tick=async()=>{for(let n=0;n<30;n++)await Promise.resolve();};
   const settle=async()=>{render();await tick();render();await tick();return render();};
-  return {render,settle,tick,calls,intervals,timers,setStatus(fn:()=>Promise<any>){nextStatus=fn;},disconnect(){connected=false;}};
+  const advance=async(ms:number)=>{
+    now+=ms;
+    for(const [id,schedule] of intervalDue)while(schedule.next<=now&&intervals.has(id)){
+      schedule.next+=schedule.period;intervals.get(id)!();await tick();render();
+    }
+    for(const [id,deadline] of [...due])if(deadline<=now&&timers.has(id)){
+      const fn=timers.get(id)!;timers.delete(id);due.delete(id);fn();await tick();render();
+    }
+    return render();
+  };
+  return {render,settle,tick,advance,now:()=>now,calls,intervals,timers,setPrepare(fn:()=>Promise<any>){nextPrepare=fn;},setStatus(fn:()=>Promise<any>){nextStatus=fn;},disconnect(){connected=false;}};
 }
 function nodes(n:any):any[]{return !n||typeof n!=='object'?[]:[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];}
 function button(tree:any,label:string){return nodes(tree).find(n=>n.type==='button'&&n.props.children===label);}
@@ -141,4 +152,54 @@ test('live adapter status is supported without implying technical assessment',()
   assert.equal(api.validStatus({...view(),live_connected:true},false),true);
   const {suggestion:_,processing:__,...candidate}=view();
   assert.equal(api.validStatus({...candidate,live_connected:true},true),true);
+});
+
+
+const hasQuestion=(tree:any)=>nodes(tree).some(n=>n.props?.['aria-label']==='Provisional question suggestion');
+
+test('validated positive poll displays through eight samples of a 15-second result window',async()=>{
+  const h=harness();
+  h.setStatus(async()=>({...view(),expires_in_ms:120000-h.now(),suggestion:h.now()>=4000&&h.now()<19000?suggestion:null}));
+  assert.equal(hasQuestion(await h.settle()),false);
+  await h.advance(2000);assert.equal(hasQuestion(h.render()),false);
+  for(let sample=0;sample<8;sample++){
+    const tree=await h.advance(2000);assert.equal(hasQuestion(tree),true);
+    assert.ok(nodes(tree).some(n=>n.type==='p'&&n.props.children===suggestion.question));
+  }
+  assert.equal(hasQuestion(await h.advance(2000)),false);
+  assert.equal(h.calls.filter(c=>c==='prepare').length,0);
+  assert.equal(h.calls.filter(c=>c==='accept').length,0);
+});
+
+test('competing manual refresh and interval ticks do not race a pending status response',async()=>{
+  const h=harness();await h.settle();let resolve!:(v:any)=>void;
+  h.setStatus(()=>new Promise(r=>{resolve=r;}));const before=h.calls.filter(c=>c==='status').length;
+  for(const fn of h.intervals.values())fn();await h.tick();
+  button(h.render(),'Check assistant status').props.onClick();
+  for(const fn of h.intervals.values())fn();await h.tick();
+  assert.equal(h.calls.filter(c=>c==='status').length,before+1);
+  resolve(view());await h.tick();assert.equal(hasQuestion(h.render()),true);
+});
+
+test('failed prepare does not prevent a later successful validated suggestion poll',async()=>{
+  const h=harness();await h.settle();h.setPrepare(async()=>{throw Error('409');});
+  button(h.render(),'Prepare new assistant run').props.onClick();await h.tick();
+  assert.equal(hasQuestion(h.render()),false);
+  for(const fn of h.intervals.values())fn();await h.tick();
+  assert.equal(hasQuestion(h.render()),true);assert.equal(h.calls.filter(c=>c==='prepare').length,1);
+});
+
+test('withdrawal clears the provisional article synchronously before awaiting the server',async()=>{
+  const h=harness();await h.settle();assert.equal(hasQuestion(h.render()),true);
+  button(h.render(),'Withdraw assistant consent').props.onClick();
+  assert.equal(hasQuestion(h.render()),false);
+  await h.tick();assert.equal(hasQuestion(h.render()),false);
+});
+
+test('cloud mode discloses AssemblyAI and training before consent without local-only claims',async()=>{
+  const h=harness(false,true);h.setStatus(async()=>({...view(),recruiter_consented:false,status:'awaiting_consent',suggestion:null}));
+  const tree=await h.settle();const words=nodes(tree).flatMap(n=>typeof n.props?.children==='string'?[n.props.children]:[]).join(' ');
+  assert.match(words,/AssemblyAI/);assert.match(words,/model-training/);
+  assert.doesNotMatch(words,/without sending it to an external|Local F4 adapter enabled/);
+  assert.ok(nodes(tree).some(n=>n.type==='label'&&JSON.stringify(n.props.children).includes('separate cloud-caption consent')));
 });
