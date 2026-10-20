@@ -1,6 +1,7 @@
 # Optional synthetic-only AssemblyAI → F4 captions → F11 demonstration
 
-Implementation increment, 20 October 2026. Not activated or externally exercised.
+Initial implementation increment, 20 October 2026: not activated or externally
+exercised at that point. Later attempt diagnosis and offline fix are recorded below.
 The release checkout and running environments are unchanged. No new provider
 request was authorized/executed during implementation. No paid plan or fallback.
 
@@ -192,3 +193,60 @@ exposure before opening any provider connection. Maximum two sequential streams,
 no retries, nominal49.4s client bound; stop on a failed acceptance stage. Normal
 finish acceptance cannot establish active-stream withdrawal behavior. No new
 provider call or real integration latency was measured during this final review.
+
+## Prefaced-question fix — offline verification only
+
+The approved real attempt on5809fad delivered both final role captions through the
+trusted bridge, but no follow-up: ASR began `In Python, our list mutable, explain
+how...` without a question mark. The old anchored detector never opened a question
+context. Python/SQL requirements and answer-topic overlap were valid and unchanged.
+Exact synthetic recognized texts are retained in the regression test; no correction
+or artificial punctuation is applied to the provider evidence.
+
+`workflow.is_question()` now centralizes question recognition for dialogue assembly,
+exploration tracking, answer-as-question rejection and independent output validation.
+Supported direct question starts remain. Explicit question clauses may follow a
+bounded topic introduction (`in`, `for`, `about`, `regarding`, `on`, `with respect to`,
+`on the topic of`): first fragment <=8 words/limited characters, optional second
+noun-like fragment <=5 words, at most2 fragments. Arbitrary narrative prefixes,
+quoted/reported instructions and negated commands fail closed. A standalone nominal
+question with trailing? is limited to8 words and cannot contain narrative clauses.
+Recognition does not rewrite stored events, stem requirement descriptions, infer
+technical competence or relax answer relevance, exact binding, generation, source,
+authorization, consent or candidate-delivery checks.
+
+Exact recognized question/answer offline replay now yields:
+- status=`suggested`,reason=`valid_suggestion`;
+- criterion=`skill-0` (Python),kind=`example`;
+- `Could you walk through a concrete example related to this requirement: Python?`;
+- source sequences1,2, same consistent caption-run identity.
+
+Original live run/caption UUIDs were not logged; the replay uses consistent surrogate
+IDs while retaining actual revision, requirements, roles, sequence, audio intervals
+and text.4s settling is allowed. No provider request or transcript substitution.
+The corrected result does not establish a successful live/browser retest or latency.
+
+`copilot_live.graph_result_metadata()` reads `Result.suggestions` (plural) and returns
+only status, reason, suggestion presence/count. The ignored local diagnostic launcher
+now calls this helper and no longer logs transcript bodies. Existing synthetic
+attempt evidence is preserved; the already-running process was NOT restarted or
+activated with these changes. No logging of credentials or private speech is added.
+
+Verification from backend with existing optional-STT Python:
+
+```sh
+python -B -m pytest -p no:cacheprovider tests/test_copilot_prefaced_questions.py tests/test_assemblyai_synthetic.py tests/test_interview_captions.py tests/test_copilot_live.py tests/test_copilot_delivery.py tests/test_interview_copilot.py tests/test_livekit_interview.py tests/test_interview_access.py -q --tb=short
+```
+
+**234 passed,1 skipped** (54.78s), including47 new prefaced-question/bridge/metadata
+cases. The skip remains the explicitly configured real local-Whisper worker gate.
+Frontend source is unaffected; frontend tests/build were not rerun for this backend
+fix. Earlier244-pass frontend validation remains historical evidence only.
+`git diff --check` passed. Zero new AssemblyAI requests. No live session restart,
+activation, requirements/DB changes, pushes, merges or other-worktree edits.
+
+Limits: this is a conservative English surface grammar, not general intent/semantic
+recognition. Unsupported long/narrative introductions, quoted technical identifiers,
+or reported/negated phrasing may abstain even when a human could understand them.
+ASR errors, missing requirement tokens or uncertain/irrelevant answers can still
+prevent suggestions. Free-tier training exposure and LiveKit JWT limitations remain.
