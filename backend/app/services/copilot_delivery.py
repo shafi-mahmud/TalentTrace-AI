@@ -6,6 +6,7 @@ import time
 from uuid import UUID, uuid4
 
 from app.schemas.interview_copilot import Binding, Requirement, Update
+from app.core.config import settings
 from app.services.interview_copilot import CopilotLogic, fingerprint
 
 VERSION = 'local-copilot-v1'
@@ -13,6 +14,17 @@ DISCLOSURE = ('The interview assistant can temporarily process recognized speech
     'to suggest job-related follow-up questions to the interviewer. Suggestions are not shown to the candidate. '
     'This feature does not automatically score or decide hiring outcomes. This version processes speech locally '
     'without sending it to an external AI provider, and does not retain an additional saved co-pilot transcript.')
+
+CLOUD_DISCLOSURE = (
+    'AssemblyAI transcribes only the fixed server-owned synthetic eSpeak audio; free-tier audio and text '
+    'may be used for model training. Physical microphone audio is not sent to AssemblyAI. '
+    'The local interview assistant temporarily uses those captions for job-related interviewer-only '
+    'follow-up questions. Both caption and assistant consents are required. No automatic scoring or '
+    'hiring decisions; no additional saved co-pilot transcript.')
+
+
+def disclosure():
+    return CLOUD_DISCLOSURE if settings.assemblyai_synthetic_enabled else DISCLOSURE
 
 
 class Unavailable(Exception):
@@ -163,7 +175,7 @@ class Delivery:
             run = self.checked(access)
             status = 'unavailable' if run is None else 'withdrawn' if run.revoked else (
                 'authorized' if len(run.consents) == 2 else 'awaiting_consent')
-            value = dict(enabled=True, live_connected=bool(run and run.live and not run.revoked), version=VERSION, wording=DISCLOSURE,
+            value = dict(enabled=True, live_connected=bool(run and run.live and not run.revoked), version=VERSION, wording=disclosure(),
                 status=status, run_id=str(run.binding.run_id) if run else None,
                 epoch=run.epoch if run else 0, recruiter_consented=bool(run and 'recruiter' in run.consents),
                 candidate_consented=bool(run and 'candidate' in run.consents),

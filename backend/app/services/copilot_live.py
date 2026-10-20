@@ -2,11 +2,18 @@
 import asyncio
 import math
 import threading
-from app.schemas.interview_copilot import Event, Source, Update
+from app.schemas.interview_copilot import Event, Source, Update, Result
 from app.services.copilot_delivery import Unavailable
 
 # At most one offloaded graph calculation across caption-run replacements.
 PROCESSOR = threading.BoundedSemaphore(1)
+
+
+def graph_result_metadata(result: Result):
+    """Safe diagnostic projection: no speech, questions, identities or credentials."""
+    return {'status': result.status, 'reason': result.reason,
+            'has_suggestion': bool(result.suggestions),
+            'suggestion_count': len(result.suggestions)}
 
 
 class LiveBridge:

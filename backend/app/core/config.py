@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     livekit_api_key: SecretStr | None = None
     livekit_api_secret: SecretStr | None = None
     livekit_synthetic_demo_enabled: bool = False
+    assemblyai_synthetic_enabled: bool = False
+    assemblyai_api_key: SecretStr | None = None
+    assemblyai_synthetic_interview_id: UUID | None = None
     local_caption_model_path: Path | None = None
     local_caption_test_duration_seconds: int = Field(default=120, ge=120, le=300)
     interview_copilot_enabled: bool = False
@@ -79,6 +82,13 @@ class Settings(BaseSettings):
         return value
 
     def model_post_init(self, __context: Any) -> None:
+        if self.assemblyai_synthetic_enabled and (
+            self.environment != "development" or not self.livekit_synthetic_demo_enabled
+            or not self.interview_copilot_enabled or not self.interview_copilot_live_enabled
+            or self.transcript_storage_enabled or self.assemblyai_api_key is None
+            or self.assemblyai_synthetic_interview_id is None
+        ):
+            raise ConfigurationError("Synthetic cloud replay requires explicit isolated development configuration.")
         if self.local_caption_test_duration_seconds != 120 and (
             self.environment != "development" or not self.livekit_synthetic_demo_enabled
         ):

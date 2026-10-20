@@ -54,6 +54,52 @@ QUESTION_WORDS = {'explain', 'describe', 'what', 'why', 'how', 'tell', 'me', 'ca
 UNFINISHED = re.compile(r'\b(?:and|or|because|the|a|to|with|if|so|is|are|can)\s*[,.]?$', re.I)
 
 
+# Bounded surface grammar, not a search for question words anywhere in speech.
+TOPIC_PREFACE = re.compile(
+    r'^(?:in|for|about|regarding|on|with respect to|on the topic of) '
+    r'[a-z0-9+#][a-z0-9+# -]{0,70}$', re.I)
+TOPIC_CONTINUATION = re.compile(r'^(?:our|the|this|these|your) [a-z0-9+#][a-z0-9+# -]{0,45}$', re.I)
+PREFACE_NARRATIVE = re.compile(
+    r'\b(?:i|we|he|she|they|because|if|when|while|although|but|then|went|think|thought|'
+    r'believe|was|were|will|would|should|could|can|must|did|does|do|not|never)\b', re.I)
+QUESTION_UNSAFE = re.compile(
+    r"[\"`“”]|(?<!\w)['‘]|['’](?!\w)|"
+    r'\b(?:said|says|asked|asks|told|reported|quoted|wrote|writes|instructed|mentioned|according|repeat)\b|'
+    r"\b(?:do not|don't|never|not|avoid|stop|without|rather than|instead of) "
+    r'(?:(?:\w+) ){0,2}(?:explain|describe|tell|ask|how|what|why)\b', re.I)
+
+
+def is_question(value):
+    """Recognize direct questions or explicit clauses after short topic prefaces.
+
+    Reject quoted/reported/negated instructions. Prefaces contain at most two
+    bounded fragments; narrative introductions and arbitrary embedded verbs fail.
+    Original recognized text is never rewritten or replaced.
+    """
+    value = value.strip()
+    if QUESTION_UNSAFE.search(value):
+        return False
+    if QUESTION.match(value):
+        return True
+    # Keep short nominal questions, but a trailing '?' must not turn arbitrary
+    # narrative or unrelated introductory clauses into an interviewer question.
+    if (re.fullmatch(r'[a-z0-9+# -]+\?', value, re.I) and len(value.split()) <= 8
+            and not PREFACE_NARRATIVE.search(value)):
+        return True
+    parts = re.split(r'\s*[,;:.]\s*', value, maxsplit=2)
+    for count in (1, 2):
+        if len(parts) <= count:
+            continue
+        preface, clause = parts[:count], ', '.join(parts[count:]).lstrip()
+        if (TOPIC_PREFACE.fullmatch(preface[0]) and len(preface[0].split()) <= 8
+                and (count == 1 or (TOPIC_CONTINUATION.fullmatch(preface[1])
+                                   and len(preface[1].split()) <= 5))
+                and not PREFACE_NARRATIVE.search(' '.join(preface))
+                and QUESTION.match(clause)):
+            return True
+    return False
+
+
 def tokens(text):
     return set(re.findall(r'[a-z0-9+#]+', text.casefold())) - IGNORED
 
@@ -82,10 +128,10 @@ def response_evidence(binding, question, answer):
     if not question or not answer or any(e.role != 'recruiter' for e in question) or any(
             e.role != 'candidate' for e in answer):
         return False
-    if any(UNCERTAIN.search(e.text) or NOISE.fullmatch(e.text) or '?' in e.text
-           or QUESTION.match(e.text) for e in answer):
+    if any(UNCERTAIN.search(e.text) or NOISE.fullmatch(e.text) or is_question(e.text)
+           or QUESTION_UNSAFE.search(e.text) for e in answer):
         return False
-    if any(UNCERTAIN.search(e.text) for e in question):
+    if any(UNCERTAIN.search(e.text) or QUESTION_UNSAFE.search(e.text) for e in question):
         return False
     return response_topics(binding, question, answer)
 
@@ -151,14 +197,14 @@ def validate_context(state):
 def assemble_dialogue(state):
     question, answer, uncertain = [], [], False
     for event in state['events']:
-        if not event.text or NOISE.fullmatch(event.text) or UNCERTAIN.search(event.text):
+        if not event.text or NOISE.fullmatch(event.text) or UNCERTAIN.search(event.text) or QUESTION_UNSAFE.search(event.text):
             if question:
                 uncertain = True
                 if event.role == 'candidate':
                     answer.append(event)
             continue
         if event.role == 'recruiter':
-            if QUESTION.match(event.text) or '?' in event.text:
+            if is_question(event.text):
                 question, answer = [event], []
                 uncertain = event.text.count('?') > 1
             elif question and not answer:
@@ -167,7 +213,7 @@ def assemble_dialogue(state):
                 uncertain = True
         elif question:
             answer.append(event)
-            if '?' in event.text or QUESTION.match(event.text):
+            if is_question(event.text):
                 uncertain = True
         # Candidate-first text is never relabelled as an interviewer question.
     dialogue = Dialogue(tuple(question), tuple(answer), uncertain)
@@ -190,7 +236,7 @@ def track_exploration(state):
             status = 'uncertain_association' if uncertain else 'response_observed' if answers else 'question_observed'
             states[requirement.id] = (status, references(tuple(question + answers)))
     for event in events:
-        if event.role == 'recruiter' and (QUESTION.match(event.text) or '?' in event.text):
+        if event.role == 'recruiter' and is_question(event.text):
             record(); question, answers = [event], []
         elif event.role == 'recruiter' and question and not answers:
             question.append(event)
@@ -257,7 +303,7 @@ def validate_output(state):
     # Reject injected/stale dialogue even if it uses plausible role labels.
     safe = safe and all(by_source.get(e.source) == e for e in dialogue.question + dialogue.answer)
     question_starts = [i for i, e in enumerate(events) if e.role == 'recruiter'
-                       and (QUESTION.match(e.text) or '?' in e.text)]
+                       and is_question(e.text)]
     if question_starts:
         tail = events[question_starts[-1]:]
         first_answer = next((i for i, e in enumerate(tail) if e.role == 'candidate'), len(tail))

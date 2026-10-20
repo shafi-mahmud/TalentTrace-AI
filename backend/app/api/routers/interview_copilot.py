@@ -15,7 +15,7 @@ from app.schemas.batch_screening import ReviewedJobSnapshot
 from app.schemas.interview_copilot import Requirement
 from app.services.recruiter_records import owned_job
 from app.services.livekit_interview import join_window
-from app.services.copilot_delivery import Access, DISCLOSURE, VERSION, delivery, Unavailable
+from app.services.copilot_delivery import Access, DISCLOSURE, VERSION, delivery, Unavailable, disclosure
 
 router = APIRouter(tags=['Optional interviewer assistant'])
 
@@ -47,7 +47,8 @@ def enabled():
 async def configuration():
     return dict(enabled=settings.interview_copilot_enabled, live_connected=False,
         live_enabled=settings.interview_copilot_live_enabled,
-        version=VERSION, wording=DISCLOSURE)
+        version=VERSION, wording=disclosure(),
+        synthetic_cloud=settings.assemblyai_synthetic_enabled)
 
 
 async def access(request, db, job_id=None, interview_id=None):

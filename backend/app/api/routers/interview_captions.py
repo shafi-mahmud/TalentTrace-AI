@@ -1,4 +1,4 @@
-"""Authenticated temporary microphone bridge; never calls a cloud STT provider."""
+"""Authenticated captions; optional fixed synthetic-only cloud replay."""
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
@@ -27,7 +27,13 @@ sessions = {}
 def trusted_socket(socket):
     return (not socket.query_params and socket.headers.get("origin") in settings.cors_origins
             and settings.environment == "development" and settings.livekit_synthetic_demo_enabled
-            and settings.local_caption_model_path is not None)
+            and (settings.local_caption_model_path is not None or settings.assemblyai_synthetic_enabled))
+
+
+@router.get("/interview-captions/config")
+async def caption_config():
+    # No identities, credentials or invitation information.
+    return {"assemblyai_synthetic": settings.assemblyai_synthetic_enabled}
 
 
 async def authorize(socket, job_id=None, interview_id=None):
@@ -83,12 +89,20 @@ async def serve(socket, job_id=None, interview_id=None):
     try:
         association = await authorize(socket, job_id, interview_id)
         key, role, _, expires = association
+        if settings.assemblyai_synthetic_enabled and key != settings.assemblyai_synthetic_interview_id:
+            raise ValueError("Interview is not the configured synthetic demonstration")
         if key not in sessions:
             if sessions:  # Explicit single-room proof bound.
                 raise ValueError("Caption capacity unavailable")
-            sessions[key] = CaptionSession(lambda: LocalWhisper(settings.local_caption_model_path),
-                duration_seconds=settings.local_caption_test_duration_seconds,
-                storage=CaptionTranscript(runtime(),key) if settings.transcript_storage_enabled else None)
+            if settings.assemblyai_synthetic_enabled:
+                from app.services.synthetic_streaming_captions import SyntheticStreamingCaptions
+                from app.integrations.stt.assemblyai_synthetic import AssemblyAISyntheticStream
+                sessions[key] = SyntheticStreamingCaptions(
+                    lambda role: AssemblyAISyntheticStream(role, settings.assemblyai_api_key), key)
+            else:
+                sessions[key] = CaptionSession(lambda: LocalWhisper(settings.local_caption_model_path),
+                    duration_seconds=settings.local_caption_test_duration_seconds,
+                    storage=CaptionTranscript(runtime(),key) if settings.transcript_storage_enabled else None)
         session = sessions[key]
         try:
             if settings.interview_copilot_enabled and settings.interview_copilot_live_enabled and session.assistant is None:
@@ -157,6 +171,8 @@ async def serve(socket, job_id=None, interview_id=None):
             if message["type"] == "websocket.disconnect":
                 break
             if message.get("bytes") is not None:
+                if settings.assemblyai_synthetic_enabled:
+                    raise ValueError("Browser PCM forbidden in synthetic replay")
                 if (not 0 < len(message["bytes"]) <= 3200 or len(message["bytes"]) % 2
                         or (len(message["bytes"]) != 3200 and not session.finishing)):
                     raise ValueError("Invalid PCM frame")
@@ -167,6 +183,11 @@ async def serve(socket, job_id=None, interview_id=None):
                 # Let the bounded frame ingest run before reading a queued burst.
                 # Otherwise a completed/fast dispatch can look like audio backlog.
                 await asyncio.sleep(0)
+            elif message.get("text") == "synthetic-start":
+                await check_authorization()
+                if not settings.assemblyai_synthetic_enabled:
+                    raise ValueError("Synthetic replay disabled")
+                await session.start_replay(role)
             elif message.get("text") == "stop":
                 break
             elif message.get("text") == "finish":

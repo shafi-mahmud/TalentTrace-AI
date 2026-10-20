@@ -39,3 +39,7 @@ env/
 # Node / Frontend
 node_modules/
 dist/
+
+# Exact offline-generated, checksum-pinned synthetic STT fixtures only.
+!backend/app/integrations/stt/synthetic/recruiter.wav
+!backend/app/integrations/stt/synthetic/candidate.wav
