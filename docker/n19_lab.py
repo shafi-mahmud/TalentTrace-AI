@@ -78,7 +78,7 @@ for f in Path('/proc').glob('[0-9]*/status'):
 """, uid=0)
 
 
-def init(path):
+def init(path, backend_image='talenttrace-docker-demo-backend:latest'):
     if path.exists():
         raise RuntimeError('state_exists_do_not_repeat_provisioning')
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -90,10 +90,11 @@ def init(path):
                        capture_output=True,check=True)
     p=dict(name='tt-n19-lab-'+secrets.token_hex(5), admin_password=secrets.token_urlsafe(24),
            maintenance_password=secrets.token_urlsafe(24), application_password=secrets.token_urlsafe(24))
+    p['backend_image']=backend_image
     save(path,p)  # Preserve partial-resource ownership for manual recovery.
     image='pgvector/pgvector@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f'
     docker('image','inspect',image)
-    docker('image','inspect','talenttrace-docker-demo-backend:latest')
+    docker('image','inspect',backend_image)
     docker('network','create','--internal','--label',LABEL+'='+p['name'],p['name'])
     for volume in ('pg','cv'):
         docker('volume','create','--label',LABEL+'='+p['name'],p['name']+'-'+volume)
@@ -120,17 +121,18 @@ CREATE EXTENSION IF NOT EXISTS vector;
            '-e','PYTHONDONTWRITEBYTECODE=1','-e','DATABASE_URL=postgresql+asyncpg://n19_maintenance:'+p['maintenance_password']+'@db:5432/n19_lab',
            '-e','CV_UPLOAD_ROOT=/cv','-e','N19_LAB_ID='+p['name'],
            '-v',str(ROOT/'backend')+':/app/backend:ro','-v',p['name']+'-cv:/cv',
-           '--entrypoint','sleep','talenttrace-docker-demo-backend:latest','infinity')
+           '--entrypoint','sleep',backend_image,'infinity')
     # Container capability set is empty. Bootstrap ownership via a short-lived
     # root helper, with only this new volume and no network/source credentials.
     docker('run','--rm','--pull=never','--network','none','--user','0',
-           '-v',p['name']+'-cv:/cv','--entrypoint','python','talenttrace-docker-demo-backend:latest',
+           '-v',p['name']+'-cv:/cv','--entrypoint','python',p.get('backend_image','talenttrace-docker-demo-backend:latest'),
            '-c',"import os;os.chown('/cv',10001,10001);os.chmod('/cv',0o700)")
     worker(p,"""from alembic.config import Config
 from alembic import command
 command.upgrade(Config('alembic.ini'),'head')
 """)
     sql(p,'GRANT USAGE ON SCHEMA public TO n19_application; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO n19_application;')
+    sql(p,'REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON submission_deletions FROM n19_application;')
     return p
 
 
@@ -146,7 +148,7 @@ def maintenance(p):
     if sql(p,"SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND backend_type='client backend';") != '0':
         raise RuntimeError('clients_remain_admission_stays_closed')
     docker('run','--rm','--pull=never','--network','none','--user','0',
-           '-v',p['name']+'-cv:/cv','--entrypoint','python','talenttrace-docker-demo-backend:latest',
+           '-v',p['name']+'-cv:/cv','--entrypoint','python',p.get('backend_image','talenttrace-docker-demo-backend:latest'),
            '-c',"import os; from pathlib import Path; paths=[Path('/cv'),*Path('/cv').rglob('*')]; assert all(not p.is_symlink() and (p.is_dir() or p.is_file()) and (p.is_dir() or p.stat().st_nlink==1) for p in paths); [(os.chown(p,10002,10002)) for p in paths]; os.chmod('/cv',0o700)")
     storage_boundary(p)
     worker(p,"""import os,json
@@ -173,13 +175,14 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action',choices=['init','enter','check'])
     parser.add_argument('--state',type=Path,required=True)
+    parser.add_argument('--backend-image',default='talenttrace-docker-demo-backend:latest')
     parser.add_argument('--confirm-new-disposable',action='store_true')
     args=parser.parse_args()
     try:
         if args.action=='init':
             if not args.confirm_new_disposable:
                 raise RuntimeError('explicit_new_lab_confirmation_required')
-            init(args.state)
+            init(args.state,args.backend_image)
         else:
             p=load(args.state)
             (maintenance if args.action=='enter' else check)(p)

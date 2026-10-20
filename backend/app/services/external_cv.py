@@ -16,6 +16,7 @@ from app.services.cv_extraction import CvExtractionService
 from app.services.recruiter_records import owned_job
 
 ERRORS = {
+    "submission_deleted": "This source submission was deleted; import is suppressed.",
     "contact_conflict": "Application contact changed; operator review is required.",
     "source_not_approved": "External source is not approved.",
     "job_not_available": "Job is not available for this source.",
@@ -117,6 +118,9 @@ class ExternalCvImportService:
                     active = await session.scalar(select(Recruiter.active).where(Recruiter.id == source.recruiter_id))
                     if not active or job.job_reference != submission.job_reference:
                         raise ExternalCvImportError("job_not_available")
+                    from app.services.submission_deletion import import_suppressed
+                    if await import_suppressed(session, source.source_id, submission.external_submission_id):
+                        raise ExternalCvImportError('submission_deleted')
                     kind, size, digest = await run_in_threadpool(fingerprint, submission.cv)
                     existing = await session.scalar(select(ExternalCvSubmissionRecord).where(
                         ExternalCvSubmissionRecord.source_id == source.source_id,

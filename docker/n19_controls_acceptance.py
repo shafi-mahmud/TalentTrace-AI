@@ -37,7 +37,7 @@ def prove(path):
     assert worker(p,"from pathlib import Path;Path('/cv/forbidden').write_text('must fail')",uid=10001,check=False).returncode!=0
     extra=p['name']+'-unexpected'
     docker('create','--name',extra,'--label',LABEL+'='+p['name'],'--network','none',
-        '-v',p['name']+'-cv:/cv:ro','--entrypoint','sleep','talenttrace-docker-demo-backend:latest','infinity')
+        '-v',p['name']+'-cv:/cv:ro','--entrypoint','sleep',p.get('backend_image','talenttrace-docker-demo-backend:latest'),'infinity')
     try:
         try:check(p);raise AssertionError('unexpected_mount_not_blocked')
         except RuntimeError as e:assert str(e)=='unexpected_storage_mount'

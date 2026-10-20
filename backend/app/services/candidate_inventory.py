@@ -81,72 +81,78 @@ async def inventory(session, target: Target, storage_root: Path):
     """
     if session.in_transaction():
         raise InventoryError('fresh_session_required')
-    params = target.parameters()
+    target.parameters()
     async with session.begin():
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
-        job = (await session.execute(text(
-            'SELECT job_reference FROM job_profiles WHERE id=:job_id AND recruiter_id=:recruiter_id'), params)).scalar_one_or_none()
-        if job is None:
-            raise InventoryError('owned_job_not_found')
-        tables = set((await session.execute(text(
-            "SELECT tablename FROM pg_tables WHERE schemaname='public'"))).scalars())
-        categories = {}
-        for name, (table, predicate) in QUERIES.items():
-            # The supported schema is head 0015. Missing dependencies fail closed
-            # rather than silently running a partial join against older schemas.
-            needed = {table}
-            if 'interview_schedules' in predicate:
-                needed.add('interview_schedules')
-            if 'scheduling_invitations' in predicate:
-                needed.add('scheduling_invitations')
-            if 'interview_transcript_sessions' in predicate:
-                needed.add('interview_transcript_sessions')
-            if not needed <= tables:
-                categories[name] = dict(status='unsupported', count=None, reason='schema_dependency_missing')
-                continue
-            count = await session.scalar(text(f'SELECT count(*) FROM {table} WHERE {predicate}'), params)
-            categories[name] = dict(status='confirmed' if count else 'missing', count=count,
-                                    reason='exact_association' if count else 'no_associated_rows')
-        # Shared job operations contain several submissions. Never claim the
-        # whole row belongs to this upload, or return masked contacts/payloads.
-        if 'bulk_scheduling_operations' in tables:
-            count = await session.scalar(text(
-                'SELECT count(*) FROM bulk_scheduling_operations WHERE job_id=:job_id'), params)
-            categories['shared_bulk_operations'] = dict(status='ambiguous' if count else 'missing',
-                count=count, reason='job_scoped_json_requires_review' if count else 'no_associated_rows')
-        else:
-            categories['shared_bulk_operations'] = dict(status='unsupported', count=None, reason='schema_dependency_missing')
-        # No common application FK: a mismatched job on the same pair needs
-        # review, not automatic inclusion in the deletion scope.
-        legacy = 0
-        for table in ('candidate_scores', 'external_cv_submissions', 'interview_schedules', 'scheduling_invitations'):
-            if table in tables:
-                legacy += await session.scalar(text(f'SELECT count(*) FROM {table} WHERE '
-                    'batch_id=:batch_id AND upload_id=:upload_id AND job_id<>:job_id'), params)
-        categories['legacy_cross_job_references'] = dict(status='ambiguous' if legacy else 'missing',
-            count=legacy, reason='pair_reused_outside_owned_job' if legacy else 'no_associated_rows')
-        referencing = set((await session.execute(text("""
-            SELECT DISTINCT child.relname FROM pg_constraint fk
-            JOIN pg_class child ON child.oid=fk.conrelid
-            JOIN pg_class parent ON parent.oid=fk.confrelid
-            JOIN pg_namespace ns ON ns.oid=child.relnamespace
-            WHERE fk.contype='f' AND ns.nspname='public'
-              AND parent.relname IN ('job_profiles','candidate_scores','external_cv_submissions',
-                'interview_schedules','interview_transcript_sessions','scheduling_invitations')
-        """))).scalars())
-        unknown = referencing - {value[0] for value in QUERIES.values()} - {'bulk_scheduling_operations'}
-        categories['unmapped_referencing_tables'] = dict(status='unsupported' if unknown else 'missing',
-            count=len(unknown), reason='unmapped_foreign_key_dependencies' if unknown else 'no_associated_rows')
-        categories['cv_files'] = file_inventory(storage_root, target, job)
-        categories['global_candidate_identity'] = dict(status='unsupported', count=None, reason='no_global_candidate_registry')
-        categories['external_copies_and_backups'] = dict(status='unsupported', count=None, reason='outside_local_inventory')
-        categories['f11_and_inflight_processing'] = dict(status='unsupported', count=None, reason='process_local_or_inflight_not_enumerable')
-        blockers = sorted({v['reason'] for v in categories.values() if v['status'] in {'ambiguous', 'unsupported'}})
-        if categories['cv_files']['status'] == 'missing':
-            blockers.append('cv_file_missing')
-        if not any(categories[k]['count'] for k in ('imported_submissions', 'screening_versions', 'interviews_and_screening_snapshots')) and not categories['cv_files']['count']:
-            blockers.append('submission_not_established')
-        return dict(mode='dry_run_only', mutation_performed=False, scope='single_owned_submission',
-            categories=categories, blockers=blockers,
-            limitations=['no_global_candidate_resolution', 'json_copies_not_exhaustively_resolved',
-                         'filesystem_not_transactional', 'not_deletion_authorization'])
+        return await inventory_in_transaction(session, target, storage_root)
+
+
+async def inventory_in_transaction(session, target: Target, storage_root: Path):
+    """Shared association inventory; caller owns the transaction and isolation."""
+    params = target.parameters()
+    job = (await session.execute(text(
+        'SELECT job_reference FROM job_profiles WHERE id=:job_id AND recruiter_id=:recruiter_id'), params)).scalar_one_or_none()
+    if job is None:
+        raise InventoryError('owned_job_not_found')
+    tables = set((await session.execute(text(
+        "SELECT tablename FROM pg_tables WHERE schemaname='public'"))).scalars())
+    categories = {}
+    for name, (table, predicate) in QUERIES.items():
+        # The supported schema is head 0015. Missing dependencies fail closed
+        # rather than silently running a partial join against older schemas.
+        needed = {table}
+        if 'interview_schedules' in predicate:
+            needed.add('interview_schedules')
+        if 'scheduling_invitations' in predicate:
+            needed.add('scheduling_invitations')
+        if 'interview_transcript_sessions' in predicate:
+            needed.add('interview_transcript_sessions')
+        if not needed <= tables:
+            categories[name] = dict(status='unsupported', count=None, reason='schema_dependency_missing')
+            continue
+        count = await session.scalar(text(f'SELECT count(*) FROM {table} WHERE {predicate}'), params)
+        categories[name] = dict(status='confirmed' if count else 'missing', count=count,
+                                reason='exact_association' if count else 'no_associated_rows')
+    # Shared job operations contain several submissions. Never claim the
+    # whole row belongs to this upload, or return masked contacts/payloads.
+    if 'bulk_scheduling_operations' in tables:
+        count = await session.scalar(text(
+            'SELECT count(*) FROM bulk_scheduling_operations WHERE job_id=:job_id'), params)
+        categories['shared_bulk_operations'] = dict(status='ambiguous' if count else 'missing',
+            count=count, reason='job_scoped_json_requires_review' if count else 'no_associated_rows')
+    else:
+        categories['shared_bulk_operations'] = dict(status='unsupported', count=None, reason='schema_dependency_missing')
+    # No common application FK: a mismatched job on the same pair needs
+    # review, not automatic inclusion in the deletion scope.
+    legacy = 0
+    for table in ('candidate_scores', 'external_cv_submissions', 'interview_schedules', 'scheduling_invitations'):
+        if table in tables:
+            legacy += await session.scalar(text(f'SELECT count(*) FROM {table} WHERE '
+                'batch_id=:batch_id AND upload_id=:upload_id AND job_id<>:job_id'), params)
+    categories['legacy_cross_job_references'] = dict(status='ambiguous' if legacy else 'missing',
+        count=legacy, reason='pair_reused_outside_owned_job' if legacy else 'no_associated_rows')
+    referencing = set((await session.execute(text("""
+        SELECT DISTINCT child.relname FROM pg_constraint fk
+        JOIN pg_class child ON child.oid=fk.conrelid
+        JOIN pg_class parent ON parent.oid=fk.confrelid
+        JOIN pg_namespace ns ON ns.oid=child.relnamespace
+        WHERE fk.contype='f' AND ns.nspname='public'
+          AND parent.relname IN ('job_profiles','candidate_scores','external_cv_submissions',
+            'interview_schedules','interview_transcript_sessions','scheduling_invitations')
+    """))).scalars())
+    unknown = referencing - {value[0] for value in QUERIES.values()} - {'bulk_scheduling_operations'}
+    categories['unmapped_referencing_tables'] = dict(status='unsupported' if unknown else 'missing',
+        count=len(unknown), reason='unmapped_foreign_key_dependencies' if unknown else 'no_associated_rows')
+    categories['cv_files'] = file_inventory(storage_root, target, job)
+    categories['global_candidate_identity'] = dict(status='unsupported', count=None, reason='no_global_candidate_registry')
+    categories['external_copies_and_backups'] = dict(status='unsupported', count=None, reason='outside_local_inventory')
+    categories['f11_and_inflight_processing'] = dict(status='unsupported', count=None, reason='process_local_or_inflight_not_enumerable')
+    blockers = sorted({v['reason'] for v in categories.values() if v['status'] in {'ambiguous', 'unsupported'}})
+    if categories['cv_files']['status'] == 'missing':
+        blockers.append('cv_file_missing')
+    if not any(categories[k]['count'] for k in ('imported_submissions', 'screening_versions', 'interviews_and_screening_snapshots')) and not categories['cv_files']['count']:
+        blockers.append('submission_not_established')
+    return dict(mode='dry_run_only', mutation_performed=False, scope='single_owned_submission',
+        categories=categories, blockers=blockers,
+        limitations=['no_global_candidate_resolution', 'json_copies_not_exhaustively_resolved',
+                     'filesystem_not_transactional', 'not_deletion_authorization'])
