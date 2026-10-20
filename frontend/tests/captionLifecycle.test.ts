@@ -7,7 +7,7 @@ import ts from "typescript";
 import {isCaption,isFinalization} from "../src/api/captions.ts";
 
 // Exercise production handlers with controlled hooks/browser APIs, no media/network.
-function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspended?:boolean}={}) {
+function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspended?:boolean;cloud?:boolean;recruiter?:boolean}={}) {
   const states:any[]=[],refs:any[]=[],effects:any[]=[],sockets:any[]=[],audios:any[]=[],worklets:any[]=[],timers=new Map<number,{callback:()=>void;ms:number}>();
   const finalizerRef:{current:(()=>Promise<void>)|null}={current:null};let timerId=100;
   let stateIndex=0,refIndex=0,finishModule=()=>{},finishResume=()=>{};
@@ -42,16 +42,16 @@ function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspende
     URL,AudioContext:Audio,MediaStream:class{},AudioWorkletNode:class{port:any={onmessage:null,sent:[],postMessage(v:any){this.sent.push(v);}};constructor(){worklets.push(this);}connect(){}},WebSocket:Socket,
     setTimeout:(callback:()=>void,ms:number)=>{const id=++timerId;timers.set(id,{callback,ms});return id;},clearTimeout:(id:number)=>timers.delete(id),setInterval:()=>2,clearInterval(){}});
   let microphoneMuted=false;
-  function render(){stateIndex=0;refIndex=0;return exports.default({connected:true,candidate:true,microphone:()=>track,microphoneMuted,finalizerRef});}
+  function render(){stateIndex=0;refIndex=0;return exports.default({connected:true,candidate:!options.recruiter,microphone:()=>track,microphoneMuted,finalizerRef});}
   function find(node:any,p:(n:any)=>boolean):any {
     if(!node || typeof node!=="object")return null;if(p(node))return node;
     for(const child of [node.props?.children].flat(Infinity)){const found=find(child,p);if(found)return found;}return null;
   }
-  render();const cleanup=effects[0]();
+  render();states[3]=options.cloud??false;const cleanup=effects[0]();
   function consent(){let tree=render();find(tree,n=>n.type==="input").props.onChange({target:{checked:true}});tree=render();
     find(tree,n=>n.type==="button" && n.props.children==="Consent to captions").props.onClick();const ws=sockets.at(-1);ws.onopen();return ws;}
   async function flush(){for(let i=0;i<12;i++)await Promise.resolve();}
-  return {states,track,audios,worklets,setMuted:(v:boolean)=>{microphoneMuted=v;return render();},cleanup,consent,flush,event:(ws:any,v:any)=>ws.onmessage({data:JSON.stringify(v)}),finishModule:()=>finishModule(),finishResume:()=>finishResume(),finish:()=>finalizerRef.current!(),timeout:(ms:number)=>{const t=[...timers.values()].find(t=>t.ms===ms);assert.ok(t);t.callback();}};
+  return {states,track,audios,worklets,render,find,setMuted:(v:boolean)=>{microphoneMuted=v;return render();},cleanup,consent,flush,event:(ws:any,v:any)=>ws.onmessage({data:JSON.stringify(v)}),finishModule:()=>finishModule(),finishResume:()=>finishResume(),finish:()=>finalizerRef.current!(),timeout:(ms:number)=>{const t=[...timers.values()].find(t=>t.ms===ms);assert.ok(t);t.callback();}};
 }
 
 test("Live status requires running AudioContext; unexpected closure ends captions without stopping microphone",async()=>{
@@ -151,4 +151,24 @@ test("network interruption while finishing resolves leave and stops capture",asy
   const pending=h.finish();h.event(ws,{kind:"finishing",deadline_seconds:35});ws.onclose();await pending;
   assert.equal(h.audios[0].state,"closed");assert.equal(h.track.readyState,"live");
   assert.ok(!h.states[1].includes("drained"));
+});
+
+
+test("synthetic cloud mode never captures microphone and requires recruiter replay action",async()=>{
+  const h=harness({cloud:true,recruiter:true}),ws=h.consent();
+  h.event(ws,{kind:"active",duration_seconds:120,source:"assemblyai-synthetic"});await h.flush();
+  assert.equal(h.audios.length,0);assert.equal(h.worklets.length,0);
+  assert.ok(ws.sent.every((v:any)=>typeof v==="string"));
+  assert.ok(!ws.sent.includes("synthetic-start"));
+  let tree=h.render();h.find(tree,(n:any)=>n.type==="button"&&n.props.children==="Start fixed synthetic cloud replay").props.onClick();
+  assert.equal(ws.sent.at(-1),"synthetic-start");
+  h.event(ws,{kind:"synthetic-complete"});assert.match(h.states[1],/provider streams terminated/);
+  h.cleanup();assert.equal(ws.readyState,3);
+});
+
+test("candidate has no replay control and mode mismatch fails closed",async()=>{
+  const h=harness({cloud:true});assert.equal(h.find(h.render(),(n:any)=>n.type==="button"&&n.props.children==="Start fixed synthetic cloud replay"),null);
+  const ws=h.consent();h.event(ws,{kind:"active"});assert.equal(ws.readyState,3);assert.equal(h.audios.length,0);
+  const local=harness(),other=local.consent();local.event(other,{kind:"active",source:"assemblyai-synthetic"});
+  assert.equal(other.readyState,3);assert.equal(local.audios.length,0);
 });

@@ -9,6 +9,9 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
   finalizerRef?:{current:(()=>Promise<void>)|null};
 }) {
   const [agreed,setAgreed]=useState(false);const [state,setState]=useState("Off");const [rows,setRows]=useState<Caption[]>([]);
+  const [cloud,setCloud]=useState<boolean|null>(null);
+  const [replayReady,setReplayReady]=useState(false);
+  const [replayStarted,setReplayStarted]=useState(false);
   const socket=useRef<WebSocket|null>(null);const context=useRef<AudioContext|null>(null);
   const generation=useRef(0);const heartbeat=useRef<ReturnType<typeof setInterval>|null>(null);
   const connectionTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -37,9 +40,15 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
     const old=socket.current;socket.current=null;
     try{if(old?.readyState===WebSocket.OPEN)old.send("stop");}catch{/* Connection already lost. */}old?.close();
     finishing.current=false;onFinalizing?.(false);finishResolve.current?.();finishResolve.current=null;finishPromise.current=null;
-    setAgreed(false);setRows([]);setState("Captions stopped. Microphone/video may remain active for the interview.");
+    setReplayReady(false);setReplayStarted(false);setAgreed(false);setRows([]);setState("Captions stopped. Microphone/video may remain active for the interview.");
   }
   useEffect(()=>()=>{stop();},[connected,candidate,jobId,interviewId]);
+  useEffect(()=>{let cancelled=false;
+    void fetch("/api/v1/interview-captions/config",{credentials:"include",cache:"no-store"})
+      .then(async r=>{if(!r.ok)throw Error();return r.json();})
+      .then(v=>{if(!cancelled&&typeof v.assemblyai_synthetic==="boolean")setCloud(v.assemblyai_synthetic);})
+      .catch(()=>{if(!cancelled)setCloud(null);});
+    return()=>{cancelled=true;};},[]);
   if(finalizerRef)finalizerRef.current=finish;
   useEffect(()=>{workletRef.current?.port.postMessage({kind:"mute",value:microphoneMuted || !trackRef.current?.enabled || !!trackRef.current?.muted});},[microphoneMuted]);
   function finish():Promise<void> {
@@ -112,7 +121,7 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
     if(current===generation.current && audio.state!=="running")throw Error();
   }
   function consent() {
-    if(!connected || !agreed || socket.current)return;
+    if(!connected || cloud===null || !agreed || socket.current)return;
     const current=++generation.current;setRows([]);setState("Connecting captions…");
     duration.current=120;
     forwarded.current={frames:0,samples:0};captured.current=0;endSent.current=false;acknowledged.current=false;finishing.current=false;terminalStatus.current=null;
@@ -127,12 +136,23 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
         const limit=value.duration_seconds ?? 120;
         if(!Number.isInteger(limit) || limit<120 || limit>300){stop();return;}
         duration.current=limit;
+        if(value.source==="assemblyai-synthetic"){
+          if(cloud!==true){stop();return;}
+          setReplayReady(true);setState("Synthetic cloud replay ready. Prepare the assistant and obtain both assistant consents before recruiter starts.");return;
+        }
+        if(cloud===true){stop();return;}
         setState("Starting caption audio capture…");
         void startAudio(current,ws).then(()=>{
           if(current===generation.current && context.current?.state==="running")setState(`Live — local CPU captions, maximum ${duration.current===120?"two minutes":`${duration.current} seconds (isolated test)`}`);
         }).catch(()=>{
           if(current===generation.current){stop();setState("Captions unavailable. Video continues.");}
         });
+      }
+      else if(value?.kind==="synthetic-complete" && cloud===true){setState("Synthetic replay complete; provider streams terminated. Review interviewer-only assistant output.");}
+      else if(value?.kind==="synthetic-finishing" && cloud===true){finishing.current=true;setState("Finishing server-owned synthetic audio…");}
+      else if(value?.kind==="synthetic-termination" && cloud===true){
+        if(typeof value.confirmed!=="boolean" || !Number.isInteger(value.sessions) || value.sessions<0 || value.sessions>2){stop();return;}
+        terminalStatus.current=value.confirmed ? `Synthetic cloud cleanup acknowledged; sessions: ${value.sessions}.` : "Synthetic cloud termination unconfirmed. Check provider usage; do not retry.";
       }
       else if(value?.kind==="stopped"){
         const status=terminalStatus.current;stop();if(status)setState(status);
@@ -162,11 +182,14 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
     ws.onclose=()=>{if(current===generation.current){stop();setState("Captions unavailable or stopped. Video continues.");}};
     ws.onerror=()=>{if(current===generation.current){stop();setState("Captions unavailable. Video continues.");}};
   }
-  return <section aria-label="Temporary interview captions"><h2>Free local captions</h2>
-    <p>{storageAvailable ? "Optional English captions processed on this computer. Both participants must consent to captions. No audio/video recording. Temporary captions clear on stop; optional transcript storage requires separate consent." : "Optional English captions processed on this computer. Both participants must consent. No recording or saved transcript; stop clears captions."}</p>
+  return <section aria-label="Temporary interview captions"><h2>{cloud ? "Synthetic cloud captions" : "Local captions"}</h2>
+    {cloud===true ? <p>AssemblyAI receives only the fixed server-owned eSpeak question and answer. Free-tier audio/text may be used for model training. No microphone audio is sent to AssemblyAI. Both participants must consent; assistant processing requires separate consent. No saved transcript. One attempt per interview per backend process; no retries.</p> : <p>{storageAvailable ? "Optional English captions processed on this computer. Both participants must consent to captions. No audio/video recording. Temporary captions clear on stop; optional transcript storage requires separate consent." : "Optional English captions processed on this computer. Both participants must consent. No recording or saved transcript; stop clears captions."}</p>}
     {storageStatus && <p role="status">{storageStatus}</p>}
-    <label><input type="checkbox" checked={agreed} disabled={!connected || !!socket.current} onChange={e=>setAgreed(e.target.checked)}/> I consent to temporary microphone processing for this synthetic test: two minutes by default, up to five minutes only in an isolated extended test.</label>
-    <button disabled={!connected || !agreed || !!socket.current} onClick={consent}>Consent to captions</button>
+    <label><input type="checkbox" checked={agreed} disabled={!connected || cloud===null || !!socket.current} onChange={e=>setAgreed(e.target.checked)}/> {cloud ? "I consent to transmitting the fixed synthetic eSpeak audio to AssemblyAI, including possible model-training use." : "I consent to temporary microphone processing for this synthetic test: two minutes by default, up to five minutes only in an isolated extended test."}</label>
+    <button disabled={!connected || cloud===null || !agreed || !!socket.current} onClick={consent}>Consent to captions</button>
+    {cloud===true && !candidate && <button disabled={!replayReady || replayStarted} onClick={()=>{
+      if(socket.current?.readyState===WebSocket.OPEN){setReplayStarted(true);socket.current.send("synthetic-start");}
+    }}>Start fixed synthetic cloud replay</button>}
     <button disabled={!socket.current} onClick={stop}>Withdraw consent / stop captions</button>
     <button disabled={!socket.current || finishing.current} onClick={()=>void finish()}>Finish captions normally</button>
     <p role="status">{microphoneMuted && state.startsWith("Live") ? "Your microphone is muted; your caption audio is paused." : state}</p><ul aria-label="Live captions">{rows.map(c=><li key={c.sequence}>{c.role==="recruiter"?"Recruiter":"Candidate"} · {c.start.toFixed(1)}–{c.end.toFixed(1)}s: {c.text}</li>)}</ul>

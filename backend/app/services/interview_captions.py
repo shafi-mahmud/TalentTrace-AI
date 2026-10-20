@@ -203,6 +203,10 @@ class CaptionSession:
         text = await self.providers[role].transcribe(audio)
         if self.finishing:
             await self._check_access()
+        await self._publish_caption(role, text, start, end, samples=len(audio) // 2)
+
+    async def _publish_caption(self, role, text, start, end, *, samples=0):
+        """Shared event envelope; streaming sessions supply finalized text only."""
         if self.stopped:
             return
         if self.expired():
@@ -210,7 +214,7 @@ class CaptionSession:
             return
         if not isinstance(text, str) or len(text) > 1000 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text):
             raise ValueError('Unsafe caption')
-        self.processed_samples[role] += len(audio) // 2
+        self.processed_samples[role] += samples
         if text:
             # One extra tail event per role; legacy caption fields stay unchanged.
             if self.sequence >= max(120, self.duration_seconds // 2):
