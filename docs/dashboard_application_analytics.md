@@ -32,3 +32,62 @@ PostgreSQL test skipped; 3 frontend API tests passed. Authorization tests use re
 authentication/ownership handlers with SQL doubles; acknowledgement tests use
 statement doubles. PostgreSQL concurrency/durability acceptance is not inferred
 from those doubles. No external calls were made.
+
+## Implemented Home dashboard
+
+Select an active saved job on Home. Only that job's application API is requested.
+Its title and persisted Job Reference identify the analytics panel. Cards show
+received, new/unviewed, available, and imported-unavailable totals. Source counts
+and accessible meter bars distinguish native storage from trusted imports.
+Continue to Candidate Screening carries the exact selected job.
+
+Loading/error states do not substitute zero. A retained snapshot during refresh
+or after failure is explicitly labelled stale. Refresh is manual, without polling.
+Neither loading, opening nor refreshing marks applications viewed. The explicit
+acknowledgement sends only the displayed snapshot (initially 25, with Show more
+in steps of 25, bounded by the service's 1,000). Duplicate clicks are guarded;
+an unconfirmed acknowledgement requires refresh before another attempt. Job keys
+and request-generation fences keep late responses out of another job's panel.
+
+The list exposes ordinal labels, source category, availability and viewed status,
+not CV text, contacts, filenames or external identifiers. It is in stable identity
+order, **not chronological order**. A reliable cross-source arrival timestamp is
+not available in the existing API, so a genuinely recent-arrival list remains
+unavailable. No filesystem dates are used.
+
+Complete current-revision screening analytics also remain unavailable: the saved
+scores endpoint is revision-bound but does not contain the complete operational
+failure history of all submitted applications. It cannot honestly produce the
+requested five-category summary for the received population. The dashboard states
+this and directs the recruiter to current screening results. No historical
+revision totals, conversion rates or predictive metrics are invented.
+
+## Files and final verification
+
+- Backend route registration, model registration and reused notification
+  service/router/model: `app/api/router.py`,
+  `app/api/routers/application_notifications.py`, `app/db/models/__init__.py`,
+  `app/db/models/application_view.py`, `app/services/application_notifications.py`.
+- Backend tests: `test_application_notifications.py` and
+  `test_notification_integration.py`.
+- Frontend: `api/applications.ts`, `components/RecruiterHome.ts`,
+  `components/ApplicationNotifications.ts` and `index.css`.
+- Frontend tests: `applications.test.ts` and `dashboardApplications.test.ts`.
+
+Run all frontend Node tests, TypeScript app/node checks, and the production build.
+Run backend notification/integration, CV upload, external-intake and bridge tests.
+The responsive implementation uses the existing design tokens, wrapping and an
+auto-fit card grid; live browser/mobile viewport acceptance was not performed.
+No existing service was deployed or restarted. The normal existing large LiveKit
+bundle warning is unrelated to these analytics changes.
+
+Recommended follow-up: authorize an isolated synthetic browser/DB acceptance of
+refresh, acknowledgement persistence, late arrivals and desktop/mobile layouts.
+Timestamped native intake history and complete screening-failure persistence would
+be separate future requirements, not implied by the current counters.
+
+Final combined results: **277 frontend tests passed, 0 failed/skipped; 95 backend
+tests passed, 0 failed, 3 skipped**. The skipped cases are the opt-in PostgreSQL
+notification, external-intake and bridge integrations. TypeScript app/node checks,
+Vite production build and Git whitespace checks passed. The initial service-only
+counts above are a subset of these totals, not additional tests.

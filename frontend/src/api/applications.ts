@@ -19,13 +19,17 @@ export function validateApplications(value: unknown, jobId: string): Application
   return v;
 }
 export async function loadApplications(jobId: string, signal?: AbortSignal): Promise<Applications> {
+  try {
   const response = await authenticatedFetch(`${BASE}/api/v1/jobs/${encodeURIComponent(jobId)}/applications`, {signal});
   if (!response.ok) throw new Error("Applications unavailable. Try Refresh.");
   return validateApplications(await response.json(),jobId);
+  } catch {throw new Error("Applications unavailable. Try Refresh.");}
 }
 export async function markApplicationsViewed(jobId: string, applications: ApplicationItem[]) {
+  try {
   const response = await authenticatedFetch(`${BASE}/api/v1/jobs/${encodeURIComponent(jobId)}/applications/viewed`, {
     method:"POST", headers:{"Content-Type":"application/json"},
     body:JSON.stringify({applications:applications.map(({batch_id,upload_id})=>({batch_id,upload_id}))})});
   if (!response.ok) throw new Error("Viewed status was not confirmed. Refresh before trying again.");
+  } catch {throw new Error("Viewed status was not confirmed. Refresh before trying again.");}
 }

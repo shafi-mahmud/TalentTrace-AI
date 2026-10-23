@@ -576,3 +576,14 @@ body { background: var(--page); color: var(--ink); }
  .comparison-columns, .comparison-selectors { grid-template-columns: minmax(0,1fr); }
  .comparison-summary :is(th,td) { padding: 6px; font-size: 13px; }
 }
+
+/* Selected-job analytics reuse the recruiter Home design tokens. */
+.application-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+.application-metric { padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--page); }
+.application-metric dt { color: var(--muted); }
+.application-metric dd { margin: 8px 0 0; font-size: 28px; font-weight: 700; }
+.application-breakdown { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 18px 0; }
+.application-breakdown :is(th, td) { text-align: left; padding: 8px 4px; overflow-wrap: anywhere; }
+.application-breakdown meter { width: 100%; accent-color: #246b56; }
+.application-list { padding-left: 20px; overflow-wrap: anywhere; }
+.home-analytics { min-width: 0; }

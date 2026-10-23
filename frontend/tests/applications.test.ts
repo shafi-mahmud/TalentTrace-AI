@@ -29,4 +29,10 @@ test("API errors are sanitized and never automatically repeated",async t=>{
   await assert.rejects(loadApplications(job),e=>!String(e).includes("PRIVATE_VALUE"));assert.equal(calls,1);
   await assert.rejects(markApplicationsViewed(job,[row]),e=>!String(e).includes("PRIVATE_VALUE"));assert.equal(calls,2);
 });
-
+test('malformed responses and transport errors never expose response text or network details',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>new Response('PRIVATE invalid JSON'));
+  await assert.rejects(loadApplications(job),/^Error: Applications unavailable\. Try Refresh\.$/);
+  t.mock.method(globalThis,'fetch',async()=>{throw Error('PRIVATE transport details');});
+  await assert.rejects(loadApplications(job),/^Error: Applications unavailable\. Try Refresh\.$/);
+  await assert.rejects(markApplicationsViewed(job,[row]),/^Error: Viewed status was not confirmed\. Refresh before trying again\.$/);
+});
