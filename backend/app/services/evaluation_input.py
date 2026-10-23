@@ -81,6 +81,7 @@ def build_input(parent, snapshot, captures, rows):
         rows=sorted(rows,key=lambda row:(capture_order.get(row.session_id,-1),row.sequence,row.id))
         identities, sequences, capture_ids, refs = set(), set(), set(), []
         durations = {}
+        transitions = []
         for capture in captures:
             if capture.id in capture_ids or capture.interview_id != parent.id:
                 raise EvaluationInputError('evaluation_identity_conflict')
@@ -98,6 +99,11 @@ def build_input(parent, snapshot, captures, rows):
                     or evidence.expected_turns != count or evidence.acknowledged_turns != count
                     or evidence.accepted_samples != evidence.processed_samples):
                 raise EvaluationInputError('evaluation_completeness_unverified')
+            if refs:
+                if capture.started_at < refs[-1].ended_at:
+                    raise EvaluationInputError('evaluation_capture_overlap')
+                gap_ms = int((capture.started_at - refs[-1].ended_at).total_seconds() * 1000)
+                transitions.append(f'{refs[-1].id} -> {capture.id}: {gap_ms} ms between stored capture windows')
             refs.append(CaptureReference(id=capture.id, started_at=capture.started_at, ended_at=capture.ended_at))
             durations[capture.id] = int((capture.ended_at-capture.started_at).total_seconds()*1000)
         turns = []
@@ -118,7 +124,11 @@ def build_input(parent, snapshot, captures, rows):
             retention_deadline=parent.transcript_retention_deadline, criteria=tuple(job.criteria),
             captures=tuple(refs), turns=tuple(turns),
             warning=('Finalized accepted audio only; ASR may be wrong. Missing evidence is not lack of skill.'
-                + (f' {len(excluded)} empty failed capture attempt(s) excluded; this is not a complete interview.' if excluded else '')))
+                + (f' {len(excluded)} empty failed capture attempt(s) excluded; this is not a complete interview.' if excluded else '')
+                + (' Capture transitions: ' + '; '.join(transitions[:5])
+                   + (f'; {len(transitions)-5} additional transitions; inspect persisted capture windows' if len(transitions)>5 else '')
+                   + '. Transition audio coverage is unverified, including around window boundaries; '
+                   'do not infer continuous recording or pair answers across epochs.' if transitions else '')))
     except ValidationError:
         raise EvaluationInputError('evaluation_source_invalid') from None
 

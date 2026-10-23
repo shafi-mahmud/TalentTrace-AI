@@ -20,7 +20,8 @@ from app.core.auth import database_session, token_hash, current_recruiter
 from app.db.models.recruiter import Recruiter, RecruiterSession, JobProfile, CandidateScoreRecord, InterviewInvitation
 from app.db.models.interview_transcript import InterviewTranscriptSession as Capture
 from app.schemas.candidate_score import ScoringWeights
-from app.services.interview_transcripts import StorageConsentAuthority, TranscriptPersistenceService
+from app.services.interview_transcripts import StorageConsentAuthority, TranscriptPersistenceService, TranscriptError
+from app.schemas.interview_transcript import FinalTranscriptEvent
 from app.services.transcript_consent import TranscriptConsentCoordinator, CONSENT_VERSION
 from app.services.caption_transcript import CaptionTranscript
 from app.services.interview_captions import CaptionSession
@@ -53,8 +54,8 @@ def no_external_inference(monkeypatch):
     monkeypatch.setattr(httpx.AsyncHTTPTransport, 'handle_async_request', denied)
 
 
-@pytest.mark.parametrize('outcome', ['complete', 'interrupted', 'missing_speaker', 'provider_failure'])
-def test_connected_scheduled_capture_analysis_assessment(pg, monkeypatch, outcome):
+@pytest.mark.parametrize('outcome,epochs', [('complete',1), ('interrupted',1), ('missing_speaker',1), ('provider_failure',1), ('complete',2), ('interrupted',2), ('revoked',2), ('missing_consent',2)])
+def test_connected_scheduled_capture_analysis_assessment(pg, monkeypatch, outcome, epochs):
     async def scenario():
         assert pg.database == 'transcript_test' and pg.port == 54402
         engine = create_async_engine(pg, hide_parameters=True)
@@ -108,47 +109,83 @@ def test_connected_scheduled_capture_analysis_assessment(pg, monkeypatch, outcom
             authority = StorageConsentAuthority(factory, version=CONSENT_VERSION, clock=lambda: now[0])
             storage = TranscriptPersistenceService(factory, authority, clock=lambda: now[0])
             coordinator = TranscriptConsentCoordinator(authority, storage, enabled=True)
-            prepared = await coordinator.prepare(request(), interview_id=interview, job_id=job)
-            for candidate in (False, True):
-                await coordinator.decide(request(candidate), interview_id=interview, capture_id=prepared['capture_id'],
-                    decision='accept', job_id=None if candidate else job)
-            adapter = CaptionTranscript(N(storage=storage, coordinator=coordinator), interview)
             tick = [0.0]
-            # The recognizer boundary is the only substituted F4 component.
+            deadline = (datetime.fromisoformat(response.json()['scheduled_at']) + timedelta(minutes=45) - now[0]).total_seconds()
+            capture_ids = []
             class Worker:
                 async def start(self): pass
                 async def close(self): pass
                 async def transcribe(self, pcm): return 'unused'
-            caption = CaptionSession(Worker, clock=lambda: tick[0], storage=adapter)
             messages = []
-            async def send(event):
-                messages.append(event)
-            for role in ('recruiter', 'candidate'):
-                await caption.connect(role, send)
-            for role in ('recruiter', 'candidate'):
-                await caption.approve(role)
-            for role, text in [('recruiter', 'What is a Python list?'), ('candidate', 'A list is an ordered collection.')]:
-                if outcome == 'missing_speaker' and role == 'candidate': continue
-                async def recognize(pcm, text=text): return text
-                caption.providers[role].transcribe = recognize
-                for _ in range(40):
-                    tick[0] += .1
-                    now[0] += timedelta(seconds=.1)
-                    await caption.audio(role, bytes(3200))
-            if outcome == 'interrupted':
-                await caption.stop()
-            else:
-                await caption.request_finish('recruiter')
-                for role in ('recruiter', 'candidate'): await end(caption, role)
-                await caption.finalizer
-                assert caption.final_result['outcome'] == 'drained'
-            turns = await storage.list_turns(owner, interview)
-            async with factory() as db:
-                capture = await db.get(Capture, prepared['capture_id'])
-                assert capture.status == ('interrupted' if outcome == 'interrupted' else 'completed')
-                assert capture.persistence_outcome == ('partial' if outcome == 'interrupted' else 'saved')
-            assert [t.role for t in turns] == (['recruiter'] if outcome == 'missing_speaker' else ['recruiter', 'candidate'])
-            assert all(t.start_ms <= t.end_ms and t.session_id == prepared['capture_id'] for t in turns)
+            async def send(event): messages.append(event)
+            for epoch in range(epochs):
+                if epoch:
+                    async with factory() as db:
+                        prior = await db.get(Capture, capture_ids[-1])
+                        assert prior.status in ('completed', 'interrupted')
+                    now[0] += timedelta(seconds=3); tick[0] += 3
+                    if outcome == 'revoked':
+                        await authority.withdraw(request(True), interview_id=interview)
+                        old = turns[0]
+                        event = FinalTranscriptEvent(**{k:getattr(old,k) for k in ('id','session_id','sequence','role','text','start_ms','end_ms')}, final=True)
+                        with pytest.raises(TranscriptError, match='storage_authorization_revoked'):
+                            await storage.append_final(owner, event)
+                        with pytest.raises(TranscriptError, match='storage_authorization_revoked'):
+                            await coordinator.prepare(request(), interview_id=interview, job_id=job)
+                        return
+                    for req, other_job, other_interview in ((request(), uuid4(), interview),
+                            (request(token=foreign_token), job, interview), (request(True), None, uuid4())):
+                        with pytest.raises(TranscriptError):
+                            await coordinator.prepare(req, interview_id=other_interview, job_id=other_job)
+                prepared = await coordinator.prepare(request(), interview_id=interview, job_id=job)
+                capture_id = prepared['capture_id']
+                assert capture_id not in capture_ids
+                if epoch:
+                    with pytest.raises(TranscriptError):
+                        await coordinator.decide(request(True), interview_id=interview, capture_id=capture_ids[-1], decision='accept')
+                await coordinator.decide(request(), interview_id=interview, capture_id=capture_id, decision='accept', job_id=job)
+                if outcome == 'missing_consent' and epoch:
+                    async with factory() as db: assert await db.get(Capture, capture_id) is None
+                    assert coordinator._entries[interview].status == 'awaiting_consent'
+                    return
+                await coordinator.decide(request(True), interview_id=interview, capture_id=capture_id, decision='accept')
+                capture_ids.append(capture_id)
+                adapter = CaptionTranscript(N(storage=storage, coordinator=coordinator), interview)
+                caption = CaptionSession(Worker, clock=lambda: tick[0], storage=adapter, authorization_deadline=deadline)
+                assert caption.authorization_deadline == deadline
+                for role in ('recruiter', 'candidate'): await caption.connect(role, send)
+                for role in ('recruiter', 'candidate'): await caption.approve(role)
+                for role, text in [('recruiter', 'What is a Python list?'), ('candidate', 'A list is an ordered collection.')]:
+                    if outcome == 'missing_speaker' and role == 'candidate': continue
+                    async def recognize(pcm, text=text): return text
+                    caption.providers[role].transcribe = recognize
+                    for _ in range(40):
+                        tick[0] += .1; now[0] += timedelta(seconds=.1)
+                        await caption.audio(role, bytes(3200))
+                interrupted = outcome == 'interrupted' and epoch == 0
+                if interrupted:
+                    await caption.stop()
+                else:
+                    await caption.request_finish('recruiter')
+                    for role in ('recruiter', 'candidate'): await end(caption, role)
+                    await caption.finalizer
+                    assert caption.final_result['outcome'] == 'drained'
+                async with factory() as db:
+                    capture = await db.get(Capture, capture_id)
+                    assert capture.status == ('interrupted' if interrupted else 'completed')
+                    assert capture.persistence_outcome == ('partial' if interrupted else 'saved')
+                turns = await storage.list_turns(owner, interview)
+                if epoch and outcome == 'complete':
+                    old = turns[0]
+                    duplicate = FinalTranscriptEvent(**{k:getattr(old,k) for k in ('id','session_id','sequence','role','text','start_ms','end_ms')}, final=True)
+                    await storage.append_final(owner, duplicate)
+                    late = duplicate.model_copy(update={'id':uuid4(),'sequence':3})
+                    with pytest.raises(TranscriptError, match='capture_closed'):
+                        await storage.append_final(owner, late)
+                    assert len(await storage.list_turns(owner, interview)) == 4
+            assert [t.role for t in turns] == (['recruiter'] if outcome == 'missing_speaker' else ['recruiter', 'candidate'] * epochs)
+            assert {t.session_id for t in turns} == set(capture_ids)
+            assert all(t.start_ms <= t.end_ms for t in turns)
             provider = GroundedProvider(fail=outcome == 'provider_failure')
             def manager():
                 value = DurableAnalysisManager(PostInterviewInputService(storage),
@@ -181,7 +218,12 @@ def test_connected_scheduled_capture_analysis_assessment(pg, monkeypatch, outcom
             if outcome == 'complete':
                 assert first.interview.state == 'available'
                 assert {t.id for t in first.interview.turns} == {t.id for t in turns}
-                assert first.interview.assessment.answers[0].dimensions[0].evidence[0].turn_id == turns[1].id
+                quotes = [q for answer in first.interview.assessment.answers for dimension in answer.dimensions for q in dimension.evidence]
+                assert quotes and all(q.turn_id in {t.id for t in turns if t.role == 'candidate'} for q in quotes)
+                if epochs == 2:
+                    assert '3000 ms between stored capture windows' in first.interview.warning
+                    assert 'Transition audio coverage is unverified' in first.interview.warning
+                    assert {pair.capture_id for pair in first.interview.pairs} == set(capture_ids)
             else:
                 assert first.interview.state != 'available' and first.interview.assessment is None
             for kwargs in ({'job_id': uuid4()}, {'upload_id': uuid4()}, {'user': foreign}):
