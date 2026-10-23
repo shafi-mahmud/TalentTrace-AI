@@ -1,5 +1,15 @@
 # F2 scoring foundation
 
+## Current deadline review
+
+See [F1/F2 deadline acceptance](f1_f2_deadline_acceptance.md) for the official BID
+review, read-only recomputation of the retained 20-application benchmark and new
+connected offline acceptance coverage. All 11 eligible abstentions contain
+ambiguous experience evidence in a positive-weight dimension; no scoring formula
+defect was established. The formula/defaults remain provisional, and full
+all-candidate ranking, real-model accuracy/repeatability and N1 acceptance remain
+pending. The historical statements below describe their original verification dates.
+
 ## Implemented
 
 `schemas/candidate_score.py` and `services/candidate_scoring.py` provide an

@@ -52,6 +52,9 @@ PDFs are design records; implemented behavior must be checked against code.
 
 ## N1 benchmark — 20 synthetic CVs, PARTIAL (19 October 2026)
 
+[Current offline F1/F2 acceptance review](docs/f1_f2_deadline_acceptance.md)
+recomputes the retained scoring outcomes; it is not a new provider benchmark.
+
 Tested source: `b3c00db89aec0f891b039e32a065ec36c2e44ec6`. One actual authenticated
 FastAPI batch used local PDF extraction, real free-tier Groq
 `openai/gpt-oss-120b` profile/semantic inference, LangGraph screening, unchanged
