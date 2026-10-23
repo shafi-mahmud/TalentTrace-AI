@@ -97,15 +97,21 @@ def test_real_postgres_concurrent_import_and_migration(tmp_path):
  from sqlalchemy import select,func
  from app.db.models.recruiter import Recruiter,JobProfile
  from app.db.models.external_cv import ExternalCvSubmissionRecord
- container='talenttrace-self-schedule-test-20261014'
+ container=os.environ.get('F4_BRIDGE_TEST_CONTAINER','')
+ assert container.startswith('tt-trainer-tests-'),'A new explicitly test-owned container is required'
+ info=json.loads(subprocess.run(['docker','inspect',container],capture_output=True,text=True,check=True).stdout)[0]
+ assert info['Config']['Labels'].get('talenttrace.test-only')=='trainer-sprints'
+ assert all(m['Type']=='volume' for m in info['Mounts']),'No host configuration or candidate mounts'
+ ports=info['NetworkSettings']['Ports']['5432/tcp']
+ assert len(ports)==1 and ports[0]['HostIp']=='127.0.0.1'
+ assert os.environ.get('F4_BRIDGE_TEST_PORT')==ports[0]['HostPort']
  database='f4_application_bridge_test_'+uuid4().hex[:10]
  subprocess.run(['docker','exec',container,'createdb','-U','schedule_test',database],check=True,capture_output=True)
  output=StringIO();command.upgrade(Config('alembic.ini',output_buffer=output),'head',sql=True)
  migration=subprocess.run(['docker','exec','-i',container,'psql','-v','ON_ERROR_STOP=1','-U','schedule_test','-d',database],input=output.getvalue(),text=True,capture_output=True)
  assert migration.returncode==0,'Disposable migration failed'
- info=json.loads(subprocess.run(['docker','inspect',container],capture_output=True,text=True,check=True).stdout)[0]
  password=next(v.split('=',1)[1] for v in info['Config']['Env'] if v.startswith('POSTGRES_PASSWORD='))
- url=URL.create('postgresql+asyncpg',username='schedule_test',password=password,host='127.0.0.1',port=54401,database=database)
+ url=URL.create('postgresql+asyncpg',username='schedule_test',password=password,host='127.0.0.1',port=int(ports[0]['HostPort']),database=database)
  async def run():
   engine=create_async_engine(url,hide_parameters=True);factory=async_sessionmaker(engine,expire_on_commit=False)
   owner,job=uuid4(),uuid4()

@@ -50,7 +50,7 @@ test("local form exposes a selectable timezone, UTC preview and unchanged unscor
   for (const text of ["Local interview date and time", "Interview timezone (IANA)", "2070-01-20T09:00:00.000Z", "Eligible but not scored"])
     assert.ok(html.includes(text), text);
   assert.match(html, /<select id="interview-zone"/);
-  assert.match(html, /disabled=""[^>]*>Schedule interview/);
+  assert.match(html, /disabled=""[^>]*>Review interview/);
   const form = ScheduleForm(props);
   const fields = (form.props.children as React.ReactElement[])[3];
   const select = (fields.props.children as React.ReactElement[]).find(child => child?.type === "select")!;

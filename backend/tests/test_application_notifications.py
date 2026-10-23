@@ -136,6 +136,9 @@ def notification_pg():
         migration('0010_interview_transcripts:0011_application_views')
         assert '1' in sql(f"SELECT count(*) FROM recruiters WHERE id='{sentinel}';")
         assert '0011_application_views' in sql('SELECT version_num FROM alembic_version;')
+        # Current import models include later contact fields; test the integrated head.
+        migration('0011_application_views:head')
+        assert '0016_submission_deletion' in sql('SELECT version_num FROM alembic_version;')
         yield url
     finally:
         subprocess.run(['docker','stop',container],capture_output=True,check=True)
