@@ -38,3 +38,6 @@ api_router.include_router(consolidated_assessment.router)
 
 from app.api.routers import interview_copilot
 api_router.include_router(interview_copilot.router)
+
+from app.api.routers import application_notifications
+api_router.include_router(application_notifications.router)
