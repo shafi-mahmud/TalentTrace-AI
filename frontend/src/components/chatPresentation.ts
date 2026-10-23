@@ -4,12 +4,14 @@ import { MISSING_FIELD_LABELS } from "../types/recruiterChat.ts";
 import type { ChatMessage, RecruiterChatResponse, PublicationState } from "../types/recruiterChat";
 import type { JobDescriptionGenerationResponse } from "../types/jobDescription";
 import type { WorkingCriteriaDraft } from "../types/recruiterChat";
+import SavedJobIdentity from './SavedJobIdentity.ts';
 
 export function replyToChatMessage(reply: RecruiterChatResponse): ChatMessage {
   return { role: "assistant", text: reply.assistant_message, conversationId: reply.conversation_id,
     ...(reply.status === "clarification" ? { missingFields: reply.missing_fields } : {}),
     ...(reply.status === "jd_generated" ? { jobDescriptionResult: reply.job_description_result, publishingContext: reply.publishing_context,
       screeningSuggestions: reply.screening_suggestions, draftId: reply.draft_id,
+      jobReference: reply.job_reference ?? undefined, jobRevision: reply.job_revision,
       screeningSuggestionSources: reply.screening_suggestion_sources } : {}),
   };
 }
@@ -39,7 +41,7 @@ function resultList(title: string, items: string[], skills = false) {
       ...items.map((item, index) => h("li", { key: index }, item))));
 }
 
-function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, onPublish, onRevise, actionsDisabled }: {
+function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, onPublish, onRevise, onContinue, actionsDisabled }: {
   result: JobDescriptionGenerationResponse; publication?: PublicationState;
   criteriaDraft?: WorkingCriteriaDraft; onCriteriaChange?: (criteria: WorkingCriteriaDraft["criteria"]) => void;
   onCriteriaReviewed?: (reviewed: boolean) => void; onContinue?: () => void;
@@ -58,7 +60,7 @@ function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, o
   return h("div", { className: "chat-draft" },
     h("div", { className: "draft-notice" }, h("span", { className: "draft-badge" }, "Draft"),
       h("span", {className: "review-badge"}, "Human review required"), h("span", {className: "grounded-badge"}, "Policy grounded"),
-      h("p", null, publication.status === "success" ? "Published as a demo. Formal approval is not recorded." : "Draft saved to your job. Review before publishing.")),
+      h("p", null, publication.status === "success" ? "Published as a demo. Formal approval is not recorded." : "Review this draft and its saved job identity before continuing.")),
     h("article", { className: "job-description" },
       h("h2", { className: "generated-title" }, draft.title),
       h("section", { className: "result-section" }, h("h3", null, "Summary"), h("p", null, draft.summary)),
@@ -83,6 +85,7 @@ function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, o
       h("button", {type: "button", className: "button button-primary", onClick: onPublish, disabled: !onPublish || actionsDisabled || publication.status !== "idle"},
         publication.status === "loading" ? "Publishing…" : publication.status === "success" ? "Published to Discord" : "Publish to Discord"),
       h("button", {type: "button", className: "button button-secondary", onClick: onRevise, disabled: !onRevise || actionsDisabled || publication.status === "loading"}, "Revise draft")),
+    onContinue ? h('button',{type:'button',className:'button button-secondary',disabled:actionsDisabled,onClick:onContinue},'Review screening criteria for this job') : null,
     publication.status === "loading" ? h("p", {role: "status", className: "publication-note"}, "Publishing once through MCP…") : null,
     publication.status === "success" ? h("div", {role: "status", className: "publication-success"},
       h("strong", null, "Publication confirmed"), h("dl", null,
@@ -101,6 +104,7 @@ export function ChatMessageView({ message, criteriaDraft, onCriteriaChange, onCr
   return h("div", { className: `chat-message chat-${message.role}` },
     h("strong", null, message.role === "recruiter" ? "You" : "TalentTrace AI"),
     h("p", null, message.text),
+    message.jobDescriptionResult ? h(SavedJobIdentity,{jobReference:message.jobReference,revision:message.jobRevision,internalId:message.draftId}) : null,
     message.sendState === "sending" ? h("p", {role: "status"}, "Sending…") : null,
     message.sendState === "failed" ? h("div", {role: "alert", className: "error-banner chat-send-error"},
       h("p", null, "Message was not confirmed as sent. Your text remains in the composer.", message.sendError ? ` ${message.sendError}` : ""),

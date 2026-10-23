@@ -28,6 +28,8 @@ function Workspace({recruiterId,accountControls}: {recruiterId: string;accountCo
   const [jobsLoading,setJobsLoading] = useState(true);
   const [chatResetKey,setChatResetKey] = useState(0);
   const [chatBusy,setChatBusy] = useState(false);
+  const [chatJobId,setChatJobId] = useState<string|null>(null);
+  const [chatInitialConversation,setChatInitialConversation] = useState<string|undefined>();
   const [workspace, dispatch] = useReducer(recruiterWorkspaceReducer, recruiterId, id => ({...initialRecruiterWorkspaceState, mode: workspaceModeFromHash(window.location.hash), activeDraftId: restoreActiveJob(window.sessionStorage, id)}));
   const {mode, drafts, activeDraftId} = workspace;
   const currentWorkspace = useRef(workspace);
@@ -49,7 +51,11 @@ function Workspace({recruiterId,accountControls}: {recruiterId: string;accountCo
   }
   useEffect(() => {refreshJobs(true); return () => {loadSequence.current++;};}, []);
   useEffect(() => {rememberActiveJob(window.sessionStorage, recruiterId, activeDraftId);}, [recruiterId, activeDraftId]);
-  function changeMode(mode: typeof workspace.mode) {
+  function changeMode(mode: typeof workspace.mode,job?:SavedJob) {
+    const target=job??savedJobs.find(row=>row.id===currentWorkspace.current.activeDraftId);
+    if(mode==='jd' && target?.conversation_id && target.id!==chatJobId && !chatBusy){
+      setChatInitialConversation(target.conversation_id);setChatJobId(target.id);setChatResetKey(key=>key+1);
+    }
     if(mode==="scheduling")setSchedulingVisited(true);
     setLiveInterview(null); window.location.hash=workspaceHash(mode); dispatch({type:"mode_changed",mode});
   }
@@ -66,8 +72,8 @@ function Workspace({recruiterId,accountControls}: {recruiterId: string;accountCo
   return <>
     <WorkspaceNavigation mode={mode} onChange={changeMode} accountControls={accountControls} />
     {mode==='home' && <RecruiterHome jobs={savedJobs} activeJobId={activeDraftId} loading={jobsLoading} error={jobError} busy={chatBusy}
-      onReload={()=>refreshJobs()} onSelect={selectJob} onOpen={(job,next)=>{selectJob(job);changeMode(next);}}
-      onCreate={()=>{setChatResetKey(key=>key+1);changeMode('jd');dispatch({type:'new_chat'});}}/>}
+      onReload={()=>refreshJobs()} onSelect={selectJob} onOpen={(job,next)=>{selectJob(job);changeMode(next,job);}}
+      onCreate={()=>{setChatResetKey(key=>key+1);setChatJobId(null);setChatInitialConversation(undefined);setLiveInterview(null);window.location.hash=workspaceHash('jd');dispatch({type:'new_chat'});}}/>}
     {mode!=="home" && (mode!=="jd" || Boolean(liveInterview)) && <div className="active-job-bar"><label>Active job<select disabled={chatBusy} value={activeDraftId ?? ""} onChange={event => {
       setLiveInterview(null);
       const job = savedJobs.find(job => job.id === event.target.value);
@@ -79,13 +85,13 @@ function Workspace({recruiterId,accountControls}: {recruiterId: string;accountCo
       }}>Reload saved jobs</button>{jobError && <p role="alert">{jobError}</p>}
     </div>}
     {liveInterview && liveInterview.job_id===activeDraftId && <Suspense fallback={<p role="status">Loading interview page…</p>}><LiveInterviewPage jobId={liveInterview.job_id} interview={liveInterview} onBack={()=>setLiveInterview(null)} /></Suspense>}
-    <div hidden={Boolean(liveInterview) || mode !== "jd"}><RecruiterChatPage><RecruiterChat key={chatResetKey} drafts={drafts} onBusyChange={setChatBusy}
-      onDraftGenerated={draft => {dispatch({type: "draft_generated", draft}); refreshJobs();}}
-      onConversationLoaded={id => {const job = savedJobs.find(job => job.conversation_id === id); if (job) dispatch({type: "draft_generated", draft: workingJob(job)});}}
+    <div hidden={Boolean(liveInterview) || mode !== "jd"}><RecruiterChatPage><RecruiterChat key={chatResetKey} initialConversationId={chatInitialConversation} drafts={drafts} onBusyChange={setChatBusy}
+      onDraftGenerated={draft => {setChatJobId(draft.draftId);dispatch({type: "draft_generated", draft:{...draft,weights:currentWorkspace.current.drafts[draft.draftId]?.weights}}); refreshJobs();}}
+      onConversationLoaded={id => {const job = savedJobs.find(job => job.conversation_id === id); if (job){setChatJobId(job.id);selectJob(job);}}}
       onCriteriaChange={(draftId, criteria) => dispatch({type: "criteria_changed", draftId, criteria})}
       onCriteriaReviewed={(draftId, reviewed) => dispatch({type: "criteria_reviewed", draftId, reviewed})}
       onContinueToCv={draftId => dispatch({type: "continue_to_screening", draftId})}
-      onNewChat={() => dispatch({type: "new_chat"})} /></RecruiterChatPage></div>
+      onNewChat={() => {setChatJobId(null);setChatInitialConversation(undefined);dispatch({type: "new_chat"});}} /></RecruiterChatPage></div>
     <div hidden={Boolean(liveInterview) || mode !== "cv"}><CvIntake draft={activeDraft} contextResetKey={workspace.criteriaContextRevision}
       onGoToScheduling={goToScheduling}
       onJobSaved={job => {dispatch({type: "draft_generated", draft: workingJob(job)}); refreshJobs();}}

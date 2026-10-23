@@ -108,7 +108,7 @@ test("generated draft is inside the rich assistant message with review and citat
   assert.match(html, /chat-assistant/);
   assert.match(html, /chat-draft/);
   for (const text of ["Draft", "Human review required", "Engineer", "Summary", "Responsibilities", "Required Skills", "Qualifications", "Policy Grounding", "Synthetic Demo Company Policy", "Technical details", "synthetic"]) assert.ok(html.includes(text));
-  assert.match(html, /Draft saved to your job/);
+  assert.match(html, /Saved job identity unavailable/); // Legacy response fixture has no persisted reference.
 });
 
 test("generated chat card leaves criteria review in the shared Candidate Screening workspace", async (t) => {

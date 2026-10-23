@@ -146,3 +146,8 @@
  .home-welcome,.home-section-heading { flex-direction:column; align-items:stretch; }
  .home-job .button-row .button { flex:1 1 100%; }
 }
+
+.saved-job-identity { padding:var(--space-4); margin-block:var(--space-3); border:1px solid var(--line); border-radius:var(--radius-control); background:var(--soft); overflow-wrap:anywhere; }
+.saved-job-identity p { margin-block:var(--space-2); }
+.saved-job-identity details { font-size:var(--text-secondary); }
+.chat-refinement-context { border-left:3px solid var(--brand); padding:var(--space-3); background:var(--soft); font-size:var(--text-secondary); overflow-wrap:anywhere; }

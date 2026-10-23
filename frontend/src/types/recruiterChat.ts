@@ -60,5 +60,7 @@ export interface ChatMessage {
   screeningSuggestions?: ScreeningSuggestions;
   conversationId?: string;
   draftId?: string;
+  jobReference?: string;
+  jobRevision?: number;
   screeningSuggestionSources?: ScreeningSuggestionSource[];
 }

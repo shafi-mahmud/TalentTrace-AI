@@ -11,7 +11,8 @@ const DEMO_INSTRUCTION = "Create a Backend AI Engineer JD for a team building Fa
 
 interface SendAttempt {messageId: string; text: string; conversationId?: string; uncertain: boolean;}
 
-export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChange, onCriteriaReviewed, onContinueToCv, onNewChat, onConversationLoaded, onBusyChange}: {
+export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChange, onCriteriaReviewed, onContinueToCv, onNewChat, onConversationLoaded, onBusyChange, initialConversationId}: {
+  initialConversationId?:string;
   onBusyChange?: (busy:boolean)=>void;
   onConversationLoaded: (id: string) => void;
   drafts: Record<string, WorkingCriteriaDraft>;
@@ -31,6 +32,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   const publishing = useRef(new Set<number>());
   const [conversations, setConversations] = useState<{id: string; expires_at: string}[]>([]);
   const [restoring, setRestoring] = useState(false);
+  const [restoreFailed,setRestoreFailed] = useState(false);
   const unresolved=messages.some(message=>message.sendState==='uncertain');
   useEffect(()=>{onBusyChange?.(sending||restoring||publishingBusy||unresolved);},[sending,restoring,publishingBusy,unresolved,onBusyChange]);
   useEffect(() => {
@@ -40,18 +42,19 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   }, [conversationId]);
   async function restore(id: string) {
     if (!id || pending.current || restoring || attempt.current?.uncertain) return;
-    setRestoring(true);
+    setRestoring(true);setRestoreFailed(false);
     try {
       const saved = await loadConversation(id);
-      onNewChat(); onConversationLoaded(id); attempt.current = null;
+      onConversationLoaded(id); attempt.current = null;
       dispatch({type: "conversation_restored", conversationId: id, messages: saved.turns.flatMap(turn => [
         {role: "recruiter" as const, text: turn.message, sendState: "sent" as const}, replyToChatMessage(turn.reply)])});
-    } catch {dispatch({type: "input_error", message: "Conversation could not be restored."});}
+    } catch {setRestoreFailed(true);dispatch({type: "input_error", message: "Conversation could not be restored. Select another saved conversation or explicitly start a new chat."});}
     finally {setRestoring(false);}
   }
+  useEffect(()=>{if(initialConversationId)void restore(initialConversationId);},[initialConversationId]);
 
   async function sendAttempt(current: SendAttempt) {
-    if (pending.current || restoring || publishingBusy) return;
+    if (pending.current || restoring || restoreFailed || publishingBusy) return;
     pending.current = true;
     attempt.current = current;
     dispatch({type: "send_started", messageId: current.messageId, text: current.text});
@@ -94,8 +97,8 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   }
 
   function revise(message: ChatMessage) {
-    if (sending) return;
-    dispatch({type: "input_changed", value: message.sourceInstruction ?? ""});
+    if (sending || restoring || attempt.current?.uncertain || !message.jobDescriptionResult) return;
+    dispatch({type: "input_changed", value: ""});
     composer.current?.focus();
   }
   useEffect(() => {
@@ -110,7 +113,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending.current) return;
+    if (pending.current || restoring || restoreFailed) return;
     const message = input.trim();
     if (!isValidRecruiterMessage(message)) {
       dispatch({type: "input_error", message: "Enter job instructions of up to 4000 characters without unsafe control characters."});
@@ -140,10 +143,12 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     const unresolved = attempt.current;
     if (unresolved?.uncertain && !window.confirm("The server may have accepted the previous request. Starting a new chat and sending it again could create another draft. Continue?")) return;
     attempt.current = null;
+    setRestoreFailed(false);
     dispatch({type: "new_chat", preserveInput: Boolean(unresolved)});
     onNewChat();
   }
 
+  const latestDraft=messages.findLast(message=>message.jobDescriptionResult);
   return <section className={`card chat-card ${messages.length ? "has-messages" : "is-empty"}`} aria-labelledby="chat-title">
     <label className="saved-conversation">Saved conversations<select value={conversationId ?? ""} disabled={sending || restoring || publishingBusy} onChange={e => void restore(e.target.value)}>
       <option value="">Choose a conversation</option>{conversations.map((row, index) => <option key={row.id} value={row.id}>Conversation {index + 1} · {new Date(row.expires_at).toLocaleString()}</option>)}
@@ -158,25 +163,27 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     <div ref={history} className="chat-history" role="log" aria-label="Recruiter conversation" aria-live="polite">
       {messages.length ? messages.map((message, index) => {
         const draft = message.draftId ? drafts[message.draftId] : undefined;
+        const outdated=!!message.jobDescriptionResult && message!==latestDraft;
         return <ChatMessageView key={message.localMessageId ?? `${message.role}-${index}`} message={message} criteriaDraft={draft}
           onCriteriaChange={draft ? criteria => onCriteriaChange(draft.draftId, criteria) : undefined}
           onCriteriaReviewed={draft ? reviewed => onCriteriaReviewed(draft.draftId, reviewed) : undefined}
-          onContinue={draft ? () => onContinueToCv(draft.draftId) : undefined}
-          onPublish={() => void publish(index)} onRevise={() => revise(message)}
-          onRetry={message.localMessageId ? () => retryMessage(message.localMessageId!) : undefined} actionsDisabled={sending || restoring || publishingBusy} />;
+          onContinue={draft && message.jobReference && draft.jobReference===message.jobReference && !outdated ? () => onContinueToCv(draft.draftId) : undefined}
+          onPublish={outdated?undefined:() => void publish(index)} onRevise={outdated?undefined:() => revise(message)}
+          onRetry={message.localMessageId ? () => retryMessage(message.localMessageId!) : undefined} actionsDisabled={sending || restoring || publishingBusy || outdated} />;
       }) : <EmptyConversation />}
       {sending && <p role="status">Checking the requirements you shared…</p>}
     </div>
     <form className="chat-composer" onSubmit={submit}>
+      {latestDraft?.jobReference && latestDraft.jobRevision && <p className="chat-refinement-context">Refining {latestDraft.jobReference} · Revision {drafts[latestDraft.draftId??'']?.revision??latestDraft.jobRevision}. Describe only what should change in this conversation. Updated criteria must be reviewed and confirmed again.</p>}
       <div className="field">
         <label htmlFor="chat-message">Your job instruction</label>
-        <textarea ref={composer} id="chat-message" rows={3} maxLength={4000} value={input} disabled={sending || restoring || publishingBusy}
-          onChange={event => dispatch({type: "input_changed", value: event.target.value})} placeholder={DEMO_INSTRUCTION}
+        <textarea ref={composer} id="chat-message" rows={3} maxLength={4000} value={input} disabled={sending || restoring || restoreFailed || publishingBusy}
+          onChange={event => dispatch({type: "input_changed", value: event.target.value})} placeholder={latestDraft?'Example: Change the required experience to 3 years and add Docker as a preferred skill.':DEMO_INSTRUCTION}
           aria-describedby="chat-help" required />
-        <p className="sr-only" id="chat-help">Sent messages stay in the conversation. New answers add to the same session.</p>
+        <p className="helper-text" id="chat-help">{latestDraft?'Send a specific change to revise this saved job. Use New chat for a different role.':'Describe the role and required skills. Follow-up answers stay in this conversation.'}</p>
       </div>
       {error && <div className="error-banner" role="alert">{error}</div>}
-      <button type="submit" className="button button-primary" disabled={sending || restoring || publishingBusy}>{restoring ? "Restoring conversation…" : sending ? "Checking details…" : "Send message"}</button>
+      <button type="submit" className="button button-primary" disabled={sending || restoring || restoreFailed || publishingBusy}>{restoring ? "Restoring conversation…" : sending ? "Checking details…" : latestDraft?'Send revision':'Send message'}</button>
       <p className="form-note">Demo data only. No candidate information or secrets. Review before publishing.</p>
     </form>
   </section>;

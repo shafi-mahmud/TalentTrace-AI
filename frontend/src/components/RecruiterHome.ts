@@ -24,6 +24,7 @@ export default function RecruiterHome({jobs,activeJobId,loading,error,busy=false
         h('p',{className:'home-job-reference'},h('span',null,'Job Reference'),h('strong',null,job.job_reference)),
         h('p',{className:'helper-text'},`Revision ${job.revision} · ${job.snapshot?'Screening criteria confirmed':'Screening criteria need review'}`),
         h('div',{className:'button-row'},
+          job.conversation_id ? h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>onOpen(job,'jd')},'Refine saved JD') : null,
           h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>onSelect(job),'aria-pressed':job.id===activeJobId},'Select active job'),
           h('button',{type:'button',className:'button button-primary',disabled:busy,onClick:()=>onOpen(job,'cv')},'Continue Screening'),
           h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>onOpen(job,'scheduling')},'Interview Scheduling')))))));
