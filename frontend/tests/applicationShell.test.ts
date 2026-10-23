@@ -41,5 +41,5 @@ test('all recruiter navigation callbacks remain independent of account actions',
  const header=WorkspaceNavigation({mode:'cv',onChange:mode=>changes.push(mode),accountControls:h(RecruiterAccountMenu,props)});
  const nav=header.props.children.props.children[1];
  for(const button of nav.props.children)button.props.onClick();
- assert.deepEqual(changes,['jd','cv','scheduling']);
+ assert.deepEqual(changes,['home','jd','cv','scheduling']);
 });

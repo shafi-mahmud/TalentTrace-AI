@@ -11,7 +11,8 @@ const DEMO_INSTRUCTION = "Create a Backend AI Engineer JD for a team building Fa
 
 interface SendAttempt {messageId: string; text: string; conversationId?: string; uncertain: boolean;}
 
-export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChange, onCriteriaReviewed, onContinueToCv, onNewChat, onConversationLoaded}: {
+export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChange, onCriteriaReviewed, onContinueToCv, onNewChat, onConversationLoaded, onBusyChange}: {
+  onBusyChange?: (busy:boolean)=>void;
   onConversationLoaded: (id: string) => void;
   drafts: Record<string, WorkingCriteriaDraft>;
   onDraftGenerated: (draft: WorkingCriteriaDraft) => void;
@@ -30,6 +31,8 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   const publishing = useRef(new Set<number>());
   const [conversations, setConversations] = useState<{id: string; expires_at: string}[]>([]);
   const [restoring, setRestoring] = useState(false);
+  const unresolved=messages.some(message=>message.sendState==='uncertain');
+  useEffect(()=>{onBusyChange?.(sending||restoring||publishingBusy||unresolved);},[sending,restoring,publishingBusy,unresolved,onBusyChange]);
   useEffect(() => {
     let active = true;
     void listConversations().then(rows => {if (active) setConversations(rows);}).catch(() => {});

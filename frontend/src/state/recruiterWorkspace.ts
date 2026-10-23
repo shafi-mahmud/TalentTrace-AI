@@ -9,7 +9,7 @@ export interface RecruiterWorkspaceState {
 }
 
 export const initialRecruiterWorkspaceState: RecruiterWorkspaceState = {
-  mode: "jd", drafts: {}, activeDraftId: null, criteriaContextRevision: 0,
+  mode: "home", drafts: {}, activeDraftId: null, criteriaContextRevision: 0,
 };
 
 export type RecruiterWorkspaceAction =
