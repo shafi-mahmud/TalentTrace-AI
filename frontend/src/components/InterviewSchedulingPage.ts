@@ -27,8 +27,8 @@ export default function InterviewSchedulingPage({draft,selection,onSelect,onOpen
       h('p',{className:'session-confirmation'},`${draft.jobReference} · Confirmed criteria revision ${draft.revision}`),
       h(BulkScheduling,{jobId:draft.draftId,revision:draft.revision}),
       h(SavedScores,{jobId:draft.draftId,revision:draft.revision,onSelectCandidate:onSelect}),
+      h(InterviewScheduling,{jobId:draft.draftId,criteriaRevision:draft.revision,scoring:selected?.batch??null,candidate:selected?.candidate??null,onOpenInterview}),
       selected && h('section',{className:'card selected-candidate','aria-label':'Selected candidate invitation'},
-        h('h2',null,'Selected candidate'),h('p',null,`Candidate reference: ${selected.candidate.upload_id.slice(0,8)}`),
-        h(SchedulingInvite,{key:selected.batch.batch_id+selected.candidate.upload_id,batch:selected.batch,candidate:selected.candidate})),
-      h(InterviewScheduling,{jobId:draft.draftId,criteriaRevision:draft.revision,scoring:selected?.batch??null,candidate:selected?.candidate??null,onOpenInterview}))));
+        h('h2',null,'Alternative: candidate chooses a slot'),h('p',null,`Candidate reference: ${selected.candidate.upload_id.slice(0,8)}`),
+        h(SchedulingInvite,{key:selected.batch.batch_id+selected.candidate.upload_id,batch:selected.batch,candidate:selected.candidate})))));
 }

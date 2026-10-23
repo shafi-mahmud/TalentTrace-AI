@@ -67,13 +67,13 @@ test("eligible-but-unscored form warns and requires explicit acknowledgement",()
     onStart:()=>{},onZone:()=>{},onDuration:()=>{},onConfirmed:(v:boolean)=>{confirmed=v;},onSubmit:()=>{}};
   const html=renderToStaticMarkup(createElement(ScheduleForm,props));
   assert.match(html,/Eligible but not scored/);assert.match(html,/Local interview date and time/);
-  assert.match(html,/Interview timezone \(IANA\)/);assert.match(html,/disabled=""[^>]*>Schedule interview/);
+  assert.match(html,/Interview timezone \(IANA\)/);assert.match(html,/disabled=""[^>]*>Review interview/);
   const form=ScheduleForm(props);const fields=(form.props.children as React.ReactElement[])[3];
   const children=fields.props.children as React.ReactElement[];
   const acknowledgement=children.at(-2)!;
   acknowledgement.props.children[0].props.onChange({target:{checked:true}});assert.equal(confirmed,true);
   const accepted=renderToStaticMarkup(createElement(ScheduleForm,{...props,confirmed}));
-  assert.ok(!/disabled=""[^>]*>Schedule interview/.test(accepted));
+  assert.ok(!/disabled=""[^>]*>Review interview/.test(accepted));
   const duplicate=renderToStaticMarkup(createElement(ScheduleForm,{...props,confirmed,alreadyScheduled:true}));
   assert.match(duplicate,/Initial interview already scheduled/);
 });
