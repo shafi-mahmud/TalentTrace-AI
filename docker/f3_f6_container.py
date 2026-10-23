@@ -9,6 +9,7 @@ import socket
 import asyncpg
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 import pytest
 from sqlalchemy.engine import URL
 
@@ -32,6 +33,28 @@ def require_fresh(identity, consumed, populated):
 
 def allowed_connection(address, addresses):
     return isinstance(address, tuple) and len(address) >= 2 and address[0] in addresses and address[1] == 54402
+
+
+REVIEWED_HEAD = "0016_submission_deletion"
+
+
+def migration_head(cfg):
+    heads = ScriptDirectory.from_config(cfg).get_heads()
+    if heads != [REVIEWED_HEAD]:
+        raise RuntimeError("Review the changed or ambiguous migration contract before running")
+    return heads[0]
+
+
+async def migrate_verified_database(connection, cfg):
+    head = migration_head(cfg)
+    output = StringIO()
+    cfg.output_buffer = output
+    command.upgrade(cfg, head, sql=True)
+    # Errors propagate to pytest and the runner's exit status.
+    await connection.execute(output.getvalue())
+    revisions = await connection.fetch("SELECT version_num FROM alembic_version")
+    if [row['version_num'] for row in revisions] != [head]:
+        raise RuntimeError("Migrated database does not match reviewed current head")
 
 
 @pytest.fixture(autouse=True)
@@ -66,15 +89,64 @@ def pg():
                 require_fresh(identity.values(), consumed, populated)
                 await connection.execute("CREATE SCHEMA f3_f6_test_owner; CREATE TABLE f3_f6_test_owner.marker (project text NOT NULL)")
                 await connection.execute("INSERT INTO f3_f6_test_owner.marker VALUES ($1)", project)
-            output = StringIO()
-            cfg = Config(str(Path(__file__).parent / "alembic.ini"), output_buffer=output)
+            cfg = Config(str(Path(__file__).parent / "alembic.ini"))
             cfg.set_main_option("script_location", str(Path(__file__).parent / "alembic"))
-            command.upgrade(cfg, "0015_reviewer_confirmation", sql=True)
-            await connection.execute(output.getvalue())
-            assert await connection.fetchval("SELECT version_num FROM alembic_version") == "0015_reviewer_confirmation"
+            await migrate_verified_database(connection, cfg)
         finally:
             await connection.close()
     asyncio.run(initialize())
     yield URL.create("postgresql+asyncpg", username="transcript_test", host="db",
         port=54402, database="transcript_test")
     # Deliberately preserve evidence and database on success or failure.
+
+
+def test_n19_schema_contract(pg):
+    async def verify():
+        connection = await asyncpg.connect(host=pg.host, port=pg.port,
+            user=pg.username, database=pg.database)
+        try:
+            assert await connection.fetchval("SELECT version_num FROM alembic_version") == REVIEWED_HEAD
+            columns = await connection.fetch("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='submission_deletions'")
+            assert {row['column_name'] for row in columns} == {
+                'job_id','batch_id','upload_id','recruiter_id','source_digest','plan_digest',
+                'file_digest','job_reference','file_type','state','created_at'}
+            assert await connection.fetchval("SELECT count(*) FROM pg_trigger WHERE tgrelid='external_cv_submissions'::regclass AND tgname='prevent_deleted_submission' AND tgenabled='O' AND NOT tgisinternal") == 1
+            assert await connection.fetchval("SELECT count(*) FROM submission_deletions") == 0
+        finally:
+            await connection.close()
+    asyncio.run(verify())
+
+
+def test_n19_replay_fence_without_deleting_candidate(pg):
+    from uuid import uuid4
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from sqlalchemy.exc import IntegrityError
+    from app.services.submission_deletion import import_suppressed, source_digest
+    async def verify():
+        engine = create_async_engine(pg, hide_parameters=True)
+        try:
+            async with async_sessionmaker(engine)() as db:
+                try:
+                    source, submission = 'synthetic-schema-test', str(uuid4())
+                    assert not await import_suppressed(db, source, submission)
+                    # Only a synthetic journal row; rolled back. No candidate DELETE.
+                    await db.execute(text("INSERT INTO submission_deletions(job_id,batch_id,upload_id,recruiter_id,source_digest,plan_digest,file_digest,job_reference,file_type,state) VALUES (:job,:batch,:upload,:owner,:digest,:plan,:file,:reference,'pdf','complete')"),
+                        dict(job=uuid4(), batch=uuid4(), upload=uuid4(), owner=uuid4(),
+                            digest=source_digest(source,submission), plan='a'*64, file='b'*64,
+                            reference='TT-JOB-0123456789ABCDEF'))
+                    assert await import_suppressed(db, source, submission)
+                    assert not await import_suppressed(db, source, str(uuid4()))
+                    # Actual function on a TEMP probe; actual ledger trigger checked above.
+                    await db.execute(text("CREATE TEMP TABLE replay_probe(source_id text,external_submission_id text) ON COMMIT DROP"))
+                    await db.execute(text("CREATE TRIGGER replay_probe BEFORE INSERT ON replay_probe FOR EACH ROW EXECUTE FUNCTION prevent_deleted_submission()"))
+                    with pytest.raises(IntegrityError) as failure:
+                        async with db.begin_nested():
+                            await db.execute(text("INSERT INTO replay_probe VALUES (:source,:submission)"),dict(source=source,submission=submission))
+                    assert failure.value.orig.sqlstate == '23514'
+                finally:
+                    await db.rollback()
+                assert await db.scalar(text("SELECT count(*) FROM submission_deletions")) == 0
+        finally:
+            await engine.dispose()
+    asyncio.run(verify())

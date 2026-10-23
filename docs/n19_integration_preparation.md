@@ -220,3 +220,25 @@ application or previous acceptance volumes. Unsupported manual/person-wide,
 interview/transcript/analysis, external-copy/backups and production-operations cases
 remain as documented above. No existing runtime, configuration or private evidence
 was changed by this compatibility increment.
+
+
+## Finalized core compatibility and Docker 0016 test increment
+
+Increment A reviewed and committed the pending test corrections and notes as
+`fe54a6f687ccbbb85641a0afeb495fa0a160ecd4`. The later Increment B supersedes only
+the 0015-only Docker test limitation above. See the measured
+[combined-schema test results](docker_f3_f6_tests.md#combined-n19-schema-verification--23-october-2026).
+The single fresh-project run passed all 25 tests against migration 0016, with no
+failed/skipped/deselected cases. Two database checks verify schema/trigger presence
+and rollback-only replay suppression; they do not delete a candidate or exercise
+the guarded maintenance deletion path. The earlier 24-case deletion acceptance
+continues to be historical evidence for its original branch.
+
+The test fixture derives and verifies the single current code head while explicitly
+requiring reviewed 0016. Obsolete/future/multiple code heads and incorrect stored
+revisions fail rather than silently using an outdated migration assumption.
+Production readiness still refuses 0015, and all preserved deployments remain
+untouched. Any real schema upgrade requires separate authorization and review of
+backup/recovery and application-role privileges. No auto-upgrade or normal-application
+deletion endpoint was added. The remaining scope and acceptance limitations above
+are unchanged; N19 remains PARTIAL. Local develop and main were not modified.
