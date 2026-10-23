@@ -88,6 +88,7 @@ def pg():
         migration('0013_transcript_lifecycle:0014_interview_analysis')
         migration('0014_interview_analysis:0013_transcript_lifecycle',down=True)
         migration('0013_transcript_lifecycle:0014_interview_analysis')
+        migration('0014_interview_analysis:0015_reviewer_confirmation')
         yield URL.create('postgresql+asyncpg',username='transcript_test',password=password,
             host='127.0.0.1',port=54402,database='transcript_test')
     finally:
