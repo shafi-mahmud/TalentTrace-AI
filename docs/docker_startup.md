@@ -14,6 +14,12 @@ Earlier office containers were unchanged. Subsequent commits through 5b6f172 are
 documentation only; this does not claim a fresh-machine or full-feature test.
 Private detailed logs remain outside Git. See the [home handover](office_home_handover.md).
 
+## Separate service-integration test workflow
+
+[Opt-in Docker F3–F6 tests](docker_f3_f6_tests.md) reproduce deterministic service
+scenarios in fresh test-owned PostgreSQL. They do not extend the production
+baseline or establish full-feature Docker acceptance.
+
 ## Implemented scope
 
 Increment 1 adds three services without changing hiring logic:

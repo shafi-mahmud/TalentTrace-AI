@@ -1,0 +1,37 @@
+# Opt-in only: never combined with compose.yaml.
+services:
+  db:
+    image: pgvector/pgvector:0.8.6-pg17-bookworm@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    command: [postgres, -p, '54402']
+    environment:
+      POSTGRES_DB: transcript_test
+      POSTGRES_USER: transcript_test
+      # Disposable internal-only lab, no reusable password or host listener.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes: [test_data:/var/lib/postgresql/data]
+    networks: [test_only]
+    healthcheck:
+      test: [CMD, pg_isready, -U, transcript_test, -d, transcript_test, -p, '54402']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  runner:
+    build:
+      context: .
+      dockerfile: docker/f3_f6_test.Dockerfile
+      target: integration
+    environment:
+      F3_F6_TEST_PROJECT: ${F3_F6_TEST_PROJECT:?Set a fresh tt-f3f6-test- plus 12 hex identity}
+    networks: [test_only]
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+networks:
+  test_only:
+    internal: true
+volumes:
+  test_data:

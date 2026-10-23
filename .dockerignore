@@ -7,6 +7,8 @@
 !backend/alembic/**
 !backend/alembic.ini
 !backend/requirements.txt
+!backend/tests/
+!backend/tests/*.py
 !frontend/
 !frontend/src/
 !frontend/src/**
