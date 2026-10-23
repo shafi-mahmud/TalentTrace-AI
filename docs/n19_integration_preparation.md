@@ -155,3 +155,68 @@ submission deletion does not establish person-wide erasure or production readine
 N19 is **PARTIAL**, now ready for a later reviewed integration decision. Next mandatory
 work should address the full-duration F3/F4-to-F5/F6 workflow and its reproducible
 deployment; do not unfreeze F11 or weaken deletion scope to obtain a broader claim.
+
+
+## Current core-develop compatibility — 23 October 2026
+
+Prepared on `feature/n19-core-integration` from local develop
+`809709ec33041707bcf99000e71c7b3bdaf1963f` in a separate clean worktree.
+The original commits applied in order without conflicts:
+
+- `07c06eb1b91a0032a764a5097a51bb362824f163` → `b8cc2fc`
+- `db653a7f126935e7af47d9591cdb039dc17b7057` → `cc6d0e0`
+
+The four core integration commits remain ancestors. No N19 behavior was rewritten;
+F11, frontend behavior, F2 arithmetic, F6 projection and production Compose were
+not changed. Supported scope remains exactly one owned imported submission with
+supported dependencies and a digest-verified private file, executed only through
+the existing isolated maintenance boundary. Interview-associated and unknown or
+shared dependencies remain refused. This is PARTIAL N19, not candidate-wide erasure.
+
+**Current offline verification:** 226 backend tests passed, 99 skipped, zero failed
+in 36.17 seconds; nine Docker readiness/verifier tests passed in 0.97 seconds;
+36 screening/saved-score Node tests passed. Counts describe final runs, not sums
+of retries. PostgreSQL gates were explicitly disabled (`N19_TEST_PG=0`,
+`TRANSCRIPT_PG_TEST=0`, `F6_HOME_PG_TEST=0`). The skips include one unsupported
+Windows symlink case and 98 opt-in PostgreSQL cases, including the eight connected
+F3–F6 scenarios. They are not integration passes. Mock/session and temporary-file
+tests cover exact identity, ownership, refusal, recovery, idempotency, replay fence,
+score associations and privacy. Existing pure epoch contracts also passed.
+
+The first backend run exposed an existing stale transcript migration test:
+local develop already contained 0015, but the assertion still required 0014.
+The test now requires the unique 0016 head and checks the retained 0015/0014 and
+privacy ancestry. A new mocked readiness regression uses actual migration metadata
+to prove 0015 is not ready and 0016 is ready. An initial missing qualifier in this
+new test caused a NameError; it was corrected and all nine helper tests then passed.
+These test adjustments and this note were reviewed for the separately authorized
+Increment A compatibility commit. Focused revalidation passed: one migration
+contract test (53 deselected) and nine Docker helper tests. No unrelated or
+production changes were included. No changes have been merged into develop.
+
+**Migration and deployment:** offline Alembic rendering verified the journal and
+trigger DDL for `0015_reviewer_confirmation:0016_submission_deletion`. Exactly one
+head exists, 0016 directly after 0015. No live database migration, deletion lab,
+container build/run or provider call was executed. The production readiness helper
+compares the database revision against the source head; a running 0015 deployment
+with this source would become not ready, even if `/api/v1/health` responds 200.
+It never upgrades automatically. A deployment upgrade requires separate owner
+authorization, backup/recovery and application-role privilege review. Downgrade
+continues to refuse a nonempty deletion journal.
+
+**Docker test limit:** the existing test Compose configuration renders successfully
+and production Compose/readiness implementation remains unchanged. The dedicated
+F3–F6 test fixture still explicitly initializes fresh databases at 0015. It can
+exercise the documented pre-N19 service contract, but does not establish combined
+0016 schema, trigger or privilege acceptance. No implicit migration or runner
+revision change was introduced to conceal that distinction.
+
+The earlier 24-case disposable-lab acceptance above is historical evidence for
+original N19 commit `07c06eb`, not acceptance of this combined tree. Recommended
+next gate, under separate authorization: rehearse 0015-to-0016 migration and importer
+privileges on fresh test-owned resources, then repeat the bounded deletion and
+F3–F6 association checks against the combined 0016 schema. Never reuse preserved
+application or previous acceptance volumes. Unsupported manual/person-wide,
+interview/transcript/analysis, external-copy/backups and production-operations cases
+remain as documented above. No existing runtime, configuration or private evidence
+was changed by this compatibility increment.
