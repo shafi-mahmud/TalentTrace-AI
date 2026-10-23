@@ -24,7 +24,10 @@ activate features, migrate data or publish a release.
 F11 is implemented through the trusted live adapter and automated integration;
 physical speech-to-suggestion acceptance remains pending. The rationale documents
 AI assistance and does not establish originality or independent-design compliance. N19 remains
-PARTIAL and its administrative tooling exists only on the separate N19 branch.
+PARTIAL. This N19 integration-preparation branch includes guarded administrative
+deletion for one imported submission in a closed disposable maintenance lab only;
+it does not enable candidate-wide erasure or deletion in ordinary deployments.
+See [N19 integration scope and validation](docs/n19_integration_preparation.md).
 N1 now has a measured 20-input attempt below, with PARTIAL completion; it is not
 a successful 20-CV scoring/ranking acceptance result.
 N21 has office baseline startup evidence, not full clean-machine acceptance.
