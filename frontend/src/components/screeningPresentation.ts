@@ -9,19 +9,29 @@ export function ScreeningResults({result, onSelectCandidate}: {result: BatchScre
     uncertain: "Uncertain", not_evaluated: "Not evaluated"};
   const excludedCount = result.candidates.filter(candidate => candidate.result?.screening_decision === "excluded").length;
   const reviewCount = result.candidates.filter(candidate => candidate.result?.screening_decision === "insufficient_evidence").length;
-  const notEvaluatedCount = result.candidates.filter(candidate => candidate.overall_coverage === "not_evaluated").length;
+  const eligibleCount = result.candidates.filter(candidate => candidate.result?.screening_decision === "eligible").length;
+  const scoredCount = result.scoring?.candidates.filter(candidate => candidate.status === "scored").length ?? 0;
+  const unscoredCount = result.scoring ? eligibleCount - scoredCount : eligibleCount;
+  const sourceCount = result.candidates.filter(candidate => candidate.result?.status === "source_unavailable").length;
+  const failedCount = result.candidates.filter(candidate => !candidate.result || candidate.result.status === "matching_failed").length;
+  const heading = failedCount || sourceCount ? "Batch processed with incomplete evaluations"
+    : reviewCount || unscoredCount ? "Batch processed — review required" : "Batch processed";
   return h("section", {className: "screening-results", "aria-label": "Candidate screening results"},
-    h("div", {className: "results-heading"}, h("div", null, h("p", {className: "eyebrow"}, "Batch complete"),
+    h("div", {className: "results-heading"}, h("div", null, h("p", {className: "eyebrow"}, heading),
       h("h2", null, "Screening results"), h("p", {className: "results-job-title"}, `${result.snapshot.job_title} · ${result.job_reference}`)),
       h("span", {className: "results-session-badge"}, result.scoring ? "Saved scores" : "Session results")),
     h("p", {className: "helper-text"}, result.scoring ? "Saved evidence-based scores for this approved job revision. Only eligible scored candidates are ranked; ties share a rank. Human review required." : "Session-only ranking within this job, batch and confirmed criteria. Supported requirements count equally; no suitability score. Human review required."),
     h("p", {className: "helper-text"}, "Ties share a rank; upload ID only controls display order. Ambiguous means uncertain evidence, not partially met."),
     h("div", {className: "results-summary", "aria-label": "Candidate outcome summary"},
-      summaryCard("Candidates processed", result.processed_count, "All batch files"),
-      summaryCard("Eligible", result.ranking.length, result.scoring ? "Complete scores ranked by weighted coverage" : "Ranked by supported requirements"),
+      summaryCard("Applications accounted for", result.processed_count, "Includes incomplete and failed evaluations"),
+      summaryCard("Eligible", eligibleCount, "Scored plus eligible but unscored; not an additional category"),
+      summaryCard("Numerically scored", scoredCount, result.scoring ? "Ranked by weighted coverage" : "Numeric scoring not available in session-only results"),
+      summaryCard("Eligible but unscored", unscoredCount, "No numeric score or numeric-score rank"),
       summaryCard("Excluded", excludedCount, "Mandatory requirement not demonstrated"),
       summaryCard("Needs review", reviewCount, "Uncertain evidence"),
-      summaryCard("Not evaluated", notEvaluatedCount, "Source or processing issue")),
+      summaryCard("Source unavailable", sourceCount, "No eligibility decision"),
+      summaryCard("Processing failures", failedCount, "No reliable eligibility decision")),
+    h("p", {className: "helper-text"}, `${scoredCount} scored + ${unscoredCount} eligible unscored + ${excludedCount} excluded + ${reviewCount} needing eligibility review + ${sourceCount} source unavailable + ${failedCount} processing failures = ${result.processed_count} applications. Eligible is a subtotal.`),
     renderGroups());
 
   function summaryCard(label: string, count: number, description: string) {
@@ -67,7 +77,7 @@ export function ScreeningResults({result, onSelectCandidate}: {result: BatchScre
   function renderGroups() {
     const byId = new Map(result.candidates.map(c => [c.upload_id, c]));
     const groups = [
-      {title: "Eligible candidate ranking", cards: (result.scoring?.ranking ?? result.ranking).map(entry => card(byId.get(entry.upload_id)!, entry))},
+      {title: result.scoring ? "Numerically scored candidate ranking" : "Eligible requirement-coverage ranking (not numeric scores)", cards: (result.scoring?.ranking ?? result.ranking).map(entry => card(byId.get(entry.upload_id)!, entry))},
       {title: "Eligible - Not scored", cards: result.scoring ? result.scoring.candidates.filter(c => c.screening_decision === "eligible" && c.status !== "scored").map(c => card(byId.get(c.upload_id)!)) : []},
       {title: "Excluded candidates", cards: result.candidates.filter(c => c.result?.screening_decision === "excluded").map(c => card(c))},
       {title: "Needs review — insufficient evidence", cards: result.candidates.filter(c => c.result?.screening_decision === "insufficient_evidence").map(c => card(c))},

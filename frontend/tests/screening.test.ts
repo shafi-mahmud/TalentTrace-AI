@@ -389,3 +389,90 @@ test("higher supported counts precede lower counts and do not count preferred am
   assert.ok(html.indexOf("Upload 1") < html.indexOf("Upload 2"));
   assert.ok(html.includes("Rank 2") && html.includes("1 ambiguous"));
 });
+
+
+// Synthetic benchmark shape; no provider or saved private benchmark data.
+function twentyOutcomes(): BatchScreeningResponse {
+  const response = scoredResult();
+  response.snapshot.criteria.push({criterion_id:"sql",description:"SQL",category:"skill",is_hard:false});
+  const template = response.candidates[0];
+  response.candidates = Array.from({length:20},(_,i)=>{
+    const item=structuredClone(template),uid=`00000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`;
+    item.upload_id=uid;
+    if(i===19)return {...item,result:null,error_code:"screening_processing_failed",overall_coverage:"not_evaluated"};
+    const d=item.result!;d.upload_id=uid;d.matching_result.upload_id=uid;
+    d.matching_result.requirement_context.skill_ids.push("sql");
+    const sql=structuredClone(d.matching_result.matches[0]);sql.criterion_id="sql";
+    if(i>=4&&i<15)sql.match_status="ambiguous";
+    d.matching_result.matches.push(sql);
+    if(i>=15){d.screening_decision="excluded";d.unmet_hard_requirement_ids=["python"];
+      d.matching_result.matches[0].match_status="not_found";d.matching_result.matches[0].evidence=[];
+      d.exclusion_reasons=[{criterion_id:"python",code:"hard_requirement_not_demonstrated",message:"Hard requirement was not demonstrated in the parsed CV."}];}
+    item.overall_coverage=i<4?"met":i<15?"uncertain":"partially_met";return item;
+  });
+  response.processed_count=20;
+  response.ranking=response.candidates.slice(0,15).map((c,i)=>({upload_id:c.upload_id,rank:i<4?1:5,tied:true,supported_count:i<4?2:1,ambiguous_count:i<4?0:1,not_found_count:0,total_requirements:2}));
+  const scoring=response.scoring!,base=scoring.candidates[0];
+  scoring.candidates=response.candidates.map((c,i)=>{
+    const score=structuredClone(base);score.upload_id=c.upload_id;score.screening_decision=c.result?.screening_decision??null;
+    if(i>=4){score.status="not_evaluated";score.reason=i<15?"uncertain_evidence":i<19?"not_eligible":"processing_failed";score.score=null;score.dimensions=[];}
+    else {score.dimensions[0].supported_count=2;score.dimensions[0].total_requirements=2;score.dimensions[0].matches=structuredClone(c.result!.matching_result.matches);}
+    return score;
+  });
+  scoring.ranking=scoring.candidates.slice(0,4).map(c=>({upload_id:c.upload_id,score:100,rank:1,tied:true}));
+  return response;
+}
+
+test("20 application partial batch reconciles all outcomes once without inventing scores",()=>{
+ const value=twentyOutcomes();assert.ok(isBatchScreeningResponse(value));
+ const before=structuredClone(value.scoring!.ranking);
+ const html=renderToStaticMarkup(createElement(ScreeningResults,{result:value}));
+ assert.match(html,/Batch processed with incomplete evaluations/);assert.ok(!html.includes("Batch complete"));
+ assert.match(html,/4 scored \+ 11 eligible unscored \+ 4 excluded \+ 0 needing eligibility review \+ 0 source unavailable \+ 1 processing failures = 20 applications/);
+ assert.equal((html.match(/candidate-result-card/g)??[]).length,20);
+ for(let i=1;i<=20;i++)assert.equal((html.match(new RegExp(`Candidate ${String(i).padStart(2,"0")} `,"g"))??[]).length,1);
+ assert.equal((html.match(/100.00 \/ 100/g)??[]).length,4);
+ assert.equal((html.match(/Rank 1/g)??[]).length,4);
+ assert.equal((html.match(/A weighted requirement has ambiguous evidence/g)??[]).length,11);
+ assert.match(html,/Processing failed; no reliable evaluation/);
+ assert.match(html,/Review requirement evidence/);assert.match(html,/OCR/);
+ assert.deepEqual(value.scoring!.ranking,before);
+});
+
+test("20 application response rejects cross-job and duplicate associations",()=>{
+ for(const change of [(v:BatchScreeningResponse)=>{v.scoring!.job_reference="TT-JOB-FFFFFFFFFFFFFFFF";},
+ (v:BatchScreeningResponse)=>{v.candidates[19].upload_id=v.candidates[0].upload_id;},
+ (v:BatchScreeningResponse)=>{v.processed_count=19;}]){const v=twentyOutcomes();change(v);assert.equal(isBatchScreeningResponse(v),false);}
+});
+
+test("successful batches and eligibility review remain distinct from processing failures",()=>{
+ const good=renderToStaticMarkup(createElement(ScreeningResults,{result:scoredResult()}));
+ assert.match(good,/Batch processed<\/p>/);assert.ok(!good.includes("with incomplete evaluations"));
+ const review=result();const d=review.candidates[0].result!;d.screening_decision="insufficient_evidence";d.ambiguous_hard_requirement_ids=["python"];d.matching_result.matches[0].match_status="ambiguous";review.candidates[0].overall_coverage="uncertain";review.ranking=[];
+ assert.ok(isBatchScreeningResponse(review));
+ const html=renderToStaticMarkup(createElement(ScreeningResults,{result:review}));assert.match(html,/Batch processed — review required/);assert.match(html,/1 needing eligibility review/);assert.match(html,/0 processing failures/);
+});
+
+
+test("20 application saved-score reload preserves unscored reasons and numeric ranking",async t=>{
+ const response=twentyOutcomes();
+ t.mock.method(globalThis,"fetch",async()=>Response.json(response.scoring));
+ const saved=await loadScores(id,2,response);
+ assert.deepEqual(saved,response.scoring);
+ const reloaded={...response,scoring:saved};
+ assert.equal(renderToStaticMarkup(createElement(ScreeningResults,{result:reloaded})),renderToStaticMarkup(createElement(ScreeningResults,{result:response})));
+ assert.equal(saved.candidates.filter(c=>c.reason==="uncertain_evidence").length,11);
+ assert.equal(saved.ranking.length,4);
+ await assert.rejects(loadScores("00000000-0000-4000-8000-000000000099",2,response),/could not be validated/);
+});
+
+test("source unavailable is counted separately and never signals batch success",()=>{
+ const response=result(),d=response.candidates[0].result!;
+ d.status="source_unavailable";d.screening_decision=null;d.matching_result.status="source_unavailable";d.matching_result.parsing_status="source_unavailable";d.matching_result.matches=[];
+ response.candidates[0].overall_coverage="not_evaluated";response.ranking=[];
+ assert.ok(isBatchScreeningResponse(response));
+ const html=renderToStaticMarkup(createElement(ScreeningResults,{result:response}));
+ assert.match(html,/Batch processed with incomplete evaluations/);
+ assert.match(html,/1 source unavailable \+ 0 processing failures = 1 applications/);
+ assert.equal((html.match(/candidate-result-card/g)??[]).length,1);
+});
