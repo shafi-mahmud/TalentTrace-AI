@@ -92,3 +92,66 @@ person-wide multi-application resolution, shared JSON cleanup, production operat
 and retention policy, manual/new-source reupload suppression and external copies/
 emails/backups. Cached LiveKit JWT invalidation is not guaranteed. These unsupported
 cases remain refused; there is no claim of full candidate deletion compliance.
+
+## Deployed synthetic acceptance — 23 October 2026
+
+Supersedes the preparation-only pending-lab statement above. One owner-authorized
+session tested commit `07c06eb1b91a0032a764a5097a51bb362824f163` in a NEW Linux
+Docker lab, `tt-n19-lab-5224de2b41`. Generated network/container/volume names were
+checked unused before creation. No old lab or application volume was reused.
+
+Existing local backend image: `db2a3ef6c3e9` (Python 3.12, /app/backend);
+PostgreSQL/pgvector image: `cf134a767f47`. No image pull/build or dependency download.
+A network-none, volume-free prerequisite check confirmed installed backend imports.
+The new lab has an internal network, no published ports, new labelled PG/CV volumes
+and a read-only mount of this branch's backend. Migration 0016 was applied only to
+this fresh empty n19_lab database. Both application and maintenance roles are
+non-superusers; maintenance retains the documented delegated role-management power.
+
+Actual deployed results (not mocked tests): **24 checks passed, zero failed/skipped**:
+
+- Six controls: non-superuser roles, active writer refusal, closed application DB
+  admission, denied application CV-storage access, unexpected-mount refusal and
+  maintenance preserved across restart of this newly created worker only.
+- Fifteen scenarios: wrong owner, missing target, interview-associated refusal,
+  cross-job identity reuse refusal, changed manifest refusal, ambiguous-file refusal,
+  shared JSON refusal, concurrent-client refusal, selected related-row/file deletion,
+  SQL replay trigger, completed retry, changed-file retry refusal, post-commit
+  interruption recovery, unrelated submission survival and importer replay refusal.
+- Three CLI checks: completed status, completed-command retry and unrelated-submission
+  preview. The controls phase's no_candidate_data_deleted flag describes that phase
+  only; subsequent acceptance deliberately deleted newly seeded synthetic data.
+
+Read-only post-verification confirmed both target journals complete; zero supported
+F2/acknowledgement/F6/import-ledger rows for those tuples; both exact target CVs
+absent; survivor has its two expected score versions/values, acknowledgement and
+ledger, with original synthetic CV bytes and matching stored digest. Both deleted
+external source identities remain suppressed. Application admission remains NOLOGIN;
+maintenance marker/storage isolation checks still pass. No admission was reopened.
+
+Controller/harness commands used this session, from the worktree root:
+
+```text
+python -B docker/n19_deletion_acceptance.py data/n19-acceptance-20261023/lab.json
+```
+
+Initialization used the existing n19_lab.init controller with the explicit local
+backend image and a wrapper that checked generated resource names before creation.
+Do not rerun initialization or the fresh-only seed/harness on this retained lab.
+Private state, container baseline and sanitized acceptance summary remain ignored
+under data/n19-acceptance-20261023/. State contains generated lab credentials and
+must not be published. Containers and volumes are deliberately retained for review.
+
+All pre-existing containers retain their IDs/images/running states/start timestamps.
+Existing host services were not restarted or reconfigured. No F11 replay, provider
+request or migration of an existing database occurred. The internal network and
+provider-free harness prevent dependency on external AI/STT; no packet-level capture
+was performed. Output contains fixed check categories, not candidate text or tokens;
+generated lab secrets were absent from retained container logs in the targeted scan.
+This is bounded inspection, not a universal secret-detection guarantee.
+
+The remaining unsupported cases above still apply. Successful exact imported-
+submission deletion does not establish person-wide erasure or production readiness.
+N19 is **PARTIAL**, now ready for a later reviewed integration decision. Next mandatory
+work should address the full-duration F3/F4-to-F5/F6 workflow and its reproducible
+deployment; do not unfreeze F11 or weaken deletion scope to obtain a broader claim.
