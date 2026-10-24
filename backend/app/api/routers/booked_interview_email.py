@@ -71,7 +71,8 @@ async def review_email(job_id: UUID, interview_id: UUID, body: ReviewRequest,
         raise HTTPException(409, 'Only upcoming appointments can be confirmed.')
     if await attempt_for(session, row):
         raise HTTPException(409, 'A delivery attempt already exists. Reload its status; do not resend.')
-    return delivery.preview(job, row, to)
+    contact = await delivery.review_contact(session, job, row, to)
+    return delivery.preview(job, row, to, contact)
 
 
 @router.post('/jobs/{job_id}/interviews/{interview_id}/appointment-email')
@@ -92,7 +93,8 @@ async def send_reviewed(job_id, interview_id, body, user, session, *, configurat
         raise HTTPException(503, 'Appointment email is not configured.')
     if row.scheduled_at <= datetime.now(timezone.utc):
         raise HTTPException(409, 'Only upcoming appointments can be confirmed.')
-    reviewed = delivery.preview(job, row, to)
+    contact = await delivery.review_contact(session, job, row, to)
+    reviewed = delivery.preview(job, row, to, contact)
     if not hmac.compare_digest(reviewed['review_digest'], body.review_digest):
         raise HTTPException(409, 'Saved appointment or recipient changed. Review again.')
     attempt = BookedInterviewEmailAttempt(interview_id=row.id, status='sending')

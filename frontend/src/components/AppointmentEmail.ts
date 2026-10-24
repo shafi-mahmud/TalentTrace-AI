@@ -34,7 +34,8 @@ export default function AppointmentEmail({interview}:{interview:Interview}){
     h('label',null,'Approved recipient email',h('input',{type:'email',autoComplete:'off',maxLength:254,value:recipient,disabled:busy,onChange:(e:{target:{value:string}})=>{setRecipient(e.target.value);setReview(null);setConfirmed(false);}})),
     h('button',{type:'button',className:'button button-secondary',disabled:busy||!recipient,onClick:()=>void preview()},'Preview saved appointment'),
     review && h('div',{'aria-label':'Review appointment email before sending'},
-     h('p',null,`Recipient: ${recipient}`),h('h4',null,review.subject),h('p',{style:{whiteSpace:'pre-wrap'}},review.body),
+     h('p',null,`Approved recipient: ${review.recipient_mask}`),
+     h('p',{role:'status'},review.contact_status==='matches_recorded'?'Matches the recorded imported application contact. Google Forms respondent input does not verify mailbox ownership.':'No recorded application contact. This address was entered manually; independently verify the intended recipient.'),h('h4',null,review.subject),h('p',{style:{whiteSpace:'pre-wrap'}},review.body),
      h('label',null,h('input',{type:'checkbox',checked:confirmed,disabled:busy,onChange:(e:{target:{checked:boolean}})=>setConfirmed(e.target.checked)}),' I confirm the approved recipient and saved appointment details. This email gives no joining access.'),
      h('button',{type:'button',className:'button button-primary',disabled:busy||!confirmed,onClick:()=>void send()},busy?'Sending…':'Send appointment confirmation')))));
 }

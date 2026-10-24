@@ -51,10 +51,22 @@ and message content exist only for the explicit review/delivery operation; they
 are never logged by this implementation. Client errors use fixed safe text, and
 unexpected response fields are rejected. No remote telemetry is introduced.
 
-The manually entered recipient is checked against the administrator allowlist;
-this does not independently establish that the address belongs to that candidate.
-The recruiter must confirm the intended recipient using the application reference.
-No recipient audit history is retained in this minimal journal.
+The manually entered recipient is checked against the administrator allowlist.
+For an imported application, the server now also resolves the unique persisted
+batch/upload pair, verifies its job association and existing `ApplicationContact`
+provenance contract, and requires the address to match that recorded contact.
+It never searches by name, CV text or address, and rejects browser provenance.
+A bridge source Job Reference may differ legitimately from the target F4 reference;
+`job_id`, batch and upload provide the target association. Source changes are bound
+into the preview digest and rechecked under the existing owned-job lock before
+reservation. Missing/invalid imported contact fails closed, requiring trusted
+operator correction; no alternate-recipient override is implemented.
+
+The UI uses the existing bulk-scheduling masked-address convention and explicitly
+states that Google Forms RESPONDER_INPUT is not verified mailbox ownership. Native
+uploads without a ledger contact remain manually addressed and receive a clear
+warning to independently verify the intended recipient. No address is autofilled
+or automatically sent. No recipient audit history is retained in this minimal journal.
 
 ## Configuration and migration
 
@@ -74,7 +86,7 @@ schema upgrade; no existing database was migrated. Readiness rejects schemas sti
 at 0016 or 0015. The isolated F3-F6 test runner's reviewed-head guard and existing
 head assertions now recognize 0017; production Compose defaults are unchanged.
 
-## Verification (synthetic only)
+## Verification of the original Sprint 4 checkpoint (synthetic only)
 
 - Full frontend Node suite: **294 passed, 0 failed, 0 skipped**.
 - Selected backend regression suites: **109 passed, 0 failed, 3 skipped**.
@@ -106,3 +118,64 @@ Recommended next acceptance: review the appointment-only wording in a synthetic
 browser walkthrough, then separately authorize deployment/migration/configuration
 and any actual delivery. Joining-access email requires a separately reviewed bearer
 lifecycle design; do not turn appointment confirmation into an unusable invitation.
+
+
+## Review and authenticated acceptance — 24 October 2026
+
+Confirmed defect in `d1a8a32`: an address could be allowlisted but belong to a
+different imported application. That commit checked appointment ownership but did
+not compare its entered recipient with the selected application's recorded contact.
+This review fixes that mismatch and stale contact/source preview handling using
+`ApplicationContact`, `SourceId`, `SubmissionId`, and the existing bulk-scheduling
+`contact_fact`, `digest`, and `masked` helpers. Candidate self-scheduling semantics,
+SMTP transport, invitation state and migration 0017 are unchanged.
+
+Implemented association path: authenticated recruiter -> owned job -> exact saved
+interview -> saved batch/upload -> unique trusted intake record belonging to that
+job. Client-supplied name, CV text and provenance have no role in this path.
+
+Authenticated ASGI API acceptance ran against a NEW disposable PostgreSQL database
+migrated to 0017, using real auth cookies, ownership queries, preview/send routes,
+reservation commits and status retrieval; only SMTP transport was faked. It covered
+foreign recruiter/job rejection, unapproved and mismatched approved addresses,
+changed saved schedule, changed persisted source identity, concurrent and duplicate
+confirmation, accepted/failed/uncertain outcomes, reload and invitation preservation.
+The separate PostgreSQL interruption test retained its no-resend reservation check.
+
+A real browser then used the production frontend build connected directly to the
+real FastAPI app and a second NEW disposable PostgreSQL database. It used normal
+login and Home -> saved job -> Interview Scheduling -> saved appointment email.
+The wrong allowlisted contact was blocked. The correct contact produced a masked
+preview and unverified-mailbox warning. Explicit confirmation invoked fake SMTP
+exactly once. Reloading the whole page and checking delivery status returned
+Accepted by SMTP; SQL independently confirmed one accepted reservation. This proves
+backend-connected browser behavior, not SMTP delivery or Google mailbox ownership.
+The synthetic saved interview/contact were seeded test records; no Google API,
+CV-import network call, LiveKit connection or real email was involved.
+
+Sanitized screenshot and fixed-category count/status JSON are retained locally in
+ignored `data/validation/`; neither artifact nor test credentials are committed.
+The created browser tab, temporary server and new test-owned database were stopped.
+All preserved services, worktrees, records and private evidence were left alone.
+
+Review result: **PASS for synthetic appointment confirmation**.
+
+- Final selected backend suites: **92 passed, 4 skipped, 0 failed**, including two
+  actual PostgreSQL acceptance tests. Suites: `test_booked_email_postgres`,
+  `test_booked_interview_email`, `test_interview_email`, `test_bulk_scheduling`,
+  `test_application_bridge`, `test_interviews`, `test_interview_access`, and
+  `test_self_scheduling`. Three bulk PostgreSQL cases and one bridge PostgreSQL
+  case stayed skipped because their separate opt-ins were not enabled.
+- Full frontend Node suite: **295 passed, 0 failed, 0 skipped**.
+- Both TypeScript projects and production build passed. The existing large LiveKit
+  bundle warning remains; this task did not change it.
+- Git whitespace checks passed. Prior intermediate runs are not counted twice.
+
+Remaining limitations: recorded contact association is validated, but Google Forms
+respondent input is not independently verified mailbox ownership. Native uploads
+have no guaranteed recorded contact and require manual recipient verification.
+Missing/invalid imported contacts cannot use a manual override. No real SMTP,
+inbox delivery, joining-access delivery or provider behavior was tested. Deployment
+still requires review and a separately authorized 0017 schema upgrade on the target
+environment; no preserved database has been migrated. This is ready for integration
+review within that appointment-only scope, with no merge or push performed.

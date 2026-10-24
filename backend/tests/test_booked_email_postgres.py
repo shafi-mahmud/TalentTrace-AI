@@ -94,3 +94,80 @@ def test_postgres_concurrent_reservation_and_interrupted_send(disposable_pg,monk
             assert transport.calls==1
         finally:await engine.dispose()
     asyncio.run(run())
+
+
+
+def test_postgres_authenticated_preview_send_and_contact_association(disposable_pg,monkeypatch):
+    import httpx, smtplib
+    from app.main import app
+    from app.core.auth import database_session, hash_password
+    from app.api.routers import booked_interview_email as route
+    from test_booked_interview_email import imported_contact
+    from app.db.models.external_cv import ExternalCvSubmissionRecord
+    async def run():
+        engine=create_async_engine(disposable_pg,echo=False,hide_parameters=True);sessions=async_sessionmaker(engine,expire_on_commit=False)
+        owner,foreign=uuid4(),uuid4();job,row=records(owner);job.job_reference='TT-JOB-'+job.id.hex[:16].upper()
+        password='synthetic-api-password-123';c=config();c.interview_email_recipients.append('other@synthetic.invalid')
+        c.livekit_synthetic_demo_enabled=False;c.interview_public_origin=None;monkeypatch.setattr(route,'settings',c)
+        contact=imported_contact(job,row,external_submission_id='api-'+uuid4().hex)
+        class FakeSMTP:
+            calls=0
+            error=None
+            def send(self,*args):
+                self.calls+=1
+                if self.error:raise self.error
+        fake=FakeSMTP();monkeypatch.setattr(delivery,'SMTPTransport',lambda:fake)
+        async def database():
+            async with sessions() as db:yield db
+        old=dict(app.dependency_overrides);app.dependency_overrides[database_session]=database
+        try:
+            async with sessions.begin() as db:
+                for identity,n in [(owner,'owner'),(foreign,'foreign')]:
+                    db.add(Recruiter(id=identity,email=n+'-'+identity.hex+'@example.test',password_hash=hash_password(password),active=True))
+                await db.flush();db.add(job);await db.flush();db.add(row);await db.flush();db.add(contact)
+                db.add(InterviewInvitation(id=uuid4(),interview_id=row.id,token_hash=uuid4().hex*2,expires_at=row.scheduled_at,revoked=False,candidate_session_hash=None))
+            path=f'/api/v1/jobs/{job.id}/interviews/{row.id}/appointment-email'
+            def client():return httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test',headers={'X-TalentTrace-Request':'1','Origin':'http://test'})
+            async with client() as user,client() as other,client() as anon:
+                assert (await anon.get(path)).status_code==401
+                for http,identity,n in [(user,owner,'owner'),(other,foreign,'foreign')]:
+                    assert (await http.post('/api/v1/auth/login',json={'email':n+'-'+identity.hex+'@example.test','password':password})).status_code==200
+                assert (await other.get(path)).status_code==404
+                assert (await other.post(path+'/preview',json={'recipient':'approved@synthetic.invalid'})).status_code==404
+                assert (await user.get(path.replace(str(job.id),str(uuid4())))).status_code==404
+                for to,code in [('not-approved@synthetic.invalid',422),('other@synthetic.invalid',409)]:
+                    assert (await user.post(path+'/preview',json={'recipient':to})).status_code==code
+                value=(await user.post(path+'/preview',json={'recipient':'approved@synthetic.invalid'})).json()
+                assert value['contact_status']=='matches_recorded' and '15:00' in value['body'] and '16:00' in value['body']
+                assert 'approved@synthetic.invalid' not in str(value)
+                request={'recipient':'approved@synthetic.invalid','review_digest':value['review_digest'],'confirmed':True}
+                async with sessions.begin() as db:(await db.get(InterviewSchedule,row.id)).duration_minutes=30
+                assert (await user.post(path,json=request)).status_code==409
+                async with sessions.begin() as db:(await db.get(InterviewSchedule,row.id)).duration_minutes=60
+                async with sessions.begin() as db:(await db.get(ExternalCvSubmissionRecord,contact.id)).external_submission_id='changed-'+uuid4().hex
+                assert (await user.post(path,json=request)).status_code==409
+                value=(await user.post(path+'/preview',json={'recipient':'approved@synthetic.invalid'})).json();request['review_digest']=value['review_digest']
+                assert fake.calls==0
+                outcomes=await asyncio.gather(user.post(path,json=request),user.post(path,json=request))
+                assert all(r.status_code==200 and r.json()['email_status'] in {'accepted','uncertain'} for r in outcomes)
+                assert fake.calls==1 and (await user.get(path)).json()=={'email_status':'accepted'}
+                assert (await user.post(path,json=request)).json()=={'email_status':'accepted'} and fake.calls==1
+                # Additional fictional appointments cover known rejection and ambiguous timeout.
+                for error,expected in [(smtplib.SMTPRecipientsRefused({}),'failed'),(TimeoutError('PRIVATE'),'uncertain')]:
+                    new=InterviewSchedule(id=uuid4(),recruiter_id=owner,job_id=job.id,batch_id=uuid4(),upload_id=uuid4(),criteria_revision=2,scoring_version=row.scoring_version,
+                        scheduled_at=row.scheduled_at,timezone=row.timezone,duration_minutes=30,unscored_confirmed=False,screening_snapshot=row.screening_snapshot)
+                    async with sessions.begin() as db:db.add(new)
+                    p=f'/api/v1/jobs/{job.id}/interviews/{new.id}/appointment-email'
+                    v=(await user.post(p+'/preview',json={'recipient':'approved@synthetic.invalid'})).json();assert v['contact_status']=='no_recorded_contact'
+                    fake.error=error
+                    body={'recipient':'approved@synthetic.invalid','review_digest':v['review_digest'],'confirmed':True}
+                    assert (await user.post(p,json=body)).json()=={'email_status':expected}
+                    assert (await user.get(p)).json()=={'email_status':expected}
+                    count=fake.calls;await user.post(p,json=body);assert fake.calls==count
+            async with sessions() as db:
+                assert (await db.get(BookedInterviewEmailAttempt,row.id)).status=='accepted'
+                inv=await db.scalar(select(InterviewInvitation).where(InterviewInvitation.interview_id==row.id))
+                assert not inv.revoked and inv.candidate_session_hash is None
+        finally:
+            app.dependency_overrides.clear();app.dependency_overrides.update(old);await engine.dispose()
+    asyncio.run(run())

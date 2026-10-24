@@ -59,7 +59,7 @@ def test_review_auth_saved_data_allowlist_staleness_and_invitation_preserved(boo
             assert (await owner.post(path+'/preview',json={'recipient':'other@synthetic.invalid'})).status_code==422
             request={'recipient':'approved@synthetic.invalid'}
             r=await owner.post(path+'/preview',json=request);assert r.status_code==200
-            value=r.json();assert set(value)=={'subject','body','review_digest'}
+            value=r.json();assert set(value)=={'subject','body','review_digest','contact_status','recipient_mask'}
             assert '15:00' in value['body'] and '16:00' in value['body'] and 'Asia/Dhaka' in value['body']
             assert str(row.upload_id) in value['body'] and job.job_reference in value['body']
             assert '/interview-join' not in value['body'] and 'no joining link' in value['body']
@@ -150,3 +150,59 @@ def test_migration_has_single_head_unique_reservation_and_safe_downgrade():
     assert 'scheduling_invitation_id' not in sql and 'recipient' not in sql and 'token' not in sql
     output.seek(0);output.truncate();command.downgrade(cfg,'head:0016_submission_deletion',sql=True)
     assert 'booked_email_journal_not_empty' in output.getvalue()
+
+
+def imported_contact(job, row, **changes):
+    from app.db.models.external_cv import ExternalCvSubmissionRecord
+    values=dict(id=uuid4(),job_id=job.id,batch_id=row.batch_id,upload_id=row.upload_id,
+        source_job_reference='TT-JOB-1111111111111111',source_id='synthetic-forms',external_submission_id='synthetic-contact',
+        file_type='pdf',size_bytes=100,content_sha256='c'*64,status='pending_review',application_email='approved@synthetic.invalid',
+        contact_status='available',email_provenance='google_forms_collected_email',email_collection_type='RESPONDER_INPUT',contact_validation_version=1)
+    values.update(changes)
+    return ExternalCvSubmissionRecord(**values)
+
+
+def test_imported_contact_mismatch_and_changed_provenance_rejected(booked,monkeypatch,caplog):
+    from app.db.models.external_cv import ExternalCvSubmissionRecord
+    db,users,password,job,row,c=booked
+    c.interview_email_recipients.append('other@synthetic.invalid')
+    db[ExternalCvSubmissionRecord]=[imported_contact(job,row)]
+    calls=[]
+    async def fake(*args):calls.append(True);return 'accepted'
+    monkeypatch.setattr(delivery,'dispatch',fake)
+    path=f'/api/v1/jobs/{job.id}/interviews/{row.id}/appointment-email'
+    async def run():
+        async with client() as owner:
+            await login(owner,users[0],password)
+            assert (await owner.post(path+'/preview',json={'recipient':'other@synthetic.invalid'})).status_code==409
+            response=await owner.post(path+'/preview',json={'recipient':'approved@synthetic.invalid'})
+            assert response.status_code==200
+            value=response.json();assert value['contact_status']=='matches_recorded' and value['recipient_mask']=='a***@synthetic.invalid'
+            for private in ['approved@synthetic.invalid','synthetic-forms','synthetic-contact','RESPONDER_INPUT']:assert private not in response.text
+            payload={'recipient':'approved@synthetic.invalid','review_digest':value['review_digest'],'confirmed':True}
+            db[ExternalCvSubmissionRecord][0].external_submission_id='changed-source'
+            assert (await owner.post(path,json=payload)).status_code==409
+            db[ExternalCvSubmissionRecord][0].external_submission_id='synthetic-contact'
+            assert (await owner.post(path,json={**payload,'recipient':'other@synthetic.invalid'})).status_code==409
+            assert not calls and not db[BookedInterviewEmailAttempt]
+            assert (await owner.post(path,json=payload)).json()=={'email_status':'accepted'}
+            assert len(calls)==1
+    asyncio.run(run())
+    assert 'approved@synthetic.invalid' not in caplog.text and 'other@synthetic.invalid' not in caplog.text
+
+
+@pytest.mark.parametrize('change',[{'job_id':uuid4()},{'email_provenance':'browser_claim'},
+    {'email_collection_type':'VERIFIED'}, {'contact_validation_version':2},
+    {'contact_status':'missing','application_email':None},{'status':'not_trusted'}])
+def test_invalid_imported_contact_fails_closed(booked,change):
+    from app.db.models.external_cv import ExternalCvSubmissionRecord
+    db,_,_,job,row,_=booked;db[ExternalCvSubmissionRecord]=[imported_contact(job,row,**change)]
+    with pytest.raises(HTTPException) as error:asyncio.run(delivery.review_contact(SessionDouble(db),job,row,'approved@synthetic.invalid'))
+    assert error.value.status_code==409
+
+
+def test_unrelated_upload_is_not_the_recorded_contact_and_native_is_explicit(booked):
+    from app.db.models.external_cv import ExternalCvSubmissionRecord
+    db,_,_,job,row,_=booked;db[ExternalCvSubmissionRecord]=[imported_contact(job,row,upload_id=uuid4())]
+    contact=asyncio.run(delivery.review_contact(SessionDouble(db),job,row,'approved@synthetic.invalid'))
+    assert contact is None and delivery.preview(job,row,'approved@synthetic.invalid',contact)['contact_status']=='no_recorded_contact'
