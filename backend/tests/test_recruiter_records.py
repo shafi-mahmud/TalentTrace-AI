@@ -80,6 +80,12 @@ class SessionDouble:
         return SimpleNamespace(all=lambda: rows)
 
     async def execute(self, query):
+        if getattr(query, 'is_select', False):
+            from collections import namedtuple
+            entity, contexts = self.selected(query)
+            names = [column['name'] for column in query.column_descriptions]
+            Projection = namedtuple('Projection', names)
+            return SimpleNamespace(all=lambda: [Projection(*(getattr(ctx[entity.__tablename__], name) for name in names)) for ctx in contexts])
         entity = TABLES[query.table.name]
         self.rows[entity] = [row for row in self.rows.get(entity, []) if not all(
             self.value(clause, {entity.__tablename__: row}) for clause in query._where_criteria)]

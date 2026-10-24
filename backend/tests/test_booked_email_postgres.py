@@ -34,7 +34,7 @@ def disposable_pg():
         assert not info['HostConfig']['Binds'] and not info['HostConfig']['VolumesFrom']
         binding=info['NetworkSettings']['Ports']['5432/tcp'];assert len(binding)==1 and binding[0]['HostIp']=='127.0.0.1'
         for _ in range(100):
-            if subprocess.run(['docker','exec',name,'pg_isready','-U','booked_email_test'],capture_output=True).returncode==0:break
+            if subprocess.run(['docker','exec',name,'pg_isready','-h','127.0.0.1','-U','booked_email_test'],capture_output=True).returncode==0:break
             time.sleep(.2)
         else:pytest.fail('Disposable database readiness timeout')
         output=StringIO();cfg=Config(str(Path(__file__).parents[1]/'alembic.ini'),output_buffer=output)

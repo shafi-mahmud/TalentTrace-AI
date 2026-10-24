@@ -126,17 +126,26 @@ export async function screenCvBatch(batch: CvUploadResponse, snapshot: ReviewedJ
   if (!isCvUploadResponse(batch) || !isReviewedSnapshot(snapshot) || batch.job_reference !== snapshot.job_reference) {
     throw new Error("Confirm criteria for this uploaded job reference before screening.");
   }
+  return screenStoredBatch({job_reference:batch.job_reference,batch_id:batch.batch_id,upload_ids:batch.files.map(f=>f.upload_id)},snapshot,revision);
+}
+
+export interface StoredBatchIdentity {job_reference:string;batch_id:string;upload_ids:string[];job_id?:string;}
+export async function screenStoredBatch(batch:StoredBatchIdentity,snapshot:ReviewedJobSnapshot,revision?:number,reviewToken?:string):Promise<BatchScreeningResponse>{
+  if(!isReviewedSnapshot(snapshot) || batch.job_reference!==snapshot.job_reference || !UUID.test(batch.batch_id)
+    || batch.upload_ids.length<1 || batch.upload_ids.length>20 || !batch.upload_ids.every(id=>UUID.test(id)) || new Set(batch.upload_ids).size!==batch.upload_ids.length)throw Error(FAILURE);
   let response: Response;
   try {
     response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads/${batch.job_reference}/${batch.batch_id}/screen`, {
-      method: "POST", headers: {"Content-Type": "application/json", ...(revision ? {"X-TalentTrace-Job-Revision": String(revision)} : {})}, body: JSON.stringify(snapshot),
+      method: "POST", headers: {"Content-Type": "application/json", ...(revision ? {"X-TalentTrace-Job-Revision": String(revision)} : {}),
+        ...(reviewToken ? {"X-TalentTrace-Imported-Review":reviewToken} : {})}, body: JSON.stringify(snapshot),
     });
-  } catch { throw new Error("Screening was not confirmed. Check before retrying; provider calls may repeat."); }
-  if (!response.ok) throw new Error(response.status === 409 ? "Reviewed job reference does not match the uploaded batch."
-    : response.status === 503 ? "Candidate profile extraction is not configured." : "Batch screening could not be completed.");
+  } catch { throw new Error("Screening was not confirmed. Check saved results before retrying; provider calls may repeat."); }
+  if (!response.ok) throw new Error(response.status === 409 ? "Stored batch or criteria changed. Reload and review before screening."
+    : response.status === 503 ? "Candidate profile extraction is not configured." : "Batch screening could not be completed. Check saved results before retrying.");
   const body: unknown = await response.json().catch(() => null);
   if (!isBatchScreeningResponse(body) || body.job_reference !== batch.job_reference || body.batch_id !== batch.batch_id
-    || !sameSnapshot(body.snapshot, snapshot) || body.processed_count !== batch.accepted_count
-    || body.candidates.some(c => !batch.files.some(f => f.upload_id === c.upload_id))) throw new Error(FAILURE);
+    || !sameSnapshot(body.snapshot, snapshot) || body.processed_count !== batch.upload_ids.length
+    || body.candidates.some(c => !batch.upload_ids.includes(c.upload_id))
+    || (batch.job_id && (!body.scoring || body.scoring.job_id!==batch.job_id || body.scoring.criteria_revision!==revision))) throw new Error(FAILURE);
   return body;
 }

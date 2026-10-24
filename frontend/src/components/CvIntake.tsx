@@ -1,3 +1,4 @@
+import ImportedBatches from './ImportedBatches.ts';
 import SavedScores from './SavedScores';
 import type { InterviewSelection } from './SavedScores';
 import { useLayoutEffect, useRef, useState } from "react";
@@ -211,6 +212,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
             </form>
           </section>}
         </details>
+        {criteriaDraft?.revision && criteriaDraft.jobReference && <ImportedBatches key={criteriaDraft.draftId+':'+criteriaDraft.revision} jobId={criteriaDraft.draftId} reference={criteriaDraft.jobReference} revision={criteriaDraft.revision} snapshot={snapshot} disabled={busy} onBusy={setScreeningBusy} onResult={setScreening} />}
         <section className="card cv-intake-card" aria-label="Candidate CV upload">
           {error && <div className="error-banner" role="alert">{error}</div>}
           <details className="stage-disclosure upload-stage" open={!result}><summary>{result ? `${result.accepted_count} CVs uploaded · choose another batch` : "Upload candidate CVs"}</summary>
@@ -242,7 +244,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
-        {screening && <><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={uploadId => {const batch=screening.scoring; const candidate=batch?.candidates.find(c=>c.upload_id===uploadId); if(batch && candidate) onGoToScheduling({batch,candidate});}} /></>}
+        {screening && <><p className="helper-text">Results for stored batch {screening.batch_id}</p><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={uploadId => {const batch=screening.scoring; const candidate=batch?.candidates.find(c=>c.upload_id===uploadId); if(batch && candidate) onGoToScheduling({batch,candidate});}} /></>}
         {criteriaDraft?.revision && <SavedScores key={criteriaDraft.draftId} jobId={criteriaDraft.draftId} revision={criteriaDraft.revision} onSelectCandidate={onGoToScheduling} />}
         </section>
       </section>

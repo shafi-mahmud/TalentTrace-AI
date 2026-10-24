@@ -52,6 +52,8 @@ def authenticated_business_contracts(request, monkeypatch):
     # Each existing CV test sets its own root/configuration on its route module.
     monkeypatch.setattr(cv_uploads, "private_settings", lambda request: cv_uploads.settings)
     monkeypatch.setattr(screening, "authorize_snapshot", owned)
+    # Legacy mocked workspaces have no import ledger; real auth/import tests do not use this override.
+    monkeypatch.setattr(screening, "check_review", AsyncMock(return_value=False))
     monkeypatch.setattr(screening, "private_settings", lambda request: settings)
     yield
     for target in apps:

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { screenCvBatch, isBatchScreeningResponse, isReviewedSnapshot, isScreeningSuggestions } from "../src/api/screening.ts";
+import { screenCvBatch, screenStoredBatch, isBatchScreeningResponse, isReviewedSnapshot, isScreeningSuggestions } from "../src/api/screening.ts";
 import { ScreeningResults } from "../src/components/screeningPresentation.ts";
 import ScreeningCriteriaReview, { confirmReviewedCriteria, CriteriaEditor } from "../src/components/ScreeningCriteriaReview.ts";
 import { isRecruiterChatResponse } from "../src/api/recruiterChat.ts";
@@ -475,4 +475,23 @@ test("source unavailable is counted separately and never signals batch success",
  assert.match(html,/Batch processed with incomplete evaluations/);
  assert.match(html,/1 source unavailable \+ 0 processing failures = 1 applications/);
  assert.equal((html.match(/candidate-result-card/g)??[]).length,1);
+});
+
+
+test("stored imported screening reuses endpoint with exact reviewed identities and rejects foreign result", async t => {
+  const response = scoredResult();
+  const identity = {job_id: response.scoring!.job_id, job_reference: reference, batch_id: batchId, upload_ids: [id]};
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.equal(url, `/api/v1/cv-uploads/${reference}/${batchId}/screen`);
+    const headers = new Headers(options!.headers);
+    assert.equal(headers.get("X-TalentTrace-Imported-Review"), "a".repeat(64));
+    assert.equal(headers.get("X-TalentTrace-Job-Revision"), "2");
+    assert.equal(options!.credentials, "include");
+    assert.deepEqual(JSON.parse(String(options!.body)), snapshot);
+    return Response.json(response);
+  });
+  assert.deepEqual(await screenStoredBatch(identity, snapshot, 2, "a".repeat(64)), response);
+  await assert.rejects(screenStoredBatch({...identity, job_id: batchId}, snapshot, 2, "a".repeat(64)), /invalid confirmation/);
+  t.mock.method(globalThis, "fetch", async () => Response.json({detail:"PRIVATE_CONTACT_AND_PATH"}, {status:409}));
+  await assert.rejects(screenStoredBatch(identity, snapshot, 2, "a".repeat(64)), /^Error: Stored batch or criteria changed/);
 });

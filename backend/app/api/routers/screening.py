@@ -8,6 +8,7 @@ from app.core.auth import current_recruiter, database_session
 from app.services.recruiter_records import owned_reference, private_settings
 from app.services.candidate_profile import CandidateProfileService
 from app.services.score_records import persist_scores
+from app.services.imported_batches import check_review
 from fastapi.responses import JSONResponse
 
 from app.integrations.llm.candidate_profile import CandidateParserNotConfigured
@@ -26,16 +27,25 @@ async def screen_batch(request: Request, job_reference: JobReference, batch_id: 
     expected_revision = request.headers.get("x-talenttrace-job-revision")
     if job is not None and expected_revision is not None and expected_revision != str(job.revision):
         raise HTTPException(409, "Job changed. Review criteria and weights again.")
+    imported_token = request.headers.get("x-talenttrace-imported-review")
+    root = private_settings(request).cv_upload_root
+    is_imported = await check_review(session, job, batch_id, root, imported_token)
+    if is_imported and expected_revision is None:
+        raise HTTPException(409, "Supply the reviewed job revision before screening an imported batch.")
     started=time.perf_counter()
     stage="batch_screening"
     try:
         batch = await BatchScreeningService(profiles=CandidateProfileService(private_settings(request))).screen_batch(job_reference, batch_id, snapshot)
+        if is_imported:
+            await check_review(session, job, batch_id, root, imported_token)
         if job is not None:
             stage="score_persistence"
             scoring = await persist_scores(session, job, batch)
             diagnostic_logger.info("talenttrace_stage stage=score_persistence candidate_count=%s scored_count=%s",len(scoring.candidates),sum(c.status=="scored" for c in scoring.candidates))
             return BatchScreeningResponse.model_validate({**batch.model_dump(), "scoring": scoring.model_dump()})
         return batch
+    except HTTPException:
+        raise
     except JobSnapshotMismatch:
         return JSONResponse(status_code=409, content={"code": "screening_job_mismatch",
             "message": "The reviewed job reference must match the uploaded batch."})

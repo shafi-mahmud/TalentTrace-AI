@@ -44,3 +44,6 @@ api_router.include_router(application_notifications.router)
 
 from app.api.routers import booked_interview_email
 api_router.include_router(booked_interview_email.router)
+
+from app.api.routers import imported_batches
+api_router.include_router(imported_batches.router)
