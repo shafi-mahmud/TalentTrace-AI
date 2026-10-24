@@ -137,3 +137,12 @@ class InterviewEmailAttempt(Base):
     kind: Mapped[str] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class BookedInterviewEmailAttempt(Base):
+    """One durable appointment confirmation; no recipient, body or bearer stored."""
+    __tablename__ = "booked_interview_email_attempts"
+    __table_args__ = (CheckConstraint("status IN ('sending','accepted','failed','uncertain')", name="ck_booked_email_status"),)
+    interview_id: Mapped[UUID] = mapped_column(ForeignKey("interview_schedules.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

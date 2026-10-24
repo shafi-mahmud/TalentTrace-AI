@@ -35,7 +35,7 @@ def allowed_connection(address, addresses):
     return isinstance(address, tuple) and len(address) >= 2 and address[0] in addresses and address[1] == 54402
 
 
-REVIEWED_HEAD = "0016_submission_deletion"
+REVIEWED_HEAD = "0017_booked_interview_email"
 
 
 def migration_head(cfg):

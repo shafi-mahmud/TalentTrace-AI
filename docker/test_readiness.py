@@ -42,12 +42,13 @@ class ReadinessTests(unittest.TestCase):
     def test_current_schema_ready(self):
         self.assertTrue(self.check_revisions(['current']))
 
-    def test_n19_head_requires_separately_authorized_upgrade(self):
+    def test_booked_email_head_requires_separately_authorized_upgrade(self):
         cfg = ready.Config(str(ROOT / 'backend/alembic.ini'))
         cfg.set_main_option('script_location', str(ROOT / 'backend/alembic'))
         head = ready.ScriptDirectory.from_config(cfg).get_current_head()
-        self.assertEqual(head, '0016_submission_deletion')
+        self.assertEqual(head, '0017_booked_interview_email')
         self.assertFalse(self.check_revisions(['0015_reviewer_confirmation'], expected=head))
+        self.assertFalse(self.check_revisions(['0016_submission_deletion'], expected=head))
         self.assertTrue(self.check_revisions([head], expected=head))
 
     def test_old_schema_not_ready(self):

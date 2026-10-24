@@ -41,3 +41,6 @@ api_router.include_router(interview_copilot.router)
 
 from app.api.routers import application_notifications
 api_router.include_router(application_notifications.router)
+
+from app.api.routers import booked_interview_email
+api_router.include_router(booked_interview_email.router)

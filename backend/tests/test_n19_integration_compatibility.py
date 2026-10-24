@@ -58,8 +58,9 @@ def test_migration_is_unique_child_of_integrated_head():
     cfg = Config(str(Path(__file__).resolve().parents[1] / 'alembic.ini'))
     cfg.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'alembic'))
     scripts = ScriptDirectory.from_config(cfg)
-    assert scripts.get_heads() == ['0016_submission_deletion']
-    assert scripts.get_revision('head').down_revision == '0015_reviewer_confirmation'
+    assert scripts.get_heads() == ['0017_booked_interview_email']
+    assert scripts.get_revision('head').down_revision == '0016_submission_deletion'
+    assert scripts.get_revision('0016_submission_deletion').down_revision == '0015_reviewer_confirmation'
 
 
 def test_wrong_owner_stops_before_any_cleanup(journal):

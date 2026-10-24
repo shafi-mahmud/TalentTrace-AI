@@ -50,7 +50,7 @@ function harness(fail=false,existing=false,loadFails=false){
  const require=createRequire(import.meta.url),exports:any={};
  runInNewContext(source,{exports,require:(name:string)=>name==='react'?hooks:name==='../api/interviews.ts'?{
   async listInterviews(){reads++;if(loadFails)throw Error('Unavailable');return existing || writes?[saved]:[];},async createInterview(job:string,body:any){writes++;assert.equal(job,id);assert.equal(body.scheduled_at,request.scheduled_at);if(fail)throw Error('Scheduling was not confirmed. Reload saved interviews.');return saved;}
- }:name==='./schedulingReview.ts'?{bookingReview,scheduleSummary}:name==='./interviewTime.ts'?{}:name==='./ConsolidatedAssessment.ts'?{}:require(name)});
+ }:name==='./schedulingReview.ts'?{bookingReview,scheduleSummary}:name==='./interviewTime.ts'?{}:name==='./AppointmentEmail.ts'?{}:name==='./ConsolidatedAssessment.ts'?{}:require(name)});
  function render(){si=0;ri=0;const tree=exports.InterviewScheduling({jobId:id,criteriaRevision:2,scoring:batch,candidate});if(first){first=false;effects.forEach(f=>f());}return tree;}
  const form=()=>render().props.children[1].props;
  const submit=()=>form().onSubmit({preventDefault(){}});

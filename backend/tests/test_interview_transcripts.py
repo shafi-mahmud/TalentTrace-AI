@@ -533,7 +533,7 @@ def test_privacy_migration_has_one_linear_head():
     from alembic.script import ScriptDirectory
     cfg=Config(str(Path(__file__).resolve().parents[1]/'alembic.ini'))
     scripts=ScriptDirectory.from_config(cfg)
-    assert scripts.get_heads()==['0016_submission_deletion']
+    assert scripts.get_heads()==['0017_booked_interview_email']
     assert scripts.get_revision('0016_submission_deletion').down_revision=='0015_reviewer_confirmation'
     assert scripts.get_revision('0015_reviewer_confirmation').down_revision=='0014_interview_analysis'
     assert scripts.get_revision('0014_interview_analysis').down_revision=='0013_transcript_lifecycle'

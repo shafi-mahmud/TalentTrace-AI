@@ -58,5 +58,5 @@ def test_late_arrival_and_repeat_acknowledgement_write_only_snapshot(monkeypatch
 
 def test_existing_migration_chain_has_single_compatible_head():
     scripts=ScriptDirectory.from_config(Config('alembic.ini'))
-    assert scripts.get_heads()==['0016_submission_deletion']
+    assert scripts.get_heads()==['0017_booked_interview_email']
     assert scripts.get_revision('0011_application_views').down_revision=='0010_interview_transcripts'

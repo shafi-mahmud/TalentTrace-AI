@@ -50,7 +50,7 @@ def test_migration_contract_requires_review(monkeypatch, heads):
 def test_actual_migration_head():
     cfg = lab.Config(str(Path(__file__).resolve().parents[1]/'alembic.ini'))
     cfg.set_main_option('script_location',str(Path(__file__).resolve().parents[1]/'alembic'))
-    assert lab.migration_head(cfg) == '0016_submission_deletion'
+    assert lab.migration_head(cfg) == '0017_booked_interview_email'
 
 
 def test_migration_failure_propagates(monkeypatch):
