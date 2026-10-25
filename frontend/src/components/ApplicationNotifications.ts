@@ -5,7 +5,7 @@ export function ApplicationSummary({data}:{data:Applications}) {
     const imported=data.applications.filter(row=>row.origin==='trusted_import').length;
     const native=data.received_count-imported;
     const metrics=[['CVs received',data.received_count],['New / unviewed',data.new_count],
-      ['Available CVs',data.received_count-data.unavailable_count],['Imported CVs needing attention',data.unavailable_count]] as const;
+      ['Viewed',data.received_count-data.new_count],['Available CVs',data.received_count-data.unavailable_count]] as const;
     return h(Fragment,null,
       h('dl',{className:'application-metrics'},...metrics.map(([label,count])=>h('div',{className:'application-metric',key:label},
         h('dt',null,label),h('dd',null,count)))),
@@ -19,6 +19,7 @@ export default function ApplicationNotifications({ jobId }: {
 }) {
     const [data, setData] = useState<Applications | null>(null);
     const [busy, setBusy] = useState(false), [error, setError] = useState(''), [limit, setLimit] = useState(25);
+    const [filter, setFilter] = useState<'all'|'new'|'viewed'>('all');
     const sequence = useRef(0), pending = useRef(false);
     async function refresh() {
         if (pending.current)
@@ -43,9 +44,10 @@ export default function ApplicationNotifications({ jobId }: {
             }
         }
     }
-    useEffect(() => { setData(null); setLimit(25); pending.current = false; void refresh(); return () => { sequence.current++; pending.current = false; }; }, [jobId]);
+    useEffect(() => { setData(null); setLimit(25); setFilter('all'); pending.current = false; void refresh(); return () => { sequence.current++; pending.current = false; }; }, [jobId]);
     const current = data?.job_id === jobId ? data : null;
-    const displayed = current?.applications.slice(0, limit) ?? [];
+    const matching = current?.applications.filter(row=>filter==='all'||(filter==='new'?row.is_new:!row.is_new)) ?? [];
+    const displayed = matching.slice(0, limit);
     async function viewed() {
         if (!current || pending.current || error)
             return;
@@ -71,23 +73,22 @@ export default function ApplicationNotifications({ jobId }: {
         }
     }
     return h('section',{className:'card application-notifications','aria-label':'Application notifications'},
-      h('h3',null,'Applications and notifications'),
-      h('p',{className:'helper-text'},'New means not explicitly marked viewed. Opening Home or refreshing does not acknowledge applications.'),
+      h('div',{className:'application-toolbar'},h('h3',null,'Applications'),
+        h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>void refresh()},'Refresh applications')),
       busy && h('p',{role:'status'},'Updating applications…'),
       error && h('p',{role:'alert',className:'error-banner'},error),
-      current && (busy||error) && h('p',{role:'status'},'Last loaded snapshot — counts may be stale.'),
+      current && (busy||error) && h('p',{role:'status'},'Counts may be out of date.'),
       !current && !busy && h('p',null,'Application counts unavailable.'),
-      h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>void refresh()},'Refresh applications'),
       current && h(Fragment,null,h(ApplicationSummary,{data:current}),
-        current.unavailable_count>0 && h('p',{role:'status'},'Imported CV files are missing or do not match expected metadata. Administrator review needed.'),
-        current.invalid_batch_count>0 && h('p',{role:'status'},`${current.invalid_batch_count} invalid storage batches excluded from native counts; administrator review needed.`),
+        current.unavailable_count>0 && h('p',{role:'status'},`${current.unavailable_count} CV${current.unavailable_count===1?'':'s'} unavailable.`),
+        current.invalid_batch_count>0 && h('p',{role:'status'},`${current.invalid_batch_count} upload batch${current.invalid_batch_count===1?' needs':'es need'} review; counts may be incomplete.`),
         !current.received_count && h('p',null,'No applications received yet.'),
-        h('h4',null,'Received application list'),
-        h('p',{className:'helper-text'},'Identity order, not arrival order. Arrival timestamps are unavailable; no dates are inferred from files.'),
+        current.received_count>0 && h(Fragment,null,h('div',{className:'application-filters',role:'group','aria-label':'Filter applications'},
+          ...(['all','new','viewed'] as const).map(value=>h('button',{key:value,type:'button',className:'button button-secondary','aria-pressed':filter===value,disabled:busy,onClick:()=>{setFilter(value);setLimit(25);}},value==='all'?'All':value==='new'?'New':'Viewed'))),
+        current.received_count>0 && !matching.length && h('p',{role:'status'},filter==='new'?'No new applications.':'No viewed applications.'),
         h('ul',{className:'application-list','aria-label':'Displayed applications'},...displayed.map((row,index)=>h('li',{key:`${row.batch_id}/${row.upload_id}`},
           `Application ${index+1} · ${row.origin==='trusted_import'?'Trusted import':'Native upload'} · ${row.available?'CV available':'CV unavailable'} · ${row.is_new?'New':'Viewed'}`))),
-        displayed.length<current.received_count && h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>setLimit(limit+25)},'Show more applications'),
-        h('p',{className:'helper-text'},`Showing ${displayed.length} of ${current.received_count}. Only these displayed applications will be acknowledged.`),
-        h('button',{type:'button',className:'button button-secondary',disabled:busy||!!error||!displayed.some(row=>row.is_new),onClick:()=>void viewed()},'Mark displayed applications as viewed')),
-      h('p',{className:'helper-text'},'Screening outcome analytics unavailable here: saved scores omit complete processing-failure history. Review current results in Candidate Screening; received counts are independent of screening.'));
+        displayed.length<matching.length && h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>setLimit(limit+25)},'Show more applications'),
+        h('p',{className:'helper-text'},`Showing ${displayed.length} of ${matching.length}`),
+        h('button',{type:'button',className:'button button-secondary',disabled:busy||!!error||!displayed.some(row=>row.is_new),onClick:()=>void viewed()},'Mark displayed applications as viewed'))));
 }

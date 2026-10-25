@@ -215,3 +215,26 @@ def test_real_postgres_authenticated_counts_acknowledgement_and_isolation(notifi
             app.dependency_overrides.clear();app.dependency_overrides.update(previous)
             await engine.dispose()
     asyncio.run(run())
+
+
+def test_same_upload_in_different_batches_and_repeated_ledger_rows_do_not_alias():
+    upload = uuid4()
+    first, second = (uuid4(), upload), (uuid4(), upload)
+    native = {first: ('pdf', 20), second: ('pdf', 30)}
+    imported = N(batch_id=first[0], upload_id=upload, file_type='pdf', size_bytes=20)
+    items = reconcile(native, [imported, imported], {first})
+    assert len(items) == 2
+    by_key = {(r['batch_id'], r['upload_id']): r for r in items}
+    assert by_key[first]['origin'] == 'trusted_import'
+    assert not by_key[first]['is_new'] and by_key[first]['available']
+    assert by_key[second]['origin'] == 'native_storage' and by_key[second]['is_new']
+
+
+def test_viewed_unavailable_import_does_not_hide_new_native_application():
+    old, new = (uuid4(), uuid4()), (uuid4(), uuid4())
+    imported = N(batch_id=old[0], upload_id=old[1], file_type='pdf', size_bytes=20)
+    items = reconcile({new: ('pdf', 20)}, [imported], {old, (uuid4(), uuid4())})
+    assert len(items) == 2
+    assert sum(r['is_new'] for r in items) == 1
+    assert sum(not r['available'] for r in items) == 1
+    assert next(r for r in items if r['is_new'])['upload_id'] == new[1]

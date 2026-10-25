@@ -588,3 +588,18 @@ body { background: var(--page); color: var(--ink); }
 .application-breakdown meter { width: 100%; accent-color: #246b56; }
 .application-list { padding-left: 20px; overflow-wrap: anywhere; }
 .home-analytics { min-width: 0; }
+
+/* Job-scoped application dashboard controls. */
+.application-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.application-toolbar h3 { margin: 0; }
+.application-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 16px; }
+.application-filters button[aria-pressed=true] { color: var(--brand-dark); background: var(--soft); border-color: var(--brand); }
+.application-notifications .application-list { list-style: none; padding: 0; margin-block: 12px; }
+.application-notifications .application-list li { padding-block: 10px; border-bottom: 1px solid var(--line); }
+@media(max-width:520px) {
+  .application-notifications .application-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .application-notifications .application-metric { padding: 12px; }
+  .application-notifications .application-metric dt { overflow-wrap: anywhere; }
+  .application-toolbar > button { width: 100%; }
+  .application-filters > button { flex: 1; }
+}
