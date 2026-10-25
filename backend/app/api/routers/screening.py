@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException
 from app.core.auth import current_recruiter, database_session
 from app.services.recruiter_records import owned_reference, private_settings
 from app.services.candidate_profile import CandidateProfileService
+from app.integrations.llm.screening_selection import selected_screening
 from app.services.score_records import persist_scores
 from app.services.imported_batches import check_review
 from fastapi.responses import JSONResponse
@@ -24,6 +25,8 @@ router = APIRouter(tags=["Candidate screening"])
 async def screen_batch(request: Request, job_reference: JobReference, batch_id: UUID,
                        snapshot: ReviewedJobSnapshot, user=Depends(current_recruiter), session=Depends(database_session)) -> BatchScreeningResponse | JSONResponse:
     job = await authorize_snapshot(session, user.id, snapshot)
+    if snapshot.job_reference != job_reference:
+        raise HTTPException(409, "Reviewed job reference must match the uploaded batch.")
     expected_revision = request.headers.get("x-talenttrace-job-revision")
     if job is not None and expected_revision is not None and expected_revision != str(job.revision):
         raise HTTPException(409, "Job changed. Review criteria and weights again.")
@@ -35,12 +38,15 @@ async def screen_batch(request: Request, job_reference: JobReference, batch_id: 
     started=time.perf_counter()
     stage="batch_screening"
     try:
-        batch = await BatchScreeningService(profiles=CandidateProfileService(private_settings(request))).screen_batch(job_reference, batch_id, snapshot)
+        service = await selected_screening(request, private_settings(request))
+        batch = await service.screen_batch(job_reference, batch_id, snapshot)
         if is_imported:
             await check_review(session, job, batch_id, root, imported_token)
-        if job is not None:
+        # Failed model output must not replace previously saved evidence/scores.
+        complete = all(item.result is not None and item.result.status == "decision_complete" for item in batch.candidates)
+        if job is not None and complete:
             stage="score_persistence"
-            scoring = await persist_scores(session, job, batch)
+            scoring = await persist_scores(session, job, batch, ai_provenance=getattr(service, "ai_provenance", None))
             diagnostic_logger.info("talenttrace_stage stage=score_persistence candidate_count=%s scored_count=%s",len(scoring.candidates),sum(c.status=="scored" for c in scoring.candidates))
             return BatchScreeningResponse.model_validate({**batch.model_dump(), "scoring": scoring.model_dump()})
         return batch

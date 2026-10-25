@@ -18,6 +18,7 @@ def restore_candidate_score(payload):
     # JSONB arrays must be explicitly restored for the existing strict tuple
     # evidence contract; do not weaken screening models or use a generic decoder.
     value = deepcopy(payload)
+    value.pop("_ai_provenance", None)  # Execution metadata is separate from validated scoring evidence.
     for dimension in value.get("dimensions", []):
         for match in dimension.get("matches", []):
             if isinstance(match.get("evidence"), list):
@@ -62,7 +63,7 @@ class ScoringBatch(BaseModel):
         return self
 
 
-async def persist_scores(session, job, batch):
+async def persist_scores(session, job, batch, *, ai_provenance=None):
     weights = ScoringWeights.model_validate(job.scoring_weights or {})
     candidates = tuple(score_candidate(item.result, job_reference=job.job_reference, criteria=batch.snapshot.criteria, weights=weights)
         if item.result else CandidateScore(job_reference=job.job_reference, upload_id=item.upload_id,
@@ -79,7 +80,7 @@ async def persist_scores(session, job, batch):
     for candidate in candidates:
         session.add(CandidateScoreRecord(job_id=job.id, batch_id=batch.batch_id, upload_id=candidate.upload_id,
             criteria_revision=job.revision, scoring_version=SCORING_VERSION, score=candidate.score,
-            payload=candidate.model_dump(mode="json")))
+            payload={**candidate.model_dump(mode="json"), **({"_ai_provenance": ai_provenance} if ai_provenance else {})}))
     await session.commit()
     return response
 

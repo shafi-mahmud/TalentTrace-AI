@@ -120,7 +120,7 @@ test("screening sends the approved job revision without client scores", async t 
     assert.deepEqual(JSON.parse(String(options?.body)), snapshot);
     return Response.json(scoredResult());
   });
-  assert.ok((await screenCvBatch(batch, snapshot, 2)).scoring);
+  assert.ok((await screenCvBatch(batch, snapshot, 2, {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false})).scoring);
 });
 
 test("review snapshot requires explicit confirmation, bounded criteria and valid reference", () => {
@@ -191,7 +191,7 @@ test("screening submits reviewed snapshot and stored identity only", async t => 
     assert.deepEqual(JSON.parse(String(options?.body)), snapshot);
     return Response.json(result());
   });
-  assert.ok(isBatchScreeningResponse(await screenCvBatch(batch, snapshot)));
+  assert.ok(isBatchScreeningResponse(await screenCvBatch(batch, snapshot, undefined, {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false})));
   assert.equal(calls, 1);
 });
 
@@ -222,7 +222,7 @@ test("response must match requested batch, upload set and exact reviewed snapsho
   ]) {
     const response = result(); mutate(response);
     t.mock.method(globalThis, "fetch", async () => Response.json(response));
-    await assert.rejects(screenCvBatch(batch, snapshot), /invalid confirmation/);
+    await assert.rejects(screenCvBatch(batch, snapshot, undefined, {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), /invalid confirmation/);
   }
 });
 
@@ -230,7 +230,7 @@ test("public errors are fixed, sanitized and not retried", async t => {
   for (const status of [409, 422, 500, 503]) {
     let calls = 0;
     t.mock.method(globalThis, "fetch", async () => {calls++; return Response.json({message: "PRIVATE_SECRET_PATH"}, {status});});
-    await assert.rejects(screenCvBatch(batch, snapshot), (error: Error) => !error.message.includes("PRIVATE_SECRET"));
+    await assert.rejects(screenCvBatch(batch, snapshot, undefined, {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), (error: Error) => !error.message.includes("PRIVATE_SECRET"));
     assert.equal(calls, 1);
   }
 });
@@ -490,8 +490,8 @@ test("stored imported screening reuses endpoint with exact reviewed identities a
     assert.deepEqual(JSON.parse(String(options!.body)), snapshot);
     return Response.json(response);
   });
-  assert.deepEqual(await screenStoredBatch(identity, snapshot, 2, "a".repeat(64)), response);
-  await assert.rejects(screenStoredBatch({...identity, job_id: batchId}, snapshot, 2, "a".repeat(64)), /invalid confirmation/);
+  assert.deepEqual(await screenStoredBatch(identity, snapshot, 2, "a".repeat(64), {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), response);
+  await assert.rejects(screenStoredBatch({...identity, job_id: batchId}, snapshot, 2, "a".repeat(64), {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), /invalid confirmation/);
   t.mock.method(globalThis, "fetch", async () => Response.json({detail:"PRIVATE_CONTACT_AND_PATH"}, {status:409}));
-  await assert.rejects(screenStoredBatch(identity, snapshot, 2, "a".repeat(64)), /^Error: Stored batch or criteria changed/);
+  await assert.rejects(screenStoredBatch(identity, snapshot, 2, "a".repeat(64), {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), /^Error: Stored batch or criteria changed/);
 });

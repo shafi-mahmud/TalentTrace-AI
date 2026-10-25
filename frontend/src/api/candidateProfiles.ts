@@ -1,3 +1,5 @@
+import {cvProviderHeaders} from "./cvProvider.ts";
+import type {CvAISelection} from "./cvProvider.ts";
 import { authenticatedFetch } from "./session.ts";
 import type { CandidateProfilesResponse } from "../types/candidateProfile";
 import type { CvUploadResponse } from "../types/cvUpload";
@@ -47,11 +49,12 @@ export function isCandidateProfilesResponse(value: unknown): value is CandidateP
         : (item.parsing_status === "source_unavailable" || item.parsing_status === "parsing_failed") && item.contact === null && item.qualifications === null));
 }
 
-export async function extractCandidateProfiles(batch: CvUploadResponse): Promise<CandidateProfilesResponse> {
+export async function extractCandidateProfiles(batch: CvUploadResponse, selection?:CvAISelection): Promise<CandidateProfilesResponse> {
   if (!isCvUploadResponse(batch)) throw new Error("A valid uploaded batch is required.");
+  const headers=cvProviderHeaders(selection);
   let response: Response;
   try {
-    response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads/${batch.job_reference}/${batch.batch_id}/candidate-profiles`, {method: "POST"});
+    response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads/${batch.job_reference}/${batch.batch_id}/candidate-profiles`, {method: "POST",headers});
   } catch { throw new Error("Candidate extraction was not confirmed. Check before retrying; another request can repeat provider calls."); }
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) throw new Error(response.status === 503 && record(body) && body.code === "candidate_parser_not_configured"

@@ -66,11 +66,9 @@ models may time out, fail strict schemas or request clarification. Their quality
 latency, policy compliance and technical reliability have **not** been measured or
 claimed equivalent to a hosted model.
 
-CV screening retains existing provider configuration. Selecting local JD does not
-make CV screening local or authorize external transfer of candidate text. Do not
-use real CVs or other personal data without separate appropriate authorization.
-No model selector was added to screening because its matching/provenance contracts
-need a distinct reviewed adapter and consent design.
+CV screening now has its own explicit selector and transfer-confirmation gate,
+independent of JD selection. See [CV provider selection](cv_ai_provider_selection.md).
+Selecting local JD alone still does not select or authorize CV processing.
 
 ## Verification
 

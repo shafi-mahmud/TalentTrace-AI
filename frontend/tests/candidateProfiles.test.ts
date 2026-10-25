@@ -72,7 +72,7 @@ test("candidate request sends only stored identity with no provider options or r
     assert.equal(options?.method, "POST"); assert.equal(options?.body, undefined);
     return Response.json(result());
   });
-  assert.deepEqual(await extractCandidateProfiles(batch), result()); assert.equal(calls, 1);
+  assert.deepEqual(await extractCandidateProfiles(batch, {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), result()); assert.equal(calls, 1);
 });
 
 test("public profile validation forbids evidence, scores and contact in qualifications", () => {
@@ -87,7 +87,7 @@ test("public profile validation forbids evidence, scores and contact in qualific
 
 test("unrelated IDs and untrusted provider errors cannot become displayed profiles", async t => {
   t.mock.method(globalThis, "fetch", async () => Response.json({...result(), batch_id: UPLOAD}));
-  await assert.rejects(extractCandidateProfiles(batch), /invalid confirmation/);
+  await assert.rejects(extractCandidateProfiles(batch, {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), /invalid confirmation/);
   t.mock.method(globalThis, "fetch", async () => Response.json({code: "candidate_parser_not_configured", message: "PRIVATE_KEY"}, {status: 503}));
-  await assert.rejects(extractCandidateProfiles(batch), {message: "Candidate profile extraction is not configured on this server."});
+  await assert.rejects(extractCandidateProfiles(batch, {provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}), {message: "Candidate profile extraction is not configured on this server."});
 });

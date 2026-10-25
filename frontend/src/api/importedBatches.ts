@@ -1,3 +1,4 @@
+import type {CvAISelection} from "./cvProvider.ts";
 import { authenticatedFetch } from './session.ts';
 import { screenStoredBatch } from './screening.ts';
 import type { ReviewedJobSnapshot } from '../types/screening';
@@ -34,8 +35,8 @@ export async function fetchImportedBatches(job: string, reference: string, revis
         throw Error('Imported batch identities could not be validated.');
     return v;
 }
-export async function screenImportedBatch(context: ImportedDiscovery, batch: ImportedBatch, snapshot: ReviewedJobSnapshot) {
+export async function screenImportedBatch(context: ImportedDiscovery, batch: ImportedBatch, snapshot: ReviewedJobSnapshot, selection?:CvAISelection) {
     if (!isImportedDiscovery(context, context.job_id, context.job_reference, context.criteria_revision) || !context.batches.includes(batch) || batch.availability !== 'available' || !batch.review_token)
         throw Error('Refresh and review the imported batch first.');
-    return screenStoredBatch({ job_id: context.job_id, job_reference: context.job_reference, batch_id: batch.batch_id, upload_ids: batch.upload_ids }, snapshot, context.criteria_revision, batch.review_token);
+    return screenStoredBatch({ job_id: context.job_id, job_reference: context.job_reference, batch_id: batch.batch_id, upload_ids: batch.upload_ids }, snapshot, context.criteria_revision, batch.review_token,selection);
 }

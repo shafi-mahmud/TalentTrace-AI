@@ -1,3 +1,5 @@
+import ProviderSelection from "./ProviderSelection";
+import {cvProviderReady} from "../api/cvProvider.ts";
 import ImportedBatches from './ImportedBatches.ts';
 import SavedScores from './SavedScores';
 import type { InterviewSelection } from './SavedScores';
@@ -32,6 +34,9 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   draft: WorkingCriteriaDraft | null; onCriteriaChange: (criteria: WorkingCriteriaDraft["criteria"]) => void;
   onCriteriaReviewed: (reviewed: boolean) => void;
 }) {
+  const [aiProvider,setAiProvider]=useState("");
+  const [externalConfirmed,setExternalConfirmed]=useState(false);
+  const selection={provider:aiProvider,externalConfirmed};
   const [reference, setReference] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
@@ -55,6 +60,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   const criteriaDraft = draft ?? manualDraft;
   const [weights, setWeights] = useState<ScoringWeights>({skill: 50, experience: 30, education: 20});
   useLayoutEffect(() => {setWeights(criteriaDraft?.weights ?? {skill: 50, experience: 30, education: 20});}, [criteriaDraft?.draftId, criteriaDraft?.revision, contextResetKey]);
+  useLayoutEffect(()=>{setExternalConfirmed(false);},[criteriaDraft?.draftId,criteriaDraft?.revision,result?.batch_id,contextResetKey]);
   const busy = loading || extracting || processingOcr || parsing || screeningBusy;
   const screeningPrerequisite = screeningPrerequisiteMessage({busy, hasSuggestions: Boolean(criteriaDraft), hasBatch: Boolean(result),
     hasSnapshot: Boolean(snapshot), referenceMatches: Boolean(result && snapshot && snapshot.job_reference === result.job_reference)});
@@ -147,19 +153,19 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
   }
 
   async function parseProfiles() {
-    if (!result || pending.current) return;
+    if (!result || pending.current || !cvProviderReady(selection)) return;
     pending.current = true; setParsing(true); setProfiles(null); setError("");
-    try { setProfiles(await extractCandidateProfiles(result)); }
+    try { setProfiles(await extractCandidateProfiles(result,selection)); }
     catch (failure) { setError(failure instanceof Error ? failure.message : "Candidate profile extraction could not be completed."); }
     finally { pending.current = false; setParsing(false); }
   }
 
   async function screen() {
-    if (!result || !snapshot || pending.current) return;
+    if (!result || !snapshot || pending.current || !cvProviderReady(selection)) return;
     pending.current = true; setScreeningBusy(true); setScreening(null); setError("");
     const revision = screeningRevision.current;
     try {
-      const response = await screenCvBatch(result, snapshot, criteriaDraft?.revision);
+      const response = await screenCvBatch(result, snapshot, criteriaDraft?.revision,selection);
       if (response.scoring && (response.scoring.job_id !== criteriaDraft?.draftId || response.scoring.criteria_revision !== criteriaDraft?.revision)) throw new Error("Job changed. Reload and review criteria and weights.");
       // Switching to another JD while this request runs invalidates its presentation.
       if (revision === screeningRevision.current) setScreening(response);
@@ -212,7 +218,8 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
             </form>
           </section>}
         </details>
-        {criteriaDraft?.revision && criteriaDraft.jobReference && <ImportedBatches key={criteriaDraft.draftId+':'+criteriaDraft.revision} jobId={criteriaDraft.draftId} reference={criteriaDraft.jobReference} revision={criteriaDraft.revision} snapshot={snapshot} disabled={busy} onBusy={setScreeningBusy} onResult={setScreening} />}
+        <ProviderSelection scope="cv" value={aiProvider} consent={externalConfirmed} disabled={busy} onChange={v=>{setAiProvider(v);setExternalConfirmed(false);}} onConsent={setExternalConfirmed}/>
+        {criteriaDraft?.revision && criteriaDraft.jobReference && <ImportedBatches key={criteriaDraft.draftId+':'+criteriaDraft.revision} jobId={criteriaDraft.draftId} reference={criteriaDraft.jobReference} revision={criteriaDraft.revision} snapshot={snapshot} disabled={busy} selection={selection} onBusy={setScreeningBusy} onResult={setScreening} />}
         <section className="card cv-intake-card" aria-label="Candidate CV upload">
           {error && <div className="error-banner" role="alert">{error}</div>}
           <details className="stage-disclosure upload-stage" open={!result}><summary>{result ? `${result.accepted_count} CVs uploaded · choose another batch` : "Upload candidate CVs"}</summary>
@@ -237,11 +244,11 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
         {result && <CvUploadConfirmation result={result} onExtract={processingOcr || parsing || screeningBusy ? undefined : extract} extracting={extracting} />}
         {extraction && <CvExtractionSummary result={extraction} onOcr={runOcr} processingOcr={processingOcr} disabled={busy} />}
         {ocr && <CvOcrSummary result={ocr} />}
-        <CandidateProfileAction extraction={extraction} ocrAttempted={ocrAttempted} busy={busy} parsing={parsing} onParse={parseProfiles} />
+        <CandidateProfileAction extraction={extraction} ocrAttempted={ocrAttempted} busy={busy||!cvProviderReady(selection)} parsing={parsing} onParse={parseProfiles} />
         {profiles && <CandidateProfilesSummary result={profiles} />}
         <div className="screening-action">
           <div><h2>Screen this CV batch</h2><p className="helper-text">Uses the stored files and confirmed criteria. Parsing runs as part of screening.</p></div>
-          <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
+          <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)||!cvProviderReady(selection)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
         {screening && <><p className="helper-text">Results for stored batch {screening.batch_id}</p><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={uploadId => {const batch=screening.scoring; const candidate=batch?.candidates.find(c=>c.upload_id===uploadId); if(batch && candidate) onGoToScheduling({batch,candidate});}} /></>}

@@ -72,7 +72,7 @@ def test_authenticated_imported_batch_screening_postgres(disposable_pg, tmp_path
                 async def screen(j,i,token=None,revision=None,c=first):
                     headers={'X-TalentTrace-Job-Revision':str(revision or j['revision'])}
                     if token:headers['X-TalentTrace-Imported-Review']=token
-                    return await c.post('/api/v1/cv-uploads/'+j['job_reference']+'/'+str(i.batch_id)+'/screen',json=j['snapshot'],headers=headers)
+                    return await c.post('/api/v1/cv-uploads/'+j['job_reference']+'/'+str(i.batch_id)+'/screen',json=j['snapshot'],headers={**headers,"X-TalentTrace-AI-Provider":"groq","X-TalentTrace-External-Processing":"confirmed"})
                 assert (await discovery(a,other)).status_code==404
                 assert (await discovery(unapproved)).status_code==409
                 assert (await first.get('/api/v1/jobs/'+a['id']+'/imported-batches?revision=1')).status_code==409
@@ -114,10 +114,10 @@ def test_authenticated_imported_batch_screening_postgres(disposable_pg, tmp_path
                 assert (await screen(b,ib,btoken)).status_code==409 and extractor.calls==1
                 extractor.fail=True
                 failure=await screen(a,failed,rows[str(failed.batch_id)]['review_token'])
-                assert failure.status_code==200 and failure.json()['scoring']['candidates'][0]['status']=='not_evaluated'
+                assert failure.status_code==200 and failure.json()['scoring'] is None
                 assert 'PRIVATE_PROVIDER_FAILURE' not in failure.text
                 latest={r['batch_id']:r for r in (await discovery(a)).json()['batches']}
-                assert latest[str(failed.batch_id)]['screening_status']=='incomplete_results'
+                assert latest[str(failed.batch_id)]['screening_status']=='not_screened'
                 # A file changed during model work must not replace persisted scores.
                 extractor.fail=False;extractor.entered=asyncio.Event();extractor.release=asyncio.Event()
                 token2=latest[str(ia.batch_id)]['review_token']

@@ -17,6 +17,7 @@ from app.schemas.cv_ocr import CvOcrResponse
 from app.services.cv_ocr import CvOcrService, OcrNotConfigured
 from app.schemas.candidate_profile import CandidateProfilesResponse
 from app.services.candidate_profile import CandidateProfileService
+from app.integrations.llm.screening_selection import selected_screening
 from app.integrations.llm.candidate_profile import CandidateParserNotConfigured
 from app.services.cv_extraction import CvExtractionError, CvExtractionService, PUBLIC_ERRORS as EXTRACTION_ERRORS
 from app.services.cv_upload import CvUploadError, CvUploadService, PUBLIC_ERRORS
@@ -39,9 +40,12 @@ async def candidate_profiles(request: Request, job_reference: JobReference, batc
         async for chunk in request.stream():
             if chunk:
                 return JSONResponse(status_code=400, content={"code": "invalid_candidate_request", "message": "Supply stored batch identity only."})
-        candidates = await CandidateProfileService(configuration).parse_batch(job_reference, batch_id)
+        service = await selected_screening(request, configuration)
+        candidates = await service.profiles.parse_batch(job_reference, batch_id)
         return CandidateProfilesResponse(job_reference=job_reference, batch_id=batch_id,
             processed_count=len(candidates), candidates=candidates)
+    except HTTPException:
+        raise
     except CandidateParserNotConfigured:
         return JSONResponse(status_code=503, content={"code": "candidate_parser_not_configured",
             "message": "Candidate profile extraction is not configured."})

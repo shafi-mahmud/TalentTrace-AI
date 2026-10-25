@@ -1,3 +1,5 @@
+import {cvProviderHeaders} from "./cvProvider.ts";
+import type {CvAISelection} from "./cvProvider.ts";
 import { authenticatedFetch } from "./session.ts";
 import { isScoringBatch } from "./scoring.ts";
 import { isGroundedAttribute } from "./candidateProfiles.ts";
@@ -122,21 +124,22 @@ export function isBatchScreeningResponse(v: unknown): v is BatchScreeningRespons
       && entry.not_found_count === row.not_found_count && entry.total_requirements === row.total_requirements;
   }) && (v.scoring == null || isScoringBatch(v.scoring, v as unknown as BatchScreeningResponse));
 }
-export async function screenCvBatch(batch: CvUploadResponse, snapshot: ReviewedJobSnapshot, revision?: number): Promise<BatchScreeningResponse> {
+export async function screenCvBatch(batch: CvUploadResponse, snapshot: ReviewedJobSnapshot, revision?: number, selection?:CvAISelection): Promise<BatchScreeningResponse> {
   if (!isCvUploadResponse(batch) || !isReviewedSnapshot(snapshot) || batch.job_reference !== snapshot.job_reference) {
     throw new Error("Confirm criteria for this uploaded job reference before screening.");
   }
-  return screenStoredBatch({job_reference:batch.job_reference,batch_id:batch.batch_id,upload_ids:batch.files.map(f=>f.upload_id)},snapshot,revision);
+  return screenStoredBatch({job_reference:batch.job_reference,batch_id:batch.batch_id,upload_ids:batch.files.map(f=>f.upload_id)},snapshot,revision,undefined,selection);
 }
 
 export interface StoredBatchIdentity {job_reference:string;batch_id:string;upload_ids:string[];job_id?:string;}
-export async function screenStoredBatch(batch:StoredBatchIdentity,snapshot:ReviewedJobSnapshot,revision?:number,reviewToken?:string):Promise<BatchScreeningResponse>{
+export async function screenStoredBatch(batch:StoredBatchIdentity,snapshot:ReviewedJobSnapshot,revision?:number,reviewToken?:string,selection?:CvAISelection):Promise<BatchScreeningResponse>{
   if(!isReviewedSnapshot(snapshot) || batch.job_reference!==snapshot.job_reference || !UUID.test(batch.batch_id)
     || batch.upload_ids.length<1 || batch.upload_ids.length>20 || !batch.upload_ids.every(id=>UUID.test(id)) || new Set(batch.upload_ids).size!==batch.upload_ids.length)throw Error(FAILURE);
+  const aiHeaders=cvProviderHeaders(selection);
   let response: Response;
   try {
     response = await authenticatedFetch(`${API_BASE_URL}/api/v1/cv-uploads/${batch.job_reference}/${batch.batch_id}/screen`, {
-      method: "POST", headers: {"Content-Type": "application/json", ...(revision ? {"X-TalentTrace-Job-Revision": String(revision)} : {}),
+      method: "POST", headers: {...aiHeaders,"Content-Type": "application/json", ...(revision ? {"X-TalentTrace-Job-Revision": String(revision)} : {}),
         ...(reviewToken ? {"X-TalentTrace-Imported-Review":reviewToken} : {})}, body: JSON.stringify(snapshot),
     });
   } catch { throw new Error("Screening was not confirmed. Check saved results before retrying; provider calls may repeat."); }

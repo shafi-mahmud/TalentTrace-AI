@@ -1,14 +1,17 @@
+import type {CvAISelection} from "../api/cvProvider.ts";
+import {cvProviderReady} from "../api/cvProvider.ts";
 import { createElement as h, useLayoutEffect, useRef, useState } from 'react';
 import { fetchImportedBatches, screenImportedBatch } from '../api/importedBatches.ts';
 import type { ImportedDiscovery, ImportedBatch } from '../api/importedBatches.ts';
 import type { ReviewedJobSnapshot, BatchScreeningResponse } from '../types/screening';
 const labels = { not_screened: 'Not screened', current_results: 'Saved results for current revision', incomplete_results: 'Incomplete saved results; review before retrying', older_revision: 'Older revision results; current review required' };
-export default function ImportedBatches({ jobId, reference, revision, snapshot, disabled, onBusy, onResult }: {
+export default function ImportedBatches({ jobId, reference, revision, snapshot, disabled, selection, onBusy, onResult }: {
     jobId: string;
     reference: string;
     revision: number;
     snapshot: ReviewedJobSnapshot | null;
     disabled: boolean;
+    selection?:CvAISelection;
     onBusy: (v: boolean) => void;
     onResult: (v: BatchScreeningResponse | null) => void;
 }) {
@@ -44,7 +47,7 @@ export default function ImportedBatches({ jobId, reference, revision, snapshot, 
         }
     }
     async function screen() {
-        if (pending.current || disabled || !snapshot || !value || !selected || !ack || attempted)
+        if (pending.current || disabled || !snapshot || !value || !selected || !ack || attempted || !cvProviderReady(selection))
             return;
         pending.current = true;
         setAttempted(true);
@@ -54,7 +57,7 @@ export default function ImportedBatches({ jobId, reference, revision, snapshot, 
         onResult(null);
         const n = generation.current;
         try {
-            const result = await screenImportedBatch(value, selected, snapshot);
+            const result = await screenImportedBatch(value, selected, snapshot,selection);
             if (n === generation.current)
                 onResult(result);
         }
@@ -76,5 +79,5 @@ export default function ImportedBatches({ jobId, reference, revision, snapshot, 
             target: {
                 checked: boolean;
             };
-        }) => setAck(e.target.checked) }), ' I reviewed this batch and current criteria. Screening or retry may consume LLM quota.'), h('button', { type: 'button', className: 'button button-primary', disabled: disabled || loading || attempted || !ack, onClick: () => void screen() }, 'Screen imported batch'), attempted && h('p', { role: 'status' }, 'Attempt completed or unconfirmed. Check the results below and saved scores. Refresh imported batches before considering another explicit attempt.'))));
+        }) => setAck(e.target.checked) }), ' I reviewed this batch and current criteria. Screening or retry may consume LLM quota.'), h('button', { type: 'button', className: 'button button-primary', disabled: disabled || loading || attempted || !ack || !cvProviderReady(selection), onClick: () => void screen() }, 'Screen imported batch'), attempted && h('p', { role: 'status' }, 'Attempt completed or unconfirmed. Check the results below and saved scores. Refresh imported batches before considering another explicit attempt.'))));
 }

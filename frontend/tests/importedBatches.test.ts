@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import {cvProviderReady} from '../src/api/cvProvider.ts';
 import { isImportedDiscovery, screenImportedBatch } from '../src/api/importedBatches.ts';
 const job = '00000000-0000-4000-8000-000000000001', batch = '00000000-0000-4000-8000-000000000002', upload = '00000000-0000-4000-8000-000000000003', reference = 'TT-JOB-0123456789ABCDEF';
 const row = { batch_id: batch, upload_ids: [upload], availability: 'available', screening_status: 'not_screened', review_token: 'a'.repeat(64) };
@@ -24,7 +25,7 @@ test('unavailable and unreviewed selections reject before HTTP', async () => {
 function harness({ fail = false, hold = false, holdRead = false, supplied: anyValue = discovery } = {}) {
     const states: any[] = [], refs: any[] = [], effects: Array<() => void> = [];
     let si = 0, ri = 0, ei = 0, reads = 0, writes = 0, resolve: any;
-    const props: any = { jobId: job, reference, revision: 2, snapshot, disabled: false, onBusy(v: boolean) { props.busy = v; }, onResult(v: any) { props.result = v; } };
+    const props: any = { jobId: job, reference, revision: 2, snapshot, selection:{provider:"ollama:qwen2.5:1.5b",externalConfirmed:false}, disabled: false, onBusy(v: boolean) { props.busy = v; }, onResult(v: any) { props.result = v; } };
     const deps: any[] = [], cleanups: any[] = [];
     const hooks = { createElement: h, useState(v: any) { const i = si++; if (!(i in states))
             states[i] = v; return [states[i], (x: any) => states[i] = x]; }, useRef(v: any) { return refs[ri++] ?? (refs[ri - 1] = { current: v }); }, useLayoutEffect(f: () => void, d: any[]) { const i = ei++; if (!deps[i] || d.some((v, k) => v !== deps[i][k])) {
@@ -32,7 +33,7 @@ function harness({ fail = false, hold = false, holdRead = false, supplied: anyVa
             effects.push(() => { cleanups[i]?.(); cleanups[i] = f(); });
         } } };
     const source = ts.transpileModule(readFileSync(new URL('../src/components/ImportedBatches.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, exports: any = {};
-    runInNewContext(source, { exports, Error, require: (name: string) => name === 'react' ? hooks : { async fetchImportedBatches() { reads++; if (holdRead)
+    runInNewContext(source, { exports, Error, require: (name: string) => name === 'react' ? hooks : name === '../api/cvProvider.ts' ? {cvProviderReady} : { async fetchImportedBatches() { reads++; if (holdRead)
                 await new Promise(r => resolve = r); return anyValue; }, async screenImportedBatch(context: any, b: any, s: any) { writes++; assert.equal(context.job_id, job); assert.equal(b.batch_id, batch); assert.equal(s, snapshot); if (hold)
                 await new Promise(r => resolve = r); if (fail)
                 throw Error('Screening failed. Check saved results before an explicit retry.'); return { safe: 'result' }; } } });

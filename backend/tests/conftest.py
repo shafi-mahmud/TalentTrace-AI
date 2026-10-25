@@ -55,6 +55,12 @@ def authenticated_business_contracts(request, monkeypatch):
     # Legacy mocked workspaces have no import ledger; real auth/import tests do not use this override.
     monkeypatch.setattr(screening, "check_review", AsyncMock(return_value=False))
     monkeypatch.setattr(screening, "private_settings", lambda request: settings)
+    async def selected_batch(request, configuration):
+        return screening.BatchScreeningService(profiles=screening.CandidateProfileService(configuration))
+    async def selected_profiles(request, configuration):
+        return SimpleNamespace(profiles=cv_uploads.CandidateProfileService(configuration))
+    monkeypatch.setattr(screening, "selected_screening", selected_batch)
+    monkeypatch.setattr(cv_uploads, "selected_screening", selected_profiles)
     yield
     for target in apps:
         target.dependency_overrides.clear()

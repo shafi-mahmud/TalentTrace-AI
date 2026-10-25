@@ -9,7 +9,7 @@ const options=[{id:'groq',label:'Groq API',available:false,external:true},
 test('selector starts without automatic choice; cloud disclosure is explicit and unchecked',()=>{
  const base={value:'',consent:false,disabled:false,onChange(){},onConsent(){}};
  const html=renderToStaticMarkup(h(ProviderSelection,base));
- assert.match(html,/Choose AI/);assert.match(html,/JD only; CV screening settings are unchanged/);
+ assert.match(html,/Choose AI/);assert.match(html,/JD provider selection is separate from CV screening/);
  assert.doesNotMatch(html,/checked=""/);
  const cloud=renderToStaticMarkup(h(ProviderSelection,{...base,value:'groq'}));
  assert.match(cloud,/Send JD conversation and policy context to Groq/);assert.doesNotMatch(cloud,/checked=""/);
@@ -28,4 +28,11 @@ test('JD request transmits explicit selection/consent without URLs or credential
  await assert.rejects(sendRecruiterMessage('Synthetic JD',undefined,'ollama:qwen2.5:1.5b',false));
  assert.deepEqual(body,{message:'Synthetic JD',ai_provider:'ollama:qwen2.5:1.5b',external_processing_confirmed:false});
  assert.ok(!('api_key' in body)&&!('endpoint' in body));
+});
+
+test('CV selector discloses CV transfer separately and local selection needs no cloud consent',()=>{
+ const base={value:'groq',scope:'cv' as const,consent:false,disabled:false,onChange(){},onConsent(){}};
+ const cloud=renderToStaticMarkup(h(ProviderSelection,base));
+ assert.match(cloud,/CV AI/);assert.match(cloud,/Send CV text and derived qualifications to Groq/);assert.doesNotMatch(cloud,/checked=""/);
+ assert.doesNotMatch(renderToStaticMarkup(h(ProviderSelection,{...base,value:'ollama:qwen2.5:1.5b'})),/Send CV text/);
 });

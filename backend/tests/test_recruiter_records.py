@@ -345,7 +345,9 @@ def test_candidate_profile_route_uses_authenticated_private_storage(workspace, m
         async def parse_batch(self, *args):
             from app.services.cv_extraction import CvExtractionError
             raise CvExtractionError("batch_not_found", 404)
-    monkeypatch.setattr(cv_uploads, "CandidateProfileService", Profiles)
+    async def selected(request, configuration):
+        return SimpleNamespace(profiles=Profiles(configuration))
+    monkeypatch.setattr(cv_uploads, "selected_screening", selected)
     async def scenario():
         async with client() as connection:
             await login(connection, users[0], password)
