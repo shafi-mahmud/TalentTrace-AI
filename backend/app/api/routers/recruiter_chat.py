@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/recruiter-chat", tags=["recruiter chat"])
 
+@router.get("/providers")
+async def providers(user=Depends(current_recruiter)):
+    from app.integrations.llm.selection import provider_options
+    return await provider_options()
+
+
 
 @router.post("", response_model=RecruiterChatResponse, responses={
     502: {"description": "Interpretation or JD generation failed."},
@@ -33,7 +39,12 @@ router = APIRouter(prefix="/recruiter-chat", tags=["recruiter chat"])
 async def recruiter_chat(request: RecruiterChatRequest, user=Depends(current_recruiter), session=Depends(database_session)) -> RecruiterChatResponse | JSONResponse:
     correlation_id = uuid4().hex[:12]
     try:
-        return await persist_chat(session, user.id, request, RecruiterChatService(get_recruiter_interpreter()), correlation_id)
+        if request.ai_provider is None:
+            service = RecruiterChatService(get_recruiter_interpreter())  # Existing legacy configured API contract.
+        else:
+            from app.integrations.llm.selection import selected_service
+            service = await selected_service(request.ai_provider, request.external_processing_confirmed)
+        return await persist_chat(session, user.id, request, service, correlation_id)
     except HTTPException:
         raise
     except ConversationUnavailableError as error:

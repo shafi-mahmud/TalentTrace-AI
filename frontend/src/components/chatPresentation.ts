@@ -76,7 +76,7 @@ function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, o
           ...Array.from(sections, section => h("li", { key: section }, section)))))),
       h("details", { className: "technical-details" }, h("summary", null, "Technical details"),
         h("dl", { className: "generation-metadata" },
-          ...[["Provider", "Groq"], ["Model", result.model], ["Retrieval", "Semantic BGE + exact pgvector cosine"]].map(([label, value]) =>
+          ...[["Provider", result.provider === "ollama" ? "Ollama" : "Groq"], ["Model", result.model], ["Retrieval", "Semantic BGE + exact pgvector cosine"]].map(([label, value]) =>
             h("div", { key: label }, h("dt", null, label), h("dd", null, value)))),
         h("h4", null, "Citation IDs"), h("ul", { className: "technical-citations" },
           ...result.grounding_citations.map(citation => h("li", { key: citation.citation_id },

@@ -30,7 +30,7 @@ class JobDescriptionGenerationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     draft: GeneratedJobDescriptionDraft
-    provider: Literal["groq"] = "groq"
+    provider: Literal["groq", "ollama"] = "groq"
     model: ModelName
 
 

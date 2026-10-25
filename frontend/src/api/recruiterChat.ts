@@ -52,12 +52,12 @@ export function isRecruiterChatResponse(value: unknown): value is RecruiterChatR
     && value.missing_fields.every((field) => typeof field === "string" && Object.hasOwn(MISSING_FIELD_LABELS, field));
 }
 
-export async function sendRecruiterMessage(message: string, conversationId?: string): Promise<RecruiterChatResponse> {
+export async function sendRecruiterMessage(message: string, conversationId?: string, provider?: string, externalConfirmed=false): Promise<RecruiterChatResponse> {
   let response: Response;
   try {
     response = await authenticatedFetch(`${API_BASE_URL}/api/v1/recruiter-chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, ...(conversationId ? {conversation_id: conversationId} : {}) }),
+      body: JSON.stringify({ message, ...(conversationId ? {conversation_id: conversationId} : {}), ...(provider ? {ai_provider:provider,external_processing_confirmed:externalConfirmed} : {}) }),
     });
   } catch {
     throw new RecruiterChatRequestError("Cannot reach the TalentTrace AI backend. The request may have been received.", true, true);
@@ -68,7 +68,7 @@ export async function sendRecruiterMessage(message: string, conversationId?: str
       ? "Use a plain-text job instruction of up to 4000 characters, without candidate information or unsafe control characters."
       : response.status === 503 ? "Recruiter chat is not configured."
       : response.status === 504 ? "Recruiter chat timed out."
-      : response.status === 409 ? "This conversation expired or reached its limit. Start a new chat." : FAILURE;
+      : response.status === 409 ? "This conversation expired, changed, or uses another AI option. Start a new chat." : FAILURE;
     throw new RecruiterChatRequestError(message, response.status >= 500, response.status !== 409 && response.status !== 422);
   }
   const body: unknown = await response.json().catch(() => null);
@@ -89,4 +89,14 @@ function isPublishingContext(value: unknown): value is PublishingContext {
   return (value.location == null || (typeof value.location === "string" && value.location.length <= 150))
     && (value.employment_type == null || ["full_time", "part_time", "contract", "internship", "temporary"].includes(String(value.employment_type)))
     && (value.work_arrangement == null || ["on_site", "remote", "hybrid"].includes(String(value.work_arrangement)));
+}
+
+export interface AIProvider {id:string;label:string;available:boolean;external:boolean;}
+export async function listAIProviders():Promise<AIProvider[]> {
+ const response=await authenticatedFetch(`${API_BASE_URL}/api/v1/recruiter-chat/providers`,{signal:AbortSignal.timeout(5000)});
+ if(!response.ok)throw Error('AI options unavailable.');
+ const data=await response.json();
+ const allowed=['groq','ollama:qwen2.5:1.5b','ollama:smollm2:360m-instruct-q4_K_M'];
+ if(!data||Object.keys(data).join()!=='providers'||!Array.isArray(data.providers)||data.providers.length!==3||new Set(data.providers.map((p:any)=>p?.id)).size!==3||!data.providers.every((p:any)=>p&&Object.keys(p).sort().join()===['id','label','available','external'].sort().join()&&allowed.includes(p.id)&&typeof p.label==='string'&&p.label.length<120&&typeof p.available==='boolean'&&p.external===(p.id==='groq')))throw Error('AI options unavailable.');
+ return data.providers;
 }

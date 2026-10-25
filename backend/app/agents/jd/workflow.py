@@ -66,6 +66,9 @@ class JobDescriptionWorkflow:
         builder.add_edge("validate_draft", END)
         self.graph = builder.compile(checkpointer=False)
 
+    def with_generator(self, generator: JobDescriptionGenerator):
+        return JobDescriptionWorkflow(self._retriever, generator)
+
     async def generate(
         self,
         request: JobDescriptionGenerationRequest,

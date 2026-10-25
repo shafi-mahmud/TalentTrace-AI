@@ -76,7 +76,7 @@ ModelName = Annotated[
         strip_whitespace=True,
         min_length=1,
         max_length=200,
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._/:-]*$",
     ),
 ]
 
@@ -235,7 +235,7 @@ class JobDescriptionGenerationResponse(BaseModel):
     status: Literal["draft"] = "draft"
     human_review_required: Literal[True] = True
     retrieval_mode: RetrievalMode
-    provider: Literal["groq"] = "groq"
+    provider: Literal["groq", "ollama"] = "groq"
     model: ModelName
     job_description: GeneratedJobDescriptionDraft
     policy_screening_suggestions: list[PolicyScreeningSuggestion] = Field(default_factory=list, max_length=2)

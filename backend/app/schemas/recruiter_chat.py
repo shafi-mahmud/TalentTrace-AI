@@ -27,6 +27,8 @@ class RecruiterChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
     conversation_id: UUID | None = None
+    ai_provider: Literal["groq", "ollama:qwen2.5:1.5b", "ollama:smollm2:360m-instruct-q4_K_M"] | None = None
+    external_processing_confirmed: bool = False
 
     @field_validator("message", mode="before")
     @classmethod

@@ -610,3 +610,8 @@ body { background: var(--page); color: var(--ink); }
 .publishing-review fieldset { border: 1px solid var(--line); border-radius: 8px; }
 .publishing-review li { margin-block: 12px; overflow-wrap: anywhere; }
 @media(max-width:520px) { .publishing-review { margin: 12px; padding: 14px; } }
+.jd-provider { padding: 12px 20px; border-top: 1px solid var(--line); }
+.jd-provider label { display: block; margin-block: 8px; }
+.jd-provider select { margin-left: 8px; max-width: 100%; }
+.jd-provider small { color: var(--muted); }
+@media(max-width:520px) { .jd-provider select { display: block; margin: 8px 0 0; width: 100%; } }

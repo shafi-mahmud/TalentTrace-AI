@@ -36,7 +36,7 @@ export function isGenerationResponse(
   return (
     value.status === "draft" &&
     value.human_review_required === true &&
-    value.provider === "groq" &&
+    (value.provider === "groq" || value.provider === "ollama") &&
     value.retrieval_mode === "semantic_bge_pgvector" &&
     typeof value.model === "string" &&
     typeof draft.title === "string" &&

@@ -32,7 +32,7 @@ export interface JobDescriptionGenerationResponse {
   status: "draft";
   human_review_required: true;
   retrieval_mode: "semantic_bge_pgvector";
-  provider: "groq";
+  provider: "groq" | "ollama";
   model: string;
   job_description: GeneratedJobDescriptionDraft;
   grounding_citations: PolicyGroundingCitation[];

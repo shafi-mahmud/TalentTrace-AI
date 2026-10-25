@@ -83,6 +83,9 @@ async def persist_chat(session, owner_id, request, service, correlation_id):
         row = RecruiterConversation(id=uuid4(), recruiter_id=owner_id, expires_at=now+timedelta(minutes=30), state={})
         session.add(row)
         await session.flush()
+    provider = request.ai_provider or "groq"
+    if row.state.get("ai_provider", "groq") != provider and request.conversation_id is not None:
+        raise HTTPException(409, "Start a new conversation to change AI provider.")
     store = ConversationStore()
     current = restore_conversation(row)
     store._sessions[row.id] = current
@@ -103,7 +106,7 @@ async def persist_chat(session, owner_id, request, service, correlation_id):
         job.confirmed_snapshot = None
         job.revision += 1
         response = response.model_copy(update={"draft_id": job.id, "job_reference": job.job_reference, "job_revision": job.revision})
-    row.state = encode_conversation(current)
+    row.state = {**encode_conversation(current), "ai_provider": provider}
     row.expires_at = now + timedelta(minutes=30)
     # Every successful submission is persisted; errors roll back instead of asserting delivery.
     from sqlalchemy import func

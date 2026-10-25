@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { isValidRecruiterMessage, RecruiterChatRequestError, sendRecruiterMessage } from "../api/recruiterChat";
+import ProviderSelection from "./ProviderSelection";
 import PublishingReview, {isPublishingCommand} from "./PublishingReview";
 import { publishDraft } from "../api/jobPublishing";
 import { listConversations, loadConversation } from "../api/jobs";
@@ -25,6 +26,8 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
 }) {
   const [state, dispatch] = useReducer(recruiterChatReducer, initialRecruiterChatState);
   const {input, messages, error, sending, conversationId} = state;
+  const [aiProvider,setAIProvider]=useState("");
+  const [externalConfirmed,setExternalConfirmed]=useState(false);
   const [publicationIndex,setPublicationIndex]=useState<number|null>(null);
   const [publishingBusy, setPublishingBusy] = useState(false);
   const pending = useRef(false);
@@ -44,6 +47,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   }, [conversationId]);
   async function restore(id: string) {
     if (!id || pending.current || restoring || attempt.current?.uncertain) return;
+    setAIProvider("");setExternalConfirmed(false);
     setRestoring(true);setRestoreFailed(false);
     try {
       const saved = await loadConversation(id);
@@ -61,7 +65,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     attempt.current = current;
     dispatch({type: "send_started", messageId: current.messageId, text: current.text});
     try {
-      const reply = await sendRecruiterMessage(current.text, current.conversationId);
+      const reply = await sendRecruiterMessage(current.text, current.conversationId, aiProvider, externalConfirmed);
       attempt.current = null;
       dispatch({type: "send_succeeded", messageId: current.messageId, submittedText: current.text,
         reply: {...replyToChatMessage(reply), sourceInstruction: current.text}, conversationId: reply.conversation_id});
@@ -122,6 +126,9 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
       }
       setPublicationIndex(messages.indexOf(latestDraft));dispatch({type:"input_changed",value:""});return;
     }
+    if(!aiProvider||(aiProvider==='groq'&&!externalConfirmed)) {
+      dispatch({type:"input_error",message:"Select an AI option and confirm external processing if needed."});return;
+    }
     if (!isValidRecruiterMessage(message)) {
       dispatch({type: "input_error", message: "Enter job instructions of up to 4000 characters without unsafe control characters."});
       return;
@@ -150,6 +157,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     const unresolved = attempt.current;
     if (unresolved?.uncertain && !window.confirm("The server may have accepted the previous request. Starting a new chat and sending it again could create another draft. Continue?")) return;
     attempt.current = null;
+    setAIProvider("");setExternalConfirmed(false);
     setRestoreFailed(false);
     dispatch({type: "new_chat", preserveInput: Boolean(unresolved)});
     onNewChat();
@@ -181,6 +189,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
       {sending && <p role="status">Checking the requirements you shared…</p>}
     </div>
     {publicationIndex!==null && messages[publicationIndex]===latestDraft && <PublishingReview key={`${latestDraft?.draftId}:${latestDraft?.jobRevision}:${publicationIndex}`} message={messages[publicationIndex]} busy={publishingBusy||sending||restoring||unresolved} onPublish={()=>publish(publicationIndex)} onClose={()=>setPublicationIndex(null)}/>}
+    <ProviderSelection value={aiProvider} consent={externalConfirmed} disabled={sending||restoring||publishingBusy||unresolved} onChange={value=>{setAIProvider(value);setExternalConfirmed(false);}} onConsent={setExternalConfirmed}/>
     <form className="chat-composer" onSubmit={submit}>
       {latestDraft?.jobReference && latestDraft.jobRevision && <p className="chat-refinement-context">Refining {latestDraft.jobReference} · Revision {drafts[latestDraft.draftId??'']?.revision??latestDraft.jobRevision}. Describe only what should change in this conversation. Updated criteria must be reviewed and confirmed again.</p>}
       <div className="field">

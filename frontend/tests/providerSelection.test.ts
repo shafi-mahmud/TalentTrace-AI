@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createElement as h} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import ProviderSelection from '../src/components/ProviderSelection.ts';
+import {listAIProviders,sendRecruiterMessage} from '../src/api/recruiterChat.ts';
+const options=[{id:'groq',label:'Groq API',available:false,external:true},
+ ...['qwen2.5:1.5b','smollm2:360m-instruct-q4_K_M'].map(model=>({id:'ollama:'+model,label:'Local '+model,available:false,external:false}))];
+test('selector starts without automatic choice; cloud disclosure is explicit and unchecked',()=>{
+ const base={value:'',consent:false,disabled:false,onChange(){},onConsent(){}};
+ const html=renderToStaticMarkup(h(ProviderSelection,base));
+ assert.match(html,/Choose AI/);assert.match(html,/JD only; CV screening settings are unchanged/);
+ assert.doesNotMatch(html,/checked=""/);
+ const cloud=renderToStaticMarkup(h(ProviderSelection,{...base,value:'groq'}));
+ assert.match(cloud,/Send JD conversation and policy context to Groq/);assert.doesNotMatch(cloud,/checked=""/);
+});
+test('authenticated capability response has strict allowlisted identities and no secret fields',async t=>{
+ t.mock.method(globalThis,'fetch',async(_url,init)=>{assert.equal(init?.credentials,'include');return Response.json({providers:options});});
+ assert.equal((await listAIProviders()).length,3);
+ for(const data of [{providers:[...options.slice(1),{...options[0],id:'http://private.invalid'}]},
+   {providers:[{...options[0],api_key:'PRIVATE'},...options.slice(1)]}]){
+  t.mock.method(globalThis,'fetch',async()=>Response.json(data));await assert.rejects(listAIProviders(),/unavailable/);
+ }
+});
+test('JD request transmits explicit selection/consent without URLs or credentials',async t=>{
+ let body:any;
+ t.mock.method(globalThis,'fetch',async(_url,init)=>{body=JSON.parse(String(init?.body));return Response.json({}, {status:503});});
+ await assert.rejects(sendRecruiterMessage('Synthetic JD',undefined,'ollama:qwen2.5:1.5b',false));
+ assert.deepEqual(body,{message:'Synthetic JD',ai_provider:'ollama:qwen2.5:1.5b',external_processing_confirmed:false});
+ assert.ok(!('api_key' in body)&&!('endpoint' in body));
+});

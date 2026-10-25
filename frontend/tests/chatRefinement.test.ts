@@ -8,6 +8,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
 import {replyToChatMessage,ChatMessageView} from '../src/components/chatPresentation.ts';
 import * as presentation from '../src/components/chatPresentation.ts';
+import ProviderSelection from '../src/components/ProviderSelection.ts';
 import * as publishingReview from '../src/components/PublishingReview.ts';
 import * as chatState from '../src/state/recruiterChatState.ts';
 import {copyJobReference} from '../src/components/SavedJobIdentity.ts';
@@ -31,6 +32,7 @@ function harness(send:(text:string,c?:string)=>Promise<RecruiterChatResponse>,re
  const require=createRequire(import.meta.url),exports:any={};
  runInNewContext(source,{exports,crypto:globalThis.crypto,window:{confirm:()=>true},require:(name:string)=>{
   if(name==='react')return hooks;
+  if(name==='./ProviderSelection')return {__esModule:true,default:ProviderSelection};
   if(name==='./PublishingReview')return {__esModule:true,...publishingReview};
   if(name==='../api/recruiterChat')return {isValidRecruiterMessage:(s:string)=>!!s.trim(),RecruiterChatRequestError,sendRecruiterMessage:send};
   if(name==='../api/jobs')return {listConversations:async()=>[],loadConversation:restore};
@@ -41,7 +43,7 @@ function harness(send:(text:string,c?:string)=>Promise<RecruiterChatResponse>,re
  }});
  const props={drafts,initialConversationId,onConversationLoaded(){},onDraftGenerated:(d:WorkingCriteriaDraft)=>{drafts[d.draftId]=d;},onCriteriaChange(){},onCriteriaReviewed(){},onContinueToCv:(value:string)=>continued.push(value),onNewChat(){}};
  function render(){index=0;return exports.default(props);}
- async function submit(text:string){let tree=render();all(tree,n=>n.type==='textarea')[0].props.onChange({target:{value:text}});tree=render();await all(tree,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await tick();return render();}
+ async function submit(text:string){let tree=render();const provider=all(tree,n=>n.type===ProviderSelection)[0];provider.props.onChange('groq');provider.props.onConsent(true);tree=render();all(tree,n=>n.type==='textarea')[0].props.onChange({target:{value:text}});tree=render();await all(tree,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await tick();return render();}
  async function flush(){for(const fn of effects.splice(0))fn();await tick();}
  return {render,submit,flush,drafts,continued};
 }
