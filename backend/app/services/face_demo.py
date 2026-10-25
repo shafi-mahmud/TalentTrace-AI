@@ -2,7 +2,7 @@
 import asyncio
 from array import array
 from dataclasses import dataclass
-import math
+from app.integrations.face.metrics import cosine_similarity
 import time
 from uuid import UUID, uuid4
 from fastapi import HTTPException
@@ -53,13 +53,7 @@ def synthetic_vector(fixture):
 
 
 def similarity(reference, probe):
-    if (len(reference) != 128 or len(probe) != 128
-            or not all(math.isfinite(v) for v in (*reference,*probe))):
-        raise ValueError("Invalid feature contract.")
-    norm_a, norm_b = math.sqrt(math.fsum(v*v for v in reference)), math.sqrt(math.fsum(v*v for v in probe))
-    if min(norm_a,norm_b) <= 1e-8:
-        raise ValueError("Invalid feature contract.")
-    score = max(-1.,min(1.,math.fsum(a*b for a,b in zip(reference,probe))/(norm_a*norm_b)))
+    score = cosine_similarity(reference,probe)
     # OpenCV's example threshold is illustrative, not calibrated to this population.
     assessment = "inconclusive" if abs(score-.363)<.05 else "above_demo_threshold" if score>=.363 else "below_demo_threshold"
     return {"mode":"simulated_vectors","model_used":None,"similarity":round(score,6),

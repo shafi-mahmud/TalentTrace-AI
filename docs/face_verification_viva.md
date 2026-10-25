@@ -1,6 +1,11 @@
 # Face-verification viva prototype — 26 October 2026
 
 **PARTIAL. No real biometric enrollment or physical-viva identity verification is enabled.**
+
+Follow-up: [actual CPU readiness](face_cpu_readiness_20261026.md) now records approved
+model provisioning, real YuNet detections and one real SFace embedding. Both probes
+failed unchanged quality checks, so real matching remains unverified. The original
+numeric API below remains explicitly simulated and disabled by default.
 Branch: `feature/face-verification-viva`, based on `579eeca` (includes `5127f7f`).
 No F3/F4/F11 changes, migrations, new dependencies, capture, model downloads or
 external recognition calls. No actual face images or biometric embeddings were used.
@@ -102,9 +107,9 @@ Existing media/camera controls are not reused for capture and were not modified.
   Binary/NumPy ABI compatibility, actual models, CPU latency, memory, detection,
   alignment and recognition on approved artificial faces remain **UNVERIFIED**.
 
-Inventory found no cv2 in system or the approved STT interpreter, no YuNet/SFace
+At original commit `8c7ec8b`, inventory found no cv2 in system or the approved STT interpreter, no YuNet/SFace
 weights in checked project data, and no approved artificial face-image fixtures.
-Nothing was installed/downloaded. **Actual model used: none.** Both positive/negative
+Nothing was installed/downloaded. **Original increment actual model used: none.** Both positive/negative
 outcomes above are vector simulations, not successful face-model comparisons.
 
 ## Licensing / compatibility evidence

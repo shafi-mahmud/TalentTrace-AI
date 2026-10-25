@@ -142,3 +142,10 @@ YuNet/SFace CPU adapter. See [face-viva status](face_verification_viva.md).
 no approved local models/OpenCV/artificial face samples or real-biometric policy,
 protected persistence and cross-session authority are provisioned. Numeric-vector
 outcomes are simulations, not face-recognition accuracy or liveness acceptance.
+
+
+Approved real CPU follow-up: see [YuNet/SFace readiness](face_cpu_readiness_20261026.md).
+Official pinned models loaded; YuNet detected the procedural faces and SFace
+extracted one valid 128-value feature. Both probes were quality-rejected; no valid
+pairwise match/accuracy result exists. Production/on-site enrollment remains blocked
+and the HTTP synthetic demonstration remains disabled by default.
