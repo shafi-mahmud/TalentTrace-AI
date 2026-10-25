@@ -1,3 +1,4 @@
+import FaceWorkflowPanel from './FaceWorkflowPanel.ts';
 import AppointmentEmail from './AppointmentEmail.ts';
 import ConsolidatedAssessment from './ConsolidatedAssessment.ts';
 import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -50,6 +51,7 @@ export function SavedInterviews({rows,criteriaRevision,onOpenInterview}: {rows:I
     h("details",{className:"supporting-details"},h("summary",null,"Booking details"),h("p",null,`UTC: ${new Date(row.scheduled_at).toISOString()}`),h("p",null,`Candidate ${row.upload_id} · Candidate invitation managed on interview page`)),
     h(AppointmentEmail,{key:row.id,interview:row}),
     h(ConsolidatedAssessment,{jobId:row.job_id,batchId:row.batch_id,uploadId:row.upload_id}),
+    h(FaceWorkflowPanel,{jobId:row.job_id,interviewId:row.id}),
     onOpenInterview && h("button",{type:"button",className:"button button-secondary",onClick:()=>onOpenInterview(row)},row.criteria_revision===criteriaRevision?"Open interview":"Review transcript / privacy")))),
     !rows.length && h("p",null,"No saved interviews loaded."));
 }

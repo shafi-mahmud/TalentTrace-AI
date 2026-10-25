@@ -156,3 +156,11 @@ produced 0.99940291 for a +1-brightness variant and 0.90649607 for a separate
 procedural design, with all unchanged gates passing. These demonstrate real
 embedding/cosine computation; the high second score does not establish identity
 discrimination. No real-world biometric accuracy or physical-viva acceptance claimed.
+
+
+Synthetic enrollment/viva workflow: see [implementation and gates](face_enrollment_viva_workflow.md).
+A separate off-by-default actual-model synthetic flow now supports encrypted local
+reference persistence, candidate consent/withdrawal and separately allowlisted
+recruiter-only later comparison. No real biometric policy/database/capture or
+physical-person verification is enabled; source erasure, key/backup governance,
+representative evaluation, liveness and real on-site authorization remain blockers.

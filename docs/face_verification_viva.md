@@ -7,6 +7,10 @@ model provisioning, real YuNet detections and one real SFace embedding. The init
 failed unchanged quality checks. A [later bounded comparison](face_matching_proof_20261026.md)
 established transformed-image consistency, but not independent identity discrimination. The original
 numeric API below remains explicitly simulated and disabled by default.
+Synthetic persistence/workflow follow-up: [online enrollment and viva review](face_enrollment_viva_workflow.md)
+adds an independent disabled-by-default encrypted synthetic-reference flow. The
+original RAM-only numeric demo below is preserved, not relabelled as real biometrics.
+
 Branch: `feature/face-verification-viva`, based on `579eeca` (includes `5127f7f`).
 No F3/F4/F11 changes, migrations, new dependencies, capture, model downloads or
 external recognition calls. No actual face images or biometric embeddings were used.

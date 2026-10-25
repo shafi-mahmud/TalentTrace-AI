@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     company_policy_document_id: UUID | None = None
     groq_api_key: SecretStr | None = None
     ollama_enabled: bool = False
+    face_workflow_enabled: bool = False
+    face_workflow_synthetic_identities: dict[UUID, str] = Field(default_factory=dict)
+    face_workflow_viva_interview_ids: list[UUID] = Field(default_factory=list)
+    face_workflow_root: Path | None = None
+    face_workflow_key: SecretStr | None = None
+    face_workflow_retention_seconds: int | None = Field(default=None, ge=60, le=604800)
+    face_workflow_python: Path | None = None
+    face_workflow_models: Path | None = None
     face_synthetic_demo_enabled: bool = False
     face_synthetic_demo_interview_ids: list[UUID] = Field(default_factory=list)
     telegram_publishing_enabled: bool = False

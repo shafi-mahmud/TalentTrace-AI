@@ -53,3 +53,6 @@ api_router.include_router(interview_attention.router)
 
 from app.api.routers import face_demo
 api_router.include_router(face_demo.router)
+
+from app.api.routers import face_workflow
+api_router.include_router(face_workflow.router)

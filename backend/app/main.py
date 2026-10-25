@@ -42,10 +42,15 @@ async def lifespan(app):
         while True:
             delivery.sweep()
             await asyncio.sleep(1)
+    from app.services.face_workflow import maintenance_loop as face_maintenance
+    face_task = asyncio.create_task(face_maintenance()) if settings.face_workflow_root and settings.face_workflow_key else None
     copilot_task = asyncio.create_task(copilot_cleanup()) if settings.interview_copilot_enabled else None
     try:
         yield
     finally:
+        if face_task:
+            face_task.cancel()
+            await asyncio.gather(face_task,return_exceptions=True)
         if copilot_task:
             copilot_task.cancel()
             await asyncio.gather(copilot_task, return_exceptions=True)
