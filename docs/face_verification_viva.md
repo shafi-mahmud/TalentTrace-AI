@@ -3,8 +3,9 @@
 **PARTIAL. No real biometric enrollment or physical-viva identity verification is enabled.**
 
 Follow-up: [actual CPU readiness](face_cpu_readiness_20261026.md) now records approved
-model provisioning, real YuNet detections and one real SFace embedding. Both probes
-failed unchanged quality checks, so real matching remains unverified. The original
+model provisioning, real YuNet detections and one real SFace embedding. The initial probes
+failed unchanged quality checks. A [later bounded comparison](face_matching_proof_20261026.md)
+established transformed-image consistency, but not independent identity discrimination. The original
 numeric API below remains explicitly simulated and disabled by default.
 Branch: `feature/face-verification-viva`, based on `579eeca` (includes `5127f7f`).
 No F3/F4/F11 changes, migrations, new dependencies, capture, model downloads or

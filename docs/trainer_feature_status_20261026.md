@@ -149,3 +149,10 @@ Official pinned models loaded; YuNet detected the procedural faces and SFace
 extracted one valid 128-value feature. Both probes were quality-rejected; no valid
 pairwise match/accuracy result exists. Production/on-site enrollment remains blocked
 and the HTTP synthetic demonstration remains disabled by default.
+
+
+Bounded SFace follow-up: [actual comparisons](face_matching_proof_20261026.md)
+produced 0.99940291 for a +1-brightness variant and 0.90649607 for a separate
+procedural design, with all unchanged gates passing. These demonstrate real
+embedding/cosine computation; the high second score does not establish identity
+discrimination. No real-world biometric accuracy or physical-viva acceptance claimed.

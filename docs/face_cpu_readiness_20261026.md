@@ -1,6 +1,11 @@
 # Actual YuNet/SFace CPU readiness — 26 October 2026
 
-**Model provisioning/load PASS; face-model matching acceptance PARTIAL/BLOCKED.**
+**Initial run: model provisioning/load PASS; face-model matching acceptance PARTIAL/BLOCKED.**
+
+Follow-up: [bounded matching proof](face_matching_proof_20261026.md) now records
+actual SFace comparisons for a modest transformed sample and a separate procedural
+design. The latter remains highly similar; independent identity discrimination
+and real biometric acceptance are still unverified. Initial evidence below is preserved.
 This replaces numeric-simulation results as the evidence for actual model readiness.
 It does not turn the existing synthetic-only HTTP demonstration into real enrollment.
 The application remains disabled by default and accepts only built-in numeric

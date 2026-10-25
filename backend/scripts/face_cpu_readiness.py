@@ -29,13 +29,15 @@ def draw_identity(cv,np,identity):
     """Original procedural geometry, no photographic source or learned generator."""
     y,x=np.mgrid[0:512,0:512]
     image=np.full((512,512,3),(178,185,190),dtype=np.uint8)
-    wide=identity=='a';rx,ry=(133,177) if wide else (115,183)
+    wide=identity in ('a','c');rx,ry=(133,177) if wide else (115,183)
+    if identity=='c':rx,ry=140,174
     center=(256,270);xx=(x-center[0])/rx;yy=(y-center[1])/ry
     mask=xx*xx+yy*yy<=1
     z=np.sqrt(np.clip(1-xx*xx-yy*yy,0,1))
     light=np.clip(.68+.3*z-.12*xx-.07*yy,.4,1.1)
     skin=np.array((145,183,220) if wide else (110,152,185))
-    noise=np.random.default_rng(123 if wide else 456).normal(0,1.6,(512,512,1))
+    if identity=='c':skin=np.array((128,165,202))
+    noise=np.random.default_rng(789 if identity=='c' else 123 if wide else 456).normal(0,1.6,(512,512,1))
     shaded=np.clip(light[:,:,None]*skin+noise,0,255).astype(np.uint8)
     image[mask]=shaded[mask]
     cv.ellipse(image,(256,480),(170,80),0,0,360,(70,65,65) if wide else (100,70,50),-1)
@@ -44,6 +46,7 @@ def draw_identity(cv,np,identity):
     # Hair cap, independent identity geometry, eyebrows, sclera/iris/lids.
     cv.ellipse(image,(256,154),(rx+2,73 if wide else 62),0,180,360,(35,40,48) if wide else (52,45,33),-1)
     eye_y=249 if wide else 242;spacing=52 if wide else 46
+    if identity=='c':eye_y,spacing=247,57
     for ex in (256-spacing,256+spacing):
         cv.ellipse(image,(ex,eye_y-26),(31 if wide else 25,8),0,180,350,(45,48,53),4)
         cv.ellipse(image,(ex,eye_y),(29 if wide else 25,12),0,0,360,(214,221,225),-1)
@@ -52,10 +55,12 @@ def draw_identity(cv,np,identity):
         cv.circle(image,(ex-3,eye_y-4),2,(245,245,245),-1)
         cv.ellipse(image,(ex,eye_y),(29 if wide else 25,12),0,180,360,(70,84,103),2)
     nose_y=315 if wide else 320
+    if identity=='c':nose_y=322
     cv.line(image,(250,265),(239 if wide else 247,nose_y),tuple(int(v) for v in skin*.66),3)
     cv.ellipse(image,(256,nose_y),(20 if wide else 14,9),0,0,180,tuple(int(v) for v in skin*.6),2)
     for ex in (245,267):cv.ellipse(image,(ex,nose_y),(4,2),0,0,360,(65,70,85),-1)
     mouth_y=365 if wide else 370
+    if identity=='c':mouth_y=374
     cv.ellipse(image,(256,mouth_y),(43 if wide else 32,11),0,0,360,(89,103,150),-1)
     cv.line(image,(216 if wide else 224,mouth_y),(296 if wide else 288,mouth_y),(48,57,75),2)
     cv.ellipse(image,(256,401),(34,9),0,0,180,tuple(int(v) for v in skin*.8),2)
