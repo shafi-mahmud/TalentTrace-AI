@@ -203,3 +203,16 @@ test('cloud mode discloses AssemblyAI and training before consent without local-
   assert.doesNotMatch(words,/without sending it to an external|Local F4 adapter enabled/);
   assert.ok(nodes(tree).some(n=>n.type==='label'&&JSON.stringify(n.props.children).includes('separate cloud-caption consent')));
 });
+
+test('dismiss interrupts an in-flight poll and stale suggestion cannot reappear',async()=>{
+  const h=harness();await h.settle();assert.equal(hasQuestion(h.render()),true);
+  let resolve!:(value:any)=>void;
+  h.setStatus(()=>new Promise(r=>{resolve=r;}));
+  for(const fn of h.intervals.values())fn();await h.tick();
+  button(h.render(),'Dismiss / Ignore').props.onClick();
+  assert.equal(hasQuestion(h.render()),false);
+  await h.tick();assert.equal(h.calls.filter(c=>c==='dismiss').length,1);
+  resolve(view());await h.tick();
+  assert.equal(hasQuestion(h.render()),false);
+  assert.equal(h.calls.filter(c=>c==='withdraw').length,0);
+});

@@ -43,7 +43,8 @@ export default function InterviewCopilot({candidate,jobId,interviewId,connected}
     return()=>window.clearTimeout(timer);
   },[value]);
   async function action(kind:'prepare'|'accept'|'decline'|'withdraw'|'dismiss'){
-    if((inflight.current&&kind!=='withdraw'&&kind!=='decline')||busy||!connected)return;
+    // Dismissal, like withdrawal, must fence a slow poll before it can repaint advice.
+    if((inflight.current&&kind!=='withdraw'&&kind!=='decline'&&kind!=='dismiss')||busy||!connected)return;
     const snapshot=current.current;
     if(kind==='accept'&&!agreed)return;
     const ticket=fence.current.next();inflight.current=ticket;setBusy(true);setValue(null);setAgreed(false);
