@@ -8,6 +8,7 @@ import type { Interview } from "../api/interviews";
 import InterviewCaptions from "./InterviewCaptions";
 import TranscriptPanel from "./TranscriptPanel";
 import InterviewAnalysis from "./InterviewAnalysis";
+import InterviewActivity from "./InterviewActivity";
 import InterviewCopilot from "./InterviewCopilot";
 
 // SDK diagnostics can contain connection details; public UI uses fixed errors.
@@ -135,6 +136,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     <button className="button button-secondary" onClick={()=>void leave(true)} disabled={(!joined && !busy) || leaving.current}>Leave interview</button>
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
+    <InterviewActivity candidate={candidate} connected={joined} jobId={jobId} interviewId={interview?.id}/>
     <InterviewCopilot key={`copilot:${candidate?"candidate":jobId}:${interview?.id??"current"}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined}/>
     <TranscriptPanel key={`${candidate?'candidate':jobId}:${interview?.id??'current'}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined} onAvailability={setStorageAvailable}/>
     {import.meta.env.DEV&&synthetic&&<section aria-label="Synthetic speech rehearsal"><p>Development-only generated speech; no physical microphone. Select before joining; play only after both caption consents. WAV stays in browser memory.</p>

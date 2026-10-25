@@ -23,6 +23,7 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     if(name==="./interviewScreenShare")return sharing;
     if(name==="livekit-client")return {Room,RoomEvent:{},Track:{Source:{},Kind:{}},setLogLevel(){}};
     if(name==="../api/livekitInterview")return {interviewAccess:async()=>({server_url:"wss://synthetic.invalid",token:"synthetic"})};
+    if(name==="./InterviewActivity")return {__esModule:true,default:()=>null};
     if(name==="./TranscriptPanel")return {__esModule:true,default:()=>null};
     if(name==="./InterviewCopilot")return {__esModule:true,default:()=>null};
     if(name==="./InterviewAnalysis")return {__esModule:true,default:()=>null};
@@ -62,6 +63,7 @@ test('disconnect during initial connect does not hide sanitized stage diagnostic
   const require=createRequire(import.meta.url),exports:any={};
   runInNewContext(source,{exports,require:(name:string)=>{
     if(name==='react')return hooks;
+    if(name==='./InterviewActivity')return {__esModule:true,default:()=>null};
     if(name==='./interviewScreenShare')return sharing;
     if(name==='livekit-client')return {Room,RoomEvent:{Disconnected:'disconnected'},Track:{Source:{},Kind:{}},setLogLevel(){}};
     if(name==='../api/livekitInterview')return {interviewAccess:async()=>({server_url:'ws://127.0.0.1:7880',token:'synthetic'}),InterviewAccessError:class extends Error{}};
@@ -91,10 +93,11 @@ test('remote screen subscription is separate from webcam and clears on disconnec
  const require=createRequire(import.meta.url),exports:any={};
  runInNewContext(source,{exports,require:(name:string)=>{
   if(name==='react')return hooks;
+    if(name==='./InterviewActivity')return {__esModule:true,default:()=>null};
   if(name==='livekit-client')return {...sdk,Room,setLogLevel(){}};
   if(name==='./interviewScreenShare')return sharing;
   if(name==='../api/livekitInterview')return {interviewAccess:async()=>({server_url:'wss://synthetic.invalid',token:'synthetic'})};
-  if(['./TranscriptPanel','./InterviewCopilot','./InterviewCaptions','./InterviewAnalysis'].includes(name))return {__esModule:true,default:()=>null};
+  if(['./InterviewActivity','./TranscriptPanel','./InterviewCopilot','./InterviewCaptions','./InterviewAnalysis'].includes(name))return {__esModule:true,default:()=>null};
   if(name==='./syntheticInterviewMedia')return {syntheticInterviewMedia(){throw Error('No automatic capture');}};
   return require(name);
  }});
