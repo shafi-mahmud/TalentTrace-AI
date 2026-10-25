@@ -1,5 +1,10 @@
 # Office → Linux Mint home handover — 19 October 2026
 
+**Historical instructions.** For current develop, schema 0017 and the reviewed
+25 October publication/continuation plan, use the
+[current home runbook](office_home_continuation_20261025.md). Do not use the older
+release branch or schema-0015 expectations below as today's startup baseline.
+
 ## Final integration checkpoint — 20 October 2026
 
 See [final release integration evidence](final_release_integration_20261020.md)
