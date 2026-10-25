@@ -23,7 +23,7 @@ function harness(initial:any=summary()){
  const source=ts.transpileModule(readFileSync(new URL('../src/components/ApplicationNotifications.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
  const exports:any={};runInNewContext(source,{exports,require:(name:string)=>name==='react'?hooks:{
   async loadApplications(){loads++;if(fail)throw Error('PRIVATE');if(next===null)return new Promise(resolve=>{release=resolve;});return next;},
-  async markApplicationsViewed(_job:string,rows:any[]){marks.push(rows);if(markFail)throw Error('PRIVATE');next={...next,new_count:next.applications.filter((r:any)=>!rows.some(a=>a.upload_id===r.upload_id)).length,applications:next.applications.map((r:any)=>({...r,is_new:!rows.some(a=>a.upload_id===r.upload_id)}))};}
+  async markApplicationsViewed(_job:string,rows:any[]){marks.push(rows);if(markFail)throw Error('PRIVATE');next={...next,new_count:next.applications.filter((r:any)=>r.is_new&&!rows.some(a=>a.batch_id===r.batch_id&&a.upload_id===r.upload_id)).length,applications:next.applications.map((r:any)=>({...r,is_new:r.is_new&&!rows.some(a=>a.batch_id===r.batch_id&&a.upload_id===r.upload_id)}))};}
  }});
  function render(id=job){si=ri=0;return exports.default({jobId:id});}
  const click=(label:string)=>all(render(),n=>n.type==='button'&&n.props.children===label)[0].props.onClick();
@@ -35,8 +35,8 @@ function harness(initial:any=summary()){
 test('operational cards and breakdown reconcile native/imported/unavailable counts',()=>{
  const data=summary(3);data.applications[0].available=false;data.unavailable_count=1;
  const html=renderToStaticMarkup(h(ApplicationSummary,{data}));
- for(const text of ['CVs received','New / unviewed','Available CVs','Imported CVs needing attention','Native upload','Trusted import','<meter'])assert.ok(html.includes(text),text);
- assert.equal(data.received_count,data.applications.length);assert.match(html,/<dd>3<\/dd>/);assert.match(html,/<dd>2<\/dd>/);assert.match(html,/<dd>1<\/dd>/);
+ for(const text of ['CVs received','New / unviewed','Available CVs','Viewed','Native upload','Trusted import','<meter'])assert.ok(html.includes(text),text);
+ assert.equal(data.received_count,data.applications.length);assert.match(html,/<dd>3<\/dd>/);assert.match(html,/<dd>2<\/dd>/);assert.match(html,/<dd>0<\/dd>/);
 });
 test('Home requests only selected saved job and navigation carries that job',()=>{
  const jobs=[1,2].map(i=>({id:uuid(i),job_reference:`TT-JOB-${String(i).padStart(16,'0')}`,job_title:`Synthetic ${i}`,revision:1,snapshot:null,conversation_id:null})) as SavedJob[];
@@ -50,7 +50,7 @@ test('Home requests only selected saved job and navigation carries that job',()=
 test('loading, zero, missing and stale/error states never substitute invented zero',async()=>{
  const loading=harness(null);assert.match(loading.text(),/Updating applications/);assert.doesNotMatch(loading.text(),/CVs received/);loading.cleanup();loading.resolve(summary());await loading.flush();assert.doesNotMatch(loading.text(),/CVs received/);
  const empty=harness(summary(0));await empty.flush();assert.match(empty.text(),/No applications received yet/);
- const missing=harness();missing.fail();await missing.flush();missing.click('Refresh applications');await missing.flush();assert.match(missing.text(),/Last loaded snapshot/);assert.match(missing.text(),/Applications unavailable/);assert.doesNotMatch(missing.text(),/PRIVATE/);
+ const missing=harness();missing.fail();await missing.flush();missing.click('Refresh applications');await missing.flush();assert.match(missing.text(),/Counts may be out of date/);assert.match(missing.text(),/Applications unavailable/);assert.doesNotMatch(missing.text(),/PRIVATE/);
 });
 test('opening and refresh are read-only; acknowledge only the displayed bounded snapshot, preserve late arrival',async()=>{
  const x=harness(summary(26));await x.flush();assert.equal(x.counts().marks.length,0);
@@ -67,4 +67,36 @@ test('unconfirmed acknowledgement blocks repetition until refresh and hides fore
 test('unknown sensitive fields and invalid counts are rejected, rather than retained in analytics',()=>{
  for(const bad of [{...summary(),email:'private@example.test'},{...summary(),applications:[{...summary().applications[0],cv_text:'PRIVATE'}]}, {...summary(),new_count:99}])assert.throws(()=>validateApplications(bad,job));
  const html=renderToStaticMarkup(h(ApplicationSummary,{data:summary()}));assert.doesNotMatch(html,/upload_id|batch_id|cookie|@|PRIVATE/);
+});
+
+test('New and Viewed filters are read-only and acknowledge only shown new identities',async()=>{
+ const data=summary(4);data.applications[0].is_new=false;data.applications[1].is_new=false;data.new_count=2;
+ const x=harness(data);await x.flush();
+ x.click('Viewed');assert.match(x.text(),/Showing 2 of 2/);
+ assert.equal(all(x.render(),n=>n.type==='button'&&n.props.children==='Mark displayed applications as viewed')[0].props.disabled,true);
+ assert.equal(x.counts().marks.length,0);assert.equal(x.counts().loads,1);
+ x.click('New');assert.match(x.text(),/Showing 2 of 2/);
+ const rows=all(x.render(),n=>n.type==='li');assert.equal(rows.length,2);
+ assert.ok(rows.every(n=>n.props.children.endsWith('New')));
+ x.click('Mark displayed applications as viewed');await x.flush();
+ assert.equal(x.counts().marks[0].length,2);
+ assert.deepEqual(Array.from(x.counts().marks[0],(r:any)=>r.upload_id),data.applications.slice(2).map(r=>r.upload_id));
+ assert.match(x.text(),/No new applications/);
+ x.click('Viewed');assert.match(x.text(),/Showing 4 of 4/);
+});
+test('filters reset pagination and keep count cards job-wide without implementation prose',async()=>{
+ const data=summary(30);data.applications[0].is_new=false;data.new_count=29;
+ const x=harness(data);await x.flush();x.click('Show more applications');assert.match(x.text(),/Showing 30 of 30/);
+ x.click('New');assert.match(x.text(),/Showing 25 of 29/);
+ const html=x.text();assert.match(html,/aria-label="Filter applications"/);
+ assert.match(html,/aria-pressed="true">New/);
+ assert.doesNotMatch(html,/Arrival timestamps|Screening outcome analytics|Identity order|snapshot|upload_id/);
+ const metrics=renderToStaticMarkup(h(ApplicationSummary,{data}));
+ assert.match(metrics,/<dt>Viewed<\/dt><dd>1<\/dd>/);
+ assert.match(metrics,/<dt>CVs received<\/dt><dd>30<\/dd>/);
+});
+test('zero applications shows compact empty state without unused filters or acknowledgement',async()=>{
+ const x=harness(summary(0));await x.flush();
+ assert.match(x.text(),/No applications received yet/);
+ assert.doesNotMatch(x.text(),/Filter applications|Mark displayed applications|Showing 0 of 0/);
 });

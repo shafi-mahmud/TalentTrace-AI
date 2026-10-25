@@ -29,6 +29,7 @@ def test_routes_enforce_real_auth_and_job_ownership(workspace, monkeypatch):
         path=f'/api/v1/jobs/{job.id}/applications'
         async with client() as owner, client() as foreign, client() as anonymous:
             assert (await anonymous.get(path)).status_code==401
+            assert (await anonymous.post(path+'/viewed',json={'applications':[]})).status_code==401
             await login(owner,users[0],password);await login(foreign,users[1],password)
             assert (await foreign.get(path)).status_code==404
             assert (await foreign.post(path+'/viewed',json={'applications':[]})).status_code==404
