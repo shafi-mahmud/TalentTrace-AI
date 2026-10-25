@@ -46,3 +46,20 @@ test("owner invitation generation and revocation use owned routes only",async t=
   });
   assert.equal((await invitation("job","interview")).token,raw);await revokeInvitation("job","interview");
 });
+
+test('candidate lifecycle poll is bounded and requires exact authorized status',async t=>{
+ let calls=0;
+ t.mock.method(globalThis,'fetch',async(_url,options)=>{
+  calls++;assert.ok(options?.signal instanceof AbortSignal);assert.equal(options?.credentials,'include');
+  return Response.json({status:'ready'});
+ });
+ await candidateStatus();assert.equal(calls,1);
+ for(const value of [{}, {status:'revoked'}, {status:'ready',suggestion:'PRIVATE'}, null]){
+  t.mock.method(globalThis,'fetch',async()=>Response.json(value));
+  await assert.rejects(candidateStatus(),/^Error: Interview access is unavailable or outside the join window\.$/);
+ }
+ t.mock.method(globalThis,'fetch',async()=>new Response('<html>PRIVATE</html>',{status:200}));
+ await assert.rejects(candidateStatus(),/unavailable/);
+ t.mock.method(globalThis,'fetch',async()=>{throw Error('PRIVATE network details');});
+ await assert.rejects(candidateStatus(),e=>!String(e).includes('PRIVATE'));
+});

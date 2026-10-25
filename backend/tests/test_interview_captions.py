@@ -482,3 +482,19 @@ def test_real_caption_route_starts_two_local_workers(monkeypatch):
                 with pytest.raises(WebSocketDisconnect):recruiter.receive_json()
                 with pytest.raises(WebSocketDisconnect):candidate.receive_json()
     assert not route.sessions
+
+
+def test_second_caption_room_is_rejected_without_stopping_first(monkeypatch):
+    from types import SimpleNamespace
+    first,second=uuid4(),uuid4()
+    existing=SimpleNamespace(stopped=False,peers={'recruiter':object()})
+    monkeypatch.setattr(route,'sessions',{first:existing})
+    monkeypatch.setattr(route,'settings',route.settings.model_copy(update={
+        'local_caption_model_path':'synthetic','livekit_synthetic_demo_enabled':True,
+        'assemblyai_synthetic_enabled':False}))
+    async def authorized(*args):return second,'candidate',uuid4(),datetime.now(timezone.utc)+timedelta(minutes=5)
+    monkeypatch.setattr(route,'authorize',authorized)
+    with TestClient(app) as client,pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect('/api/v1/interview-access/captions',headers={'origin':'http://localhost:5173'}) as socket:
+            socket.receive_json()
+    assert route.sessions=={first:existing} and not existing.stopped

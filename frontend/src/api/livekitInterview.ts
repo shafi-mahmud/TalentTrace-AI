@@ -53,6 +53,10 @@ export async function exchangeInvitation(token:string) {
   if(!response.ok)throw new Error(response.status===409?"Invitation already used. Use the original browser or request a replacement.":"Invitation is invalid, expired or revoked.");
 }
 export async function candidateStatus() {
-  const response=await fetch(`${base}/api/v1/interview-access/status`,{credentials:"include",cache:"no-store"});
-  if(!response.ok)throw new Error("Interview access is unavailable or outside the join window.");
+  try {
+    const response=await fetch(`${base}/api/v1/interview-access/status`,{credentials:"include",cache:"no-store",signal:AbortSignal.timeout(8000)});
+    if(!response.ok)throw new Error();
+    const value:unknown=await response.json();
+    if(!value||typeof value!=="object"||Object.keys(value).length!==1||!("status" in value)||value.status!=="ready")throw new Error();
+  } catch {throw new Error("Interview access is unavailable or outside the join window.");}
 }

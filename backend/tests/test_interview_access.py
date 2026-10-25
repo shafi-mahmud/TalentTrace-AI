@@ -168,3 +168,53 @@ def test_waiting_claim_refreshes_cached_invitation(invitation_workspace):
             await route.exchange(route.ExchangeRequest(token=raw),SimpleNamespace(client=SimpleNamespace(host="synthetic")),Response(),CachedSession(db))
         assert failure.value.status_code==409
     asyncio.run(scenario())
+
+
+def test_two_candidate_sessions_revoke_one_without_affecting_other(invitation_workspace):
+    db,users,password,first_job,first,calls,removed=invitation_workspace
+    second_job=JobProfile(id=uuid4(),recruiter_id=users[1].id,job_reference='TT-JOB-FEDCBA9876543210',
+        job_title='Other synthetic interview',revision=2,confirmed_snapshot={},sources=[],suggestions={})
+    second=InterviewSchedule(id=uuid4(),recruiter_id=users[1].id,job_id=second_job.id,batch_id=uuid4(),upload_id=uuid4(),
+        criteria_revision=2,scoring_version='f2-coverage-v1',scheduled_at=first.scheduled_at,timezone='UTC',duration_minutes=30,
+        unscored_confirmed=False,screening_snapshot={})
+    db[JobProfile].append(second_job);db[InterviewSchedule].append(second)
+    async def run():
+        async with client() as owner_a,client() as owner_b,client() as candidate_a,client() as candidate_b:
+            await login(owner_a,users[0],password);await login(owner_b,users[1],password)
+            path_a=f'/api/v1/jobs/{first_job.id}/interviews/{first.id}/invitation'
+            path_b=f'/api/v1/jobs/{second_job.id}/interviews/{second.id}/invitation'
+            a=(await owner_a.post(path_a,json={})).json()['token'];b=(await owner_b.post(path_b,json={})).json()['token']
+            for browser,raw in ((candidate_a,a),(candidate_b,b)):
+                assert (await browser.post('/api/v1/interview-access/exchange',json={'token':raw})).status_code==200
+                assert (await browser.post('/api/v1/interview-access/exchange',json={'token':raw})).status_code==409
+                assert (await browser.post('/api/v1/interview-access/livekit-token',json={'synthetic_test_confirmed':True})).status_code==200
+            assert calls[0][0]==first.id and calls[1][0]==second.id
+            assert (await owner_a.post(path_b+'/revoke')).status_code==404
+            assert (await owner_a.post(path_a+'/revoke')).status_code==200
+            assert (await candidate_a.get('/api/v1/interview-access/status')).status_code==401
+            assert (await candidate_b.get('/api/v1/interview-access/status')).status_code==200
+            assert (await candidate_b.post('/api/v1/interview-access/livekit-token',json={'synthetic_test_confirmed':True})).status_code==200
+            assert len(removed)==1 and removed[0][0]==first.id
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('candidate', [False, True])
+def test_transcript_identity_rejects_wrong_job_or_candidate_review(monkeypatch, candidate):
+    from app.services import transcript_privacy as privacy
+    from app.services.interview_transcripts import TranscriptError
+    from starlette.requests import Request
+    owner,job,interview=uuid4(),uuid4(),uuid4()
+    async def mutation(request):pass
+    async def recruiter(request, db):
+        if candidate:raise HTTPException(401,'Recruiter authentication required.')
+        return SimpleNamespace(id=owner)
+    calls=[]
+    async def owned(db, requested_owner, requested_interview, **kwargs):
+        calls.append((requested_owner,requested_interview));return SimpleNamespace(job_id=job)
+    monkeypatch.setattr(privacy,'protect_mutation',mutation)
+    monkeypatch.setattr(privacy,'current_recruiter',recruiter)
+    service=privacy.TranscriptPrivacyService(SimpleNamespace(factory=None,clock=lambda:datetime.now(timezone.utc),_owned=owned))
+    async def run():
+        with pytest.raises(HTTPException if candidate else TranscriptError):
+            await service._identity(object(),Request({'type':'http','headers':[]}),interview,uuid4())
+    asyncio.run(run());assert calls==([] if candidate else [(owner,interview)])

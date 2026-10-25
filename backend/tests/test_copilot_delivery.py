@@ -305,3 +305,20 @@ def test_copilot_disclosure_matches_active_recognizer_without_private_state(monk
         assert 'without sending it to an external' not in wording
         assert 'Physical microphone audio is not sent' in wording
     else:assert wording==module.DISCLOSURE
+
+
+def test_parallel_interview_runs_keep_consent_sources_and_termination_separate(runtime):
+    manager,first,clock=runtime
+    second=replace(first,interview=uuid4(),job=uuid4(),candidate_key='other-synthetic-session')
+    manager.prepare(second)
+    consent(manager,first,'recruiter');consent(manager,first,'candidate')
+    assert manager.view(second)['status']=='awaiting_consent'
+    consent(manager,second,'recruiter');consent(manager,second,'candidate');clock[0]=106
+    suggestion=manager.submit_synthetic(first,events(manager,first))['suggestion']
+    assert suggestion and manager.view(second,recruiter=True)['suggestion'] is None
+    with pytest.raises(Unavailable):manager.submit_synthetic(second,events(manager,first))
+    manager.invalidate(first.interview)
+    assert manager.view(first)['status']=='withdrawn'
+    assert manager.view(second)['status']=='authorized'
+    assert manager.submit_synthetic(second,events(manager,second))['suggestion'] is not None
+    assert 'suggestion' not in manager.view(second)

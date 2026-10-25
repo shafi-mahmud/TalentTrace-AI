@@ -119,3 +119,17 @@ def test_owner_synthetic_confirmations_stale_and_sanitized_failures(monkeypatch,
             failed=await owner.post(path,json=body)
             assert failed.status_code==502 and failed.json()=={"detail":"Interview access could not be issued."}
     asyncio.run(scenario())
+
+
+def test_simultaneous_interview_grants_never_share_rooms_or_participant_slots(monkeypatch):
+    monkeypatch.setattr(service,'settings',configuration())
+    first,second,person=uuid4(),uuid4(),uuid4()
+    claims={}
+    for interview in (first,second):
+        for role in ('recruiter','candidate'):
+            result=service.issue_interview_token(interview,person,role)
+            claims[(interview,role)]=jwt.decode(result['token'],'s'*64,algorithms=['HS256'],issuer='synthetic-api-key')
+    assert claims[(first,'candidate')]['video']['room']!=claims[(second,'candidate')]['video']['room']
+    assert len({c['sub'] for c in claims.values()})==4
+    for interview in (first,second):
+        assert claims[(interview,'candidate')]['video']['room']==claims[(interview,'recruiter')]['video']['room']
