@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { isValidRecruiterMessage, RecruiterChatRequestError, sendRecruiterMessage } from "../api/recruiterChat";
+import PublishingReview, {isPublishingCommand} from "./PublishingReview";
 import { publishDraft } from "../api/jobPublishing";
 import { listConversations, loadConversation } from "../api/jobs";
 import type { ChatMessage, WorkingCriteriaDraft } from "../types/recruiterChat";
@@ -24,6 +25,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
 }) {
   const [state, dispatch] = useReducer(recruiterChatReducer, initialRecruiterChatState);
   const {input, messages, error, sending, conversationId} = state;
+  const [publicationIndex,setPublicationIndex]=useState<number|null>(null);
   const [publishingBusy, setPublishingBusy] = useState(false);
   const pending = useRef(false);
   const attempt = useRef<SendAttempt | null>(null);
@@ -79,8 +81,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
 
   async function publish(index: number) {
     const message = messages[index];
-    if (!message?.jobDescriptionResult || publishing.current.has(index) || (message.publication && message.publication.status !== "idle")) return;
-    if (!window.confirm("Publish this reviewed synthetic demo draft to Discord? This sends a real message. Use demo data only.")) return;
+    if (message!==latestDraft || !message?.draftId || !message?.jobReference || !message?.jobDescriptionResult || publishing.current.has(index) || (message.publication && message.publication.status !== "idle")) return;
     publishing.current.add(index);
     setPublishingBusy(true);
     dispatch({type: "replace_message", index, message: {...message, publication: {status: "loading"}}});
@@ -115,6 +116,12 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     event.preventDefault();
     if (pending.current || restoring || restoreFailed) return;
     const message = input.trim();
+    if(isPublishingCommand(message)) {
+      if(unresolved||publishingBusy||!latestDraft?.draftId||!latestDraft.jobReference) {
+        dispatch({type:"input_error",message:"Open a saved job draft before publishing."});return;
+      }
+      setPublicationIndex(messages.indexOf(latestDraft));dispatch({type:"input_changed",value:""});return;
+    }
     if (!isValidRecruiterMessage(message)) {
       dispatch({type: "input_error", message: "Enter job instructions of up to 4000 characters without unsafe control characters."});
       return;
@@ -168,11 +175,12 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
           onCriteriaChange={draft ? criteria => onCriteriaChange(draft.draftId, criteria) : undefined}
           onCriteriaReviewed={draft ? reviewed => onCriteriaReviewed(draft.draftId, reviewed) : undefined}
           onContinue={draft && message.jobReference && draft.jobReference===message.jobReference && !outdated ? () => onContinueToCv(draft.draftId) : undefined}
-          onPublish={outdated?undefined:() => void publish(index)} onRevise={outdated?undefined:() => revise(message)}
+          onPublish={outdated||!message.draftId||!message.jobReference?undefined:() => setPublicationIndex(index)} onRevise={outdated?undefined:() => revise(message)}
           onRetry={message.localMessageId ? () => retryMessage(message.localMessageId!) : undefined} actionsDisabled={sending || restoring || publishingBusy || outdated} />;
       }) : <EmptyConversation />}
       {sending && <p role="status">Checking the requirements you shared…</p>}
     </div>
+    {publicationIndex!==null && messages[publicationIndex]===latestDraft && <PublishingReview key={`${latestDraft?.draftId}:${latestDraft?.jobRevision}:${publicationIndex}`} message={messages[publicationIndex]} busy={publishingBusy||sending||restoring||unresolved} onPublish={()=>publish(publicationIndex)} onClose={()=>setPublicationIndex(null)}/>}
     <form className="chat-composer" onSubmit={submit}>
       {latestDraft?.jobReference && latestDraft.jobRevision && <p className="chat-refinement-context">Refining {latestDraft.jobReference} · Revision {drafts[latestDraft.draftId??'']?.revision??latestDraft.jobRevision}. Describe only what should change in this conversation. Updated criteria must be reviewed and confirmed again.</p>}
       <div className="field">
@@ -180,7 +188,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
         <textarea ref={composer} id="chat-message" rows={3} maxLength={4000} value={input} disabled={sending || restoring || restoreFailed || publishingBusy}
           onChange={event => dispatch({type: "input_changed", value: event.target.value})} placeholder={latestDraft?'Example: Change the required experience to 3 years and add Docker as a preferred skill.':DEMO_INSTRUCTION}
           aria-describedby="chat-help" required />
-        <p className="helper-text" id="chat-help">{latestDraft?'Send a specific change to revise this saved job. Use New chat for a different role.':'Describe the role and required skills. Follow-up answers stay in this conversation.'}</p>
+        <p className="helper-text" id="chat-help">{latestDraft?'Send a revision, or type publish to review destinations.':'Describe the role and required skills. Follow-up answers stay in this conversation.'}</p>
       </div>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <button type="submit" className="button button-primary" disabled={sending || restoring || restoreFailed || publishingBusy}>{restoring ? "Restoring conversation…" : sending ? "Checking details…" : latestDraft?'Send revision':'Send message'}</button>

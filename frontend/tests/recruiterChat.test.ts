@@ -170,7 +170,7 @@ test("draft action footer has publish and revise buttons", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json(result()));
   const message=replyToChatMessage(await sendRecruiterMessage("Create a JD."));
   const html=renderToStaticMarkup(createElement(ChatMessageView,{message,onPublish:()=>{},onRevise:()=>{}}));
-  assert.match(html,/Publish to Discord/);
+  assert.match(html,/Review publishing/);
   assert.match(html,/Revise draft/);
   assert.match(html,/Policy grounded/);
   assert.match(html,/<details class="grounding-section"/);

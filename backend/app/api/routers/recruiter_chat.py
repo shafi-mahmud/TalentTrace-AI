@@ -1,4 +1,6 @@
 import logging
+import hashlib
+import json
 from uuid import uuid4
 
 from app.integrations.job_publishing.mcp_client import get_job_publisher, PublicationUnavailable
@@ -65,17 +67,33 @@ async def recruiter_chat(request: RecruiterChatRequest, user=Depends(current_rec
 
 
 
+# Bounded process-local delivery fence; restart/multiple workers need durable policy.
+publication_attempts = {}
+
 @router.post("/publish", response_model=PublicationResult, responses={
     502: {"description": "Publication unconfirmed; check delivery before another attempt."},
     503: {"description": "Local MCP publishing server unavailable."},
 })
 async def publish_job(request: RecruiterPublishRequest, user=Depends(current_recruiter), session=Depends(database_session)) -> PublicationResult | JSONResponse:
     await authorize_publication(session, user.id, request)
+    key = (str(user.id), hashlib.sha256(json.dumps(request.model_dump(mode="json"), sort_keys=True).encode()).hexdigest())
+    if key in publication_attempts:
+        result = publication_attempts[key]
+        if isinstance(result, PublicationResult):
+            return result
+        raise HTTPException(409, "Publication already attempted. Check delivery before another attempt.")
+    if len(publication_attempts) >= 1000:
+        raise HTTPException(503, "Publication capacity unavailable. Check delivery before another attempt.")
+    publication_attempts[key] = 'pending'
     try:
-        return await get_job_publisher().publish(request)
+        result = PublicationResult.model_validate(await get_job_publisher().publish(request))
+        publication_attempts[key] = result
+        return result
     except PublicationUnavailable:
+        publication_attempts.pop(key, None)
         return JSONResponse(status_code=503, content={"code": "job_publication_unavailable", "message": "Job publishing is not configured."})
     except Exception:
+        publication_attempts[key] = "unconfirmed"
         return JSONResponse(status_code=502, content={"code": "job_publication_unconfirmed", "message": "Publication was not confirmed. Check Discord before another attempt; delivery may have occurred."})
 
 

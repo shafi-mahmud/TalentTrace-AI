@@ -66,6 +66,7 @@ def test_failures_are_sanitized_and_not_retried(monkeypatch, error, status):
 
 @pytest.fixture(autouse=True)
 def isolate_application_configuration(monkeypatch):
+    route.publication_attempts.clear()
     monkeypatch.setattr(mcp_client, "settings", Settings(_env_file=None, application_form_url=None))
 
 
@@ -133,7 +134,18 @@ def test_mapping_is_accepted_by_existing_standalone_contract(monkeypatch):
     assert value.qualifications == job()["qualifications"]
 
 
+
+def protocol_files(monkeypatch, tmp_path):
+    # In-process protocol tests do not execute a real venv; satisfy only path preflight.
+    directory = tmp_path / "job-publishing-mcp"
+    executable = directory / ".venv" / ("Scripts/python.exe" if mcp_client.os.name == "nt" else "bin/python")
+    executable.parent.mkdir(parents=True, exist_ok=True); executable.touch()
+    server = directory / "talenttrace_job_publishing/server.py"
+    server.parent.mkdir(parents=True, exist_ok=True); server.touch()
+    monkeypatch.setattr(mcp_client, "REPOSITORY_ROOT", tmp_path)
+
 def test_real_sdk_and_existing_server_tool_through_endpoint_without_discord(monkeypatch,tmp_path):
+    protocol_files(monkeypatch,tmp_path)
     monkeypatch.syspath_prepend(str(Path(__file__).parents[2]/"job-publishing-mcp"))
     from talenttrace_job_publishing import server
     from talenttrace_job_publishing.schemas import PublishJobResult
@@ -199,6 +211,7 @@ def test_env_file_to_endpoint_mcp_and_discord_application_link(monkeypatch, tmp_
         encoding="utf-8",
     )
     configuration = Settings(_env_file=env_file)
+    route.publication_attempts.clear()
     monkeypatch.setattr(mcp_client, "settings", configuration)
     monkeypatch.syspath_prepend(str(Path(__file__).parents[2] / "job-publishing-mcp"))
     from talenttrace_job_publishing import server
@@ -207,6 +220,7 @@ def test_env_file_to_endpoint_mcp_and_discord_application_link(monkeypatch, tmp_
 
     arguments_seen = []
     payloads_seen = []
+    protocol_files(monkeypatch, tmp_path)
     real_client = mcp_client.Client
 
     class CapturingClient(real_client):
@@ -279,3 +293,44 @@ def test_llm_cannot_supply_job_reference():
     data["requirements"]["job_reference"] = "ARBITRARY-REFERENCE"
     with pytest.raises(ValidationError):
         RecruiterInterpretation.model_validate(data)
+
+
+def test_duplicate_confirmed_request_reuses_provider_receipt(monkeypatch):
+    calls=[]
+    class Publisher:
+        async def publish(self, request):
+            calls.append(request)
+            return PublicationResult(destination='discord',status='published',external_id='123456789012345678')
+    monkeypatch.setattr(route,'get_job_publisher',lambda:Publisher())
+    async def run():
+        first=await send(job());second=await send(job())
+        assert first.status_code==second.status_code==200
+        assert first.json()==second.json()
+    asyncio.run(run());assert len(calls)==1
+
+
+def test_concurrent_and_unconfirmed_publication_fail_closed(monkeypatch):
+    calls=[]
+    class Publisher:
+        async def publish(self, request):
+            calls.append(request);await asyncio.sleep(.01)
+            raise TimeoutError('PRIVATE')
+    monkeypatch.setattr(route,'get_job_publisher',lambda:Publisher())
+    async def run():
+        responses=await asyncio.gather(send(job()),send(job()))
+        assert sorted(r.status_code for r in responses)==[409,502]
+        assert (await send(job())).status_code==409
+    asyncio.run(run());assert len(calls)==1
+
+
+def test_cached_receipt_cannot_bypass_revalidated_ownership(monkeypatch):
+    from fastapi import HTTPException
+    class Publisher:
+        async def publish(self, request):return PublicationResult(destination='discord',status='published',external_id='123456789012345678')
+    monkeypatch.setattr(route,'get_job_publisher',lambda:Publisher())
+    async def run():
+        assert (await send(job())).status_code==200
+        async def denied(*args):raise HTTPException(404,'Job unavailable.')
+        monkeypatch.setattr(route,'authorize_publication',denied)
+        assert (await send(job())).status_code==404
+    asyncio.run(run())
