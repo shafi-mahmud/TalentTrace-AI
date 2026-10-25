@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     company_policy_document_id: UUID | None = None
     groq_api_key: SecretStr | None = None
     ollama_enabled: bool = False
+    face_synthetic_demo_enabled: bool = False
+    face_synthetic_demo_interview_ids: list[UUID] = Field(default_factory=list)
     telegram_publishing_enabled: bool = False
     telegram_bot_token: SecretStr | None = None
     telegram_channel_id: SecretStr | None = None

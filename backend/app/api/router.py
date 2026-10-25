@@ -50,3 +50,6 @@ api_router.include_router(imported_batches.router)
 
 from app.api.routers import interview_attention
 api_router.include_router(interview_attention.router)
+
+from app.api.routers import face_demo
+api_router.include_router(face_demo.router)

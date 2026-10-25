@@ -131,3 +131,14 @@ including added real-route authorization coverage. All 331 frontend tests and
 TypeScript/production build passed. Models/providers were mocked throughout;
 no Docker, Ollama, Cloud runtime or external publication was started. CV local-model
 accuracy and actual Telegram channel delivery remain unverified.
+
+
+## Isolated face-viva prototype
+
+The later `feature/face-verification-viva` branch adds only an opt-in, RAM-only
+synthetic-vector enrollment/comparison lifecycle and an unactivated optional
+YuNet/SFace CPU adapter. See [face-viva status](face_verification_viva.md).
+**Actual face-model use and physical-viva identity verification remain blocked**:
+no approved local models/OpenCV/artificial face samples or real-biometric policy,
+protected persistence and cross-session authority are provisioned. Numeric-vector
+outcomes are simulations, not face-recognition accuracy or liveness acceptance.
