@@ -37,7 +37,7 @@ def test_real_sdk_grants_ttl_and_opaque_two_slots(monkeypatch):
     assert ca["video"]["room"]==cb["video"]["room"] and ca["sub"]!=cb["sub"]
     assert str(interview) not in ca["video"]["room"] and str(owner) not in ca["sub"]
     assert ca["video"]["roomJoin"] is True and ca["video"]["canSubscribe"] is True
-    assert ca["video"]["canPublishSources"]==["camera","microphone"]
+    assert ca["video"]["canPublishSources"]==["camera","microphone","screen_share"]
     for grant in ("roomAdmin","roomCreate","roomList","roomRecord","canPublishData","canUpdateOwnMetadata"):
         assert ca["video"][grant] is False
     assert "metadata" not in ca and "name" not in ca

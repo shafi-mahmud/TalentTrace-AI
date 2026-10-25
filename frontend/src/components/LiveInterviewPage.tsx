@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track, setLogLevel } from "livekit-client";
 import type { RemoteTrack, RemoteTrackPublication } from "livekit-client";
 import { interviewAccess, candidateAccess, candidateStatus, invitation, revokeInvitation, InterviewAccessError } from "../api/livekitInterview";
+import {InterviewScreenShare} from "./interviewScreenShare";
 import { syntheticInterviewMedia } from "./syntheticInterviewMedia";
 import type { Interview } from "../api/interviews";
 import InterviewCaptions from "./InterviewCaptions";
@@ -19,6 +20,10 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   const [joined,setJoined]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
   const [muted,setMuted]=useState(false);const [cameraOff,setCameraOff]=useState(false);
   const [peers,setPeers]=useState(0);const [audioBlocked,setAudioBlocked]=useState(false);
+  const [sharing,setSharing]=useState({active:false,busy:false,error:""});
+  const [remoteSharing,setRemoteSharing]=useState(false);
+  const screenController=useRef<InterviewScreenShare|null>(null);
+  const localScreen=useRef<HTMLDivElement>(null),remoteScreen=useRef<HTMLDivElement>(null);
   const [remoteMuted,setRemoteMuted]=useState(false);const [remoteCameraOff,setRemoteCameraOff]=useState(false);
   const [storageAvailable,setStorageAvailable]=useState(false);
   const [syntheticSpeech,setSyntheticSpeech]=useState<AudioBuffer|undefined>();
@@ -33,8 +38,10 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   const leaving=useRef(false);
   const captionDraining=useRef(false);
   const media=useRef<ReturnType<typeof syntheticInterviewMedia>|null>(null);
-  function stopMedia() {media.current?.dispose();media.current=null;local.current?.replaceChildren();remote.current?.replaceChildren();}
+  function stopSharing() {screenController.current?.close();screenController.current=null;localScreen.current?.replaceChildren();remoteScreen.current?.replaceChildren();setSharing({active:false,busy:false,error:""});setRemoteSharing(false);}
+  function stopMedia() {stopSharing();media.current?.dispose();media.current=null;local.current?.replaceChildren();remote.current?.replaceChildren();}
   async function leave(normal=false) {
+    stopSharing();
     if(normal){if(leaving.current)return;leaving.current=true;setBusy(true);await captionFinalizer.current?.();}
     generation.current++;const active=room.current;room.current=null;
     stopMedia();setJoined(false);setBusy(false);setPeers(0);setState("Left interview");try {await active?.disconnect(true);} catch {}finally{leaving.current=false;}}
@@ -54,18 +61,27 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     const current=++generation.current;setBusy(true);setError("");setState("Connecting…");
     let establishing=true;let stage='synthetic_media';
     const active=new Room();room.current=active;
+    screenController.current=new InterviewScreenShare(active.localParticipant,value=>{if(current===generation.current)setSharing(value);});
     function remoteState(publication:RemoteTrackPublication) {
       if(current!==generation.current)return;
       if(publication.source===Track.Source.Camera)setRemoteCameraOff(publication.isMuted);
       if(publication.source===Track.Source.Microphone)setRemoteMuted(publication.isMuted);
     }
     function attach(track:RemoteTrack,publication:RemoteTrackPublication) {if(current!==generation.current)return;
+      if(publication.source===Track.Source.ScreenShare&&track.kind===Track.Kind.Video){
+        const element=track.attach();element.setAttribute("aria-label","Remote shared screen");remoteScreen.current?.appendChild(element);setRemoteSharing(true);return;
+      }
+      if(publication.source!==Track.Source.Camera&&publication.source!==Track.Source.Microphone)return;
       remoteState(publication);
       if(track.kind===Track.Kind.Video || track.kind===Track.Kind.Audio) {const element=track.attach();
         element.setAttribute("aria-label",track.kind===Track.Kind.Video?"Remote video":"Remote audio");remote.current?.appendChild(element);}}
-    active.on(RoomEvent.TrackSubscribed,attach).on(RoomEvent.TrackUnsubscribed,track=>track.detach().forEach(e=>e.remove()))
+    active.on(RoomEvent.TrackSubscribed,attach).on(RoomEvent.TrackUnsubscribed,(track,publication)=>{track.detach().forEach(e=>e.remove());
+        if(current===generation.current&&publication.source===Track.Source.ScreenShare)setRemoteSharing(!!remoteScreen.current?.childElementCount);})
       .on(RoomEvent.LocalTrackPublished,publication=>{if(publication.track?.kind===Track.Kind.Video && current===generation.current){
-        const element=publication.track.attach();element.muted=true;element.setAttribute("aria-label","Local video");local.current?.appendChild(element);}})
+        const element=publication.track.attach();element.muted=true;
+        if(publication.source===Track.Source.ScreenShare){element.setAttribute("aria-label","Your shared screen");localScreen.current?.appendChild(element);screenController.current?.sync();}
+        else {element.setAttribute("aria-label","Local video");local.current?.appendChild(element);}}})
+      .on(RoomEvent.LocalTrackUnpublished,publication=>{if(current===generation.current&&publication.source===Track.Source.ScreenShare){localScreen.current?.replaceChildren();screenController.current?.sync();}})
       .on(RoomEvent.ParticipantConnected,()=>{if(current===generation.current)setPeers(active.remoteParticipants.size);})
       .on(RoomEvent.ParticipantDisconnected,()=>{if(current===generation.current)setPeers(active.remoteParticipants.size);})
       .on(RoomEvent.TrackMuted,(publication,participant)=>{if(!participant.isLocal)remoteState(publication as RemoteTrackPublication);})
@@ -114,6 +130,8 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     <button className="button button-primary" onClick={()=>void join()} disabled={!confirmed || busy || joined}>Join interview</button>
     <button className="button button-secondary" onClick={()=>void toggle("microphone")} disabled={!joined || busy}>{muted?"Unmute microphone":"Mute microphone"}</button>
     <button className="button button-secondary" onClick={()=>void toggle("camera")} disabled={!joined || busy}>{cameraOff?"Turn camera on":"Turn camera off"}</button>
+    <button className="button button-secondary" disabled={!joined||busy||sharing.busy||leaving.current} onClick={()=>void screenController.current?.toggle()}>{sharing.active?'Stop sharing':'Start sharing'}</button>
+    {sharing.error&&<p role="alert">{sharing.error}</p>}
     <button className="button button-secondary" onClick={()=>void leave(true)} disabled={(!joined && !busy) || leaving.current}>Leave interview</button>
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
@@ -126,6 +144,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     <InterviewCaptions onFinalizing={active=>{captionDraining.current=active;}} storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
+    <div className="interview-media"><section hidden={!sharing.active}><h2>Your shared screen</h2><div ref={localScreen}/></section><section hidden={!remoteSharing}><h2>Shared screen</h2><div ref={remoteScreen}/></section></div>
     <button className="button button-secondary" onClick={onBack}>Back to screening</button>
   </section></main>;
 }

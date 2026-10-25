@@ -65,7 +65,7 @@ def issue_interview_token(interview_id: UUID, participant_id: UUID, role: str, t
         .with_ttl(timedelta(seconds=ttl)).with_grants(api.VideoGrants(
             room_join=True, room=room, room_create=False, room_list=False, room_admin=False,
             room_record=False, can_publish=True, can_subscribe=True, can_publish_data=False,
-            can_update_own_metadata=False, can_publish_sources=["camera", "microphone"])).to_jwt())
+            can_update_own_metadata=False, can_publish_sources=["camera", "microphone", "screen_share"])).to_jwt())
     return {"server_url": url, "token": token, "expires_in": ttl}
 
 
