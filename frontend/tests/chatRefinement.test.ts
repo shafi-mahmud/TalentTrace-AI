@@ -8,6 +8,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
 import {replyToChatMessage,ChatMessageView} from '../src/components/chatPresentation.ts';
 import * as presentation from '../src/components/chatPresentation.ts';
+import * as publishingReview from '../src/components/PublishingReview.ts';
 import * as chatState from '../src/state/recruiterChatState.ts';
 import {copyJobReference} from '../src/components/SavedJobIdentity.ts';
 import {RecruiterChatRequestError} from '../src/api/recruiterChat.ts';
@@ -30,6 +31,7 @@ function harness(send:(text:string,c?:string)=>Promise<RecruiterChatResponse>,re
  const require=createRequire(import.meta.url),exports:any={};
  runInNewContext(source,{exports,crypto:globalThis.crypto,window:{confirm:()=>true},require:(name:string)=>{
   if(name==='react')return hooks;
+  if(name==='./PublishingReview')return {__esModule:true,...publishingReview};
   if(name==='../api/recruiterChat')return {isValidRecruiterMessage:(s:string)=>!!s.trim(),RecruiterChatRequestError,sendRecruiterMessage:send};
   if(name==='../api/jobs')return {listConversations:async()=>[],loadConversation:restore};
   if(name==='./chatPresentation')return presentation;
@@ -84,4 +86,18 @@ test('selected saved conversation restores without a model call; failure cannot 
  assert.ok(all(ok.render(),n=>n.type===ChatMessageView).some(n=>n.props.message.jobReference===reference));assert.equal(sent,0);
  const fail=harness(async()=>{sent++;return reply();},async()=>{throw Error('Expired');},conversation);fail.render();await fail.flush();
  assert.equal(all(fail.render(),n=>n.type==='textarea')[0].props.disabled,true);await fail.submit('Change this role');assert.equal(sent,0);
+});
+
+test('chat publish command opens saved-job review without an interpretation or provider request',async()=>{
+ let sends=0;const x=harness(async()=>{sends++;return reply();});
+ await x.submit('Create a job');const tree=await x.submit('publish to Discord and LinkedIn');
+ assert.equal(sends,1);
+ const reviews=all(tree,n=>n.type===publishingReview.default);assert.equal(reviews.length,1);
+ assert.equal(reviews[0].props.message.jobReference,reference);
+ assert.equal(all(tree,n=>n.type==='textarea')[0].props.value,'');
+});
+test('publish without a saved draft cannot invoke inference or publication',async()=>{
+ const x=harness(async()=>assert.fail('No model call'));const tree=await x.submit('/publish');
+ assert.equal(all(tree,n=>n.type===publishingReview.default).length,0);
+ assert.match(renderToStaticMarkup(tree),/Open a saved job draft before publishing/);
 });

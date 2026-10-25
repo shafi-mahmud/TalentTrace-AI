@@ -588,3 +588,10 @@ body { background: var(--page); color: var(--ink); }
 .application-breakdown meter { width: 100%; accent-color: #246b56; }
 .application-list { padding-left: 20px; overflow-wrap: anywhere; }
 .home-analytics { min-width: 0; }
+.publishing-review { padding: 20px; margin: 16px 20px; }
+.publishing-review label { display: block; margin-block: 12px; }
+.publishing-review textarea { width: 100%; box-sizing: border-box; }
+.publishing-review input[type=checkbox] { margin-right: 8px; }
+.publishing-review fieldset { border: 1px solid var(--line); border-radius: 8px; }
+.publishing-review li { margin-block: 12px; overflow-wrap: anywhere; }
+@media(max-width:520px) { .publishing-review { margin: 12px; padding: 14px; } }

@@ -83,7 +83,7 @@ function DraftMessage({ result, publication = {status: "idle"}, criteriaDraft, o
             h("span", null, citation.source_title), h("code", null, citation.citation_id)))))),
     h("footer", {className: "draft-actions"},
       h("button", {type: "button", className: "button button-primary", onClick: onPublish, disabled: !onPublish || actionsDisabled || publication.status !== "idle"},
-        publication.status === "loading" ? "Publishing…" : publication.status === "success" ? "Published to Discord" : "Publish to Discord"),
+        publication.status === "loading" ? "Publishing…" : publication.status === "success" ? "Published to Discord" : "Review publishing"),
       h("button", {type: "button", className: "button button-secondary", onClick: onRevise, disabled: !onRevise || actionsDisabled || publication.status === "loading"}, "Revise draft")),
     onContinue ? h('button',{type:'button',className:'button button-secondary',disabled:actionsDisabled,onClick:onContinue},'Review screening criteria for this job') : null,
     publication.status === "loading" ? h("p", {role: "status", className: "publication-note"}, "Publishing once through MCP…") : null,
