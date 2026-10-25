@@ -23,7 +23,8 @@ export interface PublishingContext {
   employment_type?: "full_time" | "part_time" | "contract" | "internship" | "temporary" | null;
   work_arrangement?: "on_site" | "remote" | "hybrid" | null;
 }
-export interface PublicationResult { destination: "discord"; status: "published"; external_id: string; }
+export type AutomaticDestination = "discord" | "telegram";
+export interface PublicationResult { destination: AutomaticDestination; status: "published"; external_id: string; }
 export type PublicationState = {status: "idle" | "loading"} | {status: "success"; result: PublicationResult} | {status: "failed"; message: string};
 export interface ScreeningSuggestionSource { criterion_id: string; source: "recruiter_input" | "company_policy"; evidence: string; citation_id?: string | null; source_title?: string | null; }
 export interface WorkingCriteriaDraft {
@@ -56,6 +57,7 @@ export interface ChatMessage {
   jobDescriptionResult?: JobDescriptionGenerationResponse;
   publishingContext?: PublishingContext;
   publication?: PublicationState;
+  publications?: Partial<Record<AutomaticDestination,PublicationState>>;
   sourceInstruction?: string;
   screeningSuggestions?: ScreeningSuggestions;
   conversationId?: string;

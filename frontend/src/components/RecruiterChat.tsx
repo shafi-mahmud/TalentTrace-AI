@@ -83,22 +83,30 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     }
   }
 
-  async function publish(index: number) {
+  async function publish(index: number, destinations:("discord"|"telegram")[]=["discord"]) {
     const message = messages[index];
-    if (message!==latestDraft || !message?.draftId || !message?.jobReference || !message?.jobDescriptionResult || publishing.current.has(index) || (message.publication && message.publication.status !== "idle")) return;
-    publishing.current.add(index);
-    setPublishingBusy(true);
-    dispatch({type: "replace_message", index, message: {...message, publication: {status: "loading"}}});
-    try {
-      const result = await publishDraft(message.jobDescriptionResult, message.publishingContext, message.draftId);
-      dispatch({type: "replace_message", index, message: {...message, publication: {status: "success", result}}});
-    } catch (failure) {
-      const text = failure instanceof Error ? failure.message : "Publication was not confirmed. Check Discord before another attempt.";
-      dispatch({type: "replace_message", index, message: {...message, publication: {status: "failed", message: text}}});
-    } finally {
-      publishing.current.delete(index);
-      setPublishingBusy(publishing.current.size > 0);
+    if (message!==latestDraft || !message?.draftId || !message?.jobReference || !message?.jobDescriptionResult || publishing.current.has(index)) return;
+    const selected=[...new Set(destinations)].filter(destination=>["discord","telegram"].includes(destination)
+      && !(message.publications?.[destination] && message.publications[destination]?.status!=="idle")
+      && !(destination==="discord" && message.publication && message.publication.status!=="idle"));
+    if(!selected.length)return;
+    publishing.current.add(index);setPublishingBusy(true);
+    let updated=message;
+    function update(destination:"discord"|"telegram", state:NonNullable<ChatMessage["publication"]>){
+      updated={...updated,publications:{...updated.publications,[destination]:state},...(destination==="discord"?{publication:state}:{})};
+      dispatch({type:"replace_message",index,message:updated});
     }
+    try {
+      for(const destination of selected){
+        update(destination,{status:"loading"});
+        try {
+          const result=await publishDraft(message.jobDescriptionResult,message.publishingContext,message.draftId,destination);
+          update(destination,{status:"success",result});
+        } catch(failure){
+          update(destination,{status:"failed",message:failure instanceof Error?failure.message:"Publication unconfirmed. Check the destination before another attempt."});
+        }
+      }
+    } finally {publishing.current.delete(index);setPublishingBusy(publishing.current.size>0);}
   }
 
   function revise(message: ChatMessage) {
@@ -188,7 +196,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
       }) : <EmptyConversation />}
       {sending && <p role="status">Checking the requirements you shared…</p>}
     </div>
-    {publicationIndex!==null && messages[publicationIndex]===latestDraft && <PublishingReview key={`${latestDraft?.draftId}:${latestDraft?.jobRevision}:${publicationIndex}`} message={messages[publicationIndex]} busy={publishingBusy||sending||restoring||unresolved} onPublish={()=>publish(publicationIndex)} onClose={()=>setPublicationIndex(null)}/>}
+    {publicationIndex!==null && messages[publicationIndex]===latestDraft && <PublishingReview key={`${latestDraft?.draftId}:${latestDraft?.jobRevision}:${publicationIndex}`} message={messages[publicationIndex]} busy={publishingBusy||sending||restoring||unresolved} onPublish={destinations=>publish(publicationIndex,destinations)} onClose={()=>setPublicationIndex(null)}/>}
     <ProviderSelection value={aiProvider} consent={externalConfirmed} disabled={sending||restoring||publishingBusy||unresolved} onChange={value=>{setAIProvider(value);setExternalConfirmed(false);}} onConsent={setExternalConfirmed}/>
     <form className="chat-composer" onSubmit={submit}>
       {latestDraft?.jobReference && latestDraft.jobRevision && <p className="chat-refinement-context">Refining {latestDraft.jobReference} · Revision {drafts[latestDraft.draftId??'']?.revision??latestDraft.jobRevision}. Describe only what should change in this conversation. Updated criteria must be reviewed and confirmed again.</p>}

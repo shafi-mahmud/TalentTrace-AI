@@ -23,7 +23,7 @@ function reply(revision=1):RecruiterChatResponse{return {status:'jd_generated',i
  grounding_citations:[{citation_id:'synthetic',source_title:'Synthetic policy',heading_paths:[['Skills']]}]}};}
 function all(n:any,p:(n:any)=>boolean):any[]{if(!n||typeof n!=='object')return [];return [...(p(n)?[n]:[]),...[n.props?.children].flat(Infinity).flatMap(c=>all(c,p))];}
 const tick=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
-function harness(send:(text:string,c?:string)=>Promise<RecruiterChatResponse>,restore=async()=>({id:conversation,turns:[{message:'Original instruction',reply:reply()}]}),initialConversationId?:string){
+function harness(send:(text:string,c?:string)=>Promise<RecruiterChatResponse>,restore=async()=>({id:conversation,turns:[{message:'Original instruction',reply:reply()}]}),initialConversationId?:string,publish:(...args:any[])=>Promise<any>=async()=>{throw Error("Publication forbidden");}){
  const slots:any[]=[],effects:(()=>unknown)[]=[];let index=0;const drafts:Record<string,WorkingCriteriaDraft>={};const continued:string[]=[];
  const hooks={useState(v:any){const i=index++;if(!(i in slots))slots[i]=typeof v==='function'?v():v;return [slots[i],(n:any)=>{slots[i]=typeof n==='function'?n(slots[i]):n;}];},
  useReducer(reduce:any,initial:any){const [value,set]=hooks.useState(initial);return [value,(a:any)=>set((s:any)=>reduce(s,a))];},
@@ -38,7 +38,7 @@ function harness(send:(text:string,c?:string)=>Promise<RecruiterChatResponse>,re
   if(name==='../api/jobs')return {listConversations:async()=>[],loadConversation:restore};
   if(name==='./chatPresentation')return presentation;
   if(name==='../state/recruiterChatState')return chatState;
-  if(name==='../api/jobPublishing')return {publishDraft:()=>{throw Error('Publication forbidden');}};
+  if(name==='../api/jobPublishing')return {publishDraft:publish};
   return require(name);
  }});
  const props={drafts,initialConversationId,onConversationLoaded(){},onDraftGenerated:(d:WorkingCriteriaDraft)=>{drafts[d.draftId]=d;},onCriteriaChange(){},onCriteriaReviewed(){},onContinueToCv:(value:string)=>continued.push(value),onNewChat(){}};
@@ -102,4 +102,26 @@ test('publish without a saved draft cannot invoke inference or publication',asyn
  const x=harness(async()=>assert.fail('No model call'));const tree=await x.submit('/publish');
  assert.equal(all(tree,n=>n.type===publishingReview.default).length,0);
  assert.match(renderToStaticMarkup(tree),/Open a saved job draft before publishing/);
+});
+
+test('real chat publishing handlers preserve independent receipts and partial success without reposting',async()=>{
+ const calls:string[]=[];
+ const x=harness(async()=>reply(),undefined,undefined,async(_result,_context,job,destination)=>{
+  assert.equal(job,id);calls.push(destination);
+  if(destination==='telegram')throw Error('Publication unconfirmed. Check the selected destination before another attempt.');
+  return {destination:'discord',status:'published',external_id:'123456789012345678'};
+ });
+ await x.submit('Create a synthetic job');let tree=await x.submit('/publish');
+ let review=all(tree,n=>n.type===publishingReview.default)[0];
+ const first=review.props.onPublish(['discord','telegram']);
+ await review.props.onPublish(['discord','telegram']);await first;
+ tree=x.render();review=all(tree,n=>n.type===publishingReview.default)[0];
+ assert.deepEqual(calls,['discord','telegram']);
+ assert.equal(review.props.message.publications.discord.status,'success');
+ assert.equal(review.props.message.publications.telegram.status,'failed');
+ assert.equal(review.props.message.publication.result.destination,'discord');
+ const html=renderToStaticMarkup(h(publishingReview.default,review.props));
+ assert.match(html,/Discord: published/);assert.match(html,/Telegram: Publication unconfirmed/);
+ assert.doesNotMatch(html,/Telegram: published/);
+ await review.props.onPublish(['discord','telegram']);assert.equal(calls.length,2);
 });

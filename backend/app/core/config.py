@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     company_policy_document_id: UUID | None = None
     groq_api_key: SecretStr | None = None
     ollama_enabled: bool = False
+    telegram_publishing_enabled: bool = False
+    telegram_bot_token: SecretStr | None = None
+    telegram_channel_id: SecretStr | None = None
     interview_evaluation_enabled: bool = False
     interview_evaluation_synthetic_job_ids: list[UUID] = Field(default_factory=list)
     livekit_url: SecretStr | None = None

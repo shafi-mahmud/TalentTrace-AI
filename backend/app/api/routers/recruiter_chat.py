@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 
 from app.integrations.job_publishing.mcp_client import get_job_publisher, PublicationUnavailable
+from app.integrations.job_publishing.telegram import get_telegram_publisher, PublicationContentError
 from app.schemas.job_publication import PublicationResult, RecruiterPublishRequest
 
 from fastapi import APIRouter, status, Depends, HTTPException
@@ -97,15 +98,21 @@ async def publish_job(request: RecruiterPublishRequest, user=Depends(current_rec
         raise HTTPException(503, "Publication capacity unavailable. Check delivery before another attempt.")
     publication_attempts[key] = 'pending'
     try:
-        result = PublicationResult.model_validate(await get_job_publisher().publish(request))
+        publisher = get_telegram_publisher() if request.destination == "telegram" else get_job_publisher()
+        result = PublicationResult.model_validate(await publisher.publish(request))
+        if result.destination != request.destination:
+            raise ValueError("Publication destination mismatch.")
         publication_attempts[key] = result
         return result
+    except PublicationContentError:
+        publication_attempts.pop(key, None)
+        return JSONResponse(status_code=422, content={"code": "job_publication_content_limit", "message": "Job exceeds destination limits. Shorten the saved draft first."})
     except PublicationUnavailable:
         publication_attempts.pop(key, None)
         return JSONResponse(status_code=503, content={"code": "job_publication_unavailable", "message": "Job publishing is not configured."})
     except Exception:
         publication_attempts[key] = "unconfirmed"
-        return JSONResponse(status_code=502, content={"code": "job_publication_unconfirmed", "message": "Publication was not confirmed. Check Discord before another attempt; delivery may have occurred."})
+        return JSONResponse(status_code=502, content={"code": "job_publication_unconfirmed", "message": "Publication was not confirmed. Check the selected destination before another attempt; delivery may have occurred."})
 
 
 async def authorize_publication(session, owner_id, request):

@@ -22,14 +22,14 @@ no remote publication or main update is performed.
 | Trainer area | Implemented code | Automated evidence | Live/unsupported boundary |
 | --- | --- | --- | --- |
 | JD chat refinement / Job Reference | Saved owned jobs, refinement, reference/revision display | Recruiter-record, workflow and full frontend regressions | Actual generated content still requires human review and configured policy/RAG resources |
-| Multi-platform publishing | Review/confirm destinations; Discord uses existing MCP adapter; LinkedIn/other manual copy | Mocked confirmed receipt, failure/duplicate handling, auth and chat review | No real post made; no automatic LinkedIn capability; deduplication is process-local, not durable across restarts/workers |
+| Multi-platform publishing | Review/confirm destinations; Discord uses existing MCP adapter; opt-in Telegram channel uses Bot API; LinkedIn/other manual copy | Mocked confirmed receipt, failure/duplicate handling, auth and chat review | No real post made; no automatic LinkedIn capability; deduplication is process-local, not durable across restarts/workers |
 | Job-isolated CV processing | Existing owned intake/screening; deduplicated native/imported application discovery | Counts/source/ownership cases and existing frontend validations | No new real CV parsing/provider-quality benchmark; application identity is not universal person identity |
 | Reviewed scheduling / appointment email | Existing reviewed booking/contact/SMTP workflow from base | Existing frontend tests and historical Sprint 4 evidence | This run does not revalidate live SMTP or full booking-to-email PostgreSQL pipeline; no email sent |
 | Candidate access | One-use invitations, hashed scoped sessions, current criteria/window checks; bounded exact-ready polling | Auth/replay/rotation/revocation and separate-client isolation regressions | Invitation possession is not identity verification; Leave permits reconnect; cached media JWT revocation limitations remain |
 | F11 follow-up questions | Trusted caption bridge → model-free graph → recruiter-only optional suggestion; dismiss fixes late-poll race | Graph/bridge/API/consent/candidate projection/dismiss regressions | Fresh Cloud browser visibility, simultaneous candidate exclusion and terminal lifecycle observation remain unverified |
 | Concurrent interviews | Independent room grants, cookie/profile and logical F11 run isolation | JWT/role/session/source isolation; rejecting second caption room leaves first intact | **One caption room per backend process**; multi-room F4/live F11 not implemented; no new simultaneous Cloud media trial |
 | Camera / face verification | Existing camera readiness and publication controls | Mocked access/media lifecycle checks | No authoritative enrollment/reference, biometric consent/retention/error policy; **face matching unsupported** |
-| Local/API AI choice | JD interpreter and generator route to allowlisted Ollama or configured Groq; explicit new-UI choice and cloud disclosure; conversation pin | Mocked local routing, schema/timeouts/no fallback, owner and pin tests | No actual model quality/performance claim; CV screening selector not added; legacy configured-Groq API behavior remains |
+| Local/API AI choice | JD interpreter and generator route to allowlisted Ollama or configured Groq; explicit new-UI choice and cloud disclosure; conversation pin | Mocked local routing, schema/timeouts/no fallback, owner and pin tests | JD and CV have independent selectors; CV profile/matching both route explicitly and cloud requires transfer confirmation. No actual model quality/performance claim; legacy JD API behavior remains |
 | Tab / page-fullscreen indicators | Optional candidate consent; scoped coarse current snapshot; expiry/withdrawal; recruiter-only last-reported view | Synthetic DOM, backend consent/auth/isolation/revocation/expiry and late-consent cleanup | Self-reported and spoofable; not cheating proof. Browser F11/window fullscreen not reliably detected; no activity history or browser surveillance |
 | Screen sharing | Explicit SDK start/stop, screen video only, distinct remote display, late-picker cleanup | Mocked track/native-stop/denial/leave tests; scoped SDK grants | Real picker, browser/mobile support and Cloud delivery/revocation unverified; no recording or screen audio |
 | Home / consistent interface | Existing approved navigation/Home and functional controls preserved | Full frontend rendering/workflow tests and production build | Unapproved UI pass excluded; no new desktop/390px browser visual acceptance |
@@ -113,3 +113,21 @@ Result: **offline integration PASS; live evaluation acceptance remains PARTIAL**
 Only documentation was added during this final consolidation; tested functionality
 was not changed. Local develop is eligible for the requested history-preserving
 fast-forward, without modifying main or any remote ref.
+
+
+## Gap-closure extension
+
+`feature/trainer-gap-closure-1` starts at this document's published-source successor
+`7c2725e`. CV provider selection (`5127f7f`) and Telegram publishing are separate
+implementation commits; develop and other feature branches are unchanged.
+See [CV selection](cv_ai_provider_selection.md) and
+[publishing capabilities](multiplatform_job_publishing.md) for configuration,
+consent, provenance, failure handling and mocked evidence. This extension adds no
+model-quality or live publishing acceptance claim, migration or dependency.
+
+Gap-closure verification: 231 combined focused backend tests passed, one explicit
+PostgreSQL gate skipped; 17 overlapping Telegram-focused tests passed afterward,
+including added real-route authorization coverage. All 331 frontend tests and
+TypeScript/production build passed. Models/providers were mocked throughout;
+no Docker, Ollama, Cloud runtime or external publication was started. CV local-model
+accuracy and actual Telegram channel delivery remain unverified.

@@ -228,5 +228,17 @@ test("draft card renders loading, confirmed metadata and safe failure states", a
   const failed=renderToStaticMarkup(createElement(ChatMessageView,{message:{...message,publication:{status:"failed",message:"Check Discord before another attempt."}},onPublish:()=>{},onRevise:()=>{}}));
   assert.match(failed,/role="alert"/);
   assert.match(failed,/Check Discord/);
-  assert.match(failed,/disabled/);
+  assert.match(failed,/Review publishing/); // Other destinations remain available; attempted Discord stays fenced.
+});
+
+test('Telegram request is explicit and only matching provider receipts are accepted',async t=>{
+ const draft=result().job_description_result;let calls=0;
+ t.mock.method(globalThis,'fetch',async(_url,init)=>{
+  calls++;const body=JSON.parse(String(init?.body));assert.equal(body.destination,'telegram');assert.equal(body.job_id,'synthetic-job');
+  assert.ok(!('bot_token' in body)&&!('channel_id' in body));
+  return Response.json({destination:'telegram',status:'published',external_id:'42'});
+ });
+ assert.equal((await publishDraft(draft,{},'synthetic-job','telegram')).external_id,'42');assert.equal(calls,1);
+ t.mock.method(globalThis,'fetch',async()=>Response.json({destination:'discord',status:'published',external_id:'123456789012345678'}));
+ await assert.rejects(publishDraft(draft,{},'synthetic-job','telegram'),/not confirmed/);
 });

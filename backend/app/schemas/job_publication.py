@@ -4,7 +4,7 @@ import hashlib
 import json
 from typing import Annotated, Literal
 import unicodedata
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, PrivateAttr
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, PrivateAttr, model_validator
 
 
 def plain_text(value: object) -> object:
@@ -31,6 +31,7 @@ Location = Annotated[str, BeforeValidator(single_line), StringConstraints(min_le
 class RecruiterPublishRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
     job_id: Annotated[UUID | None, BeforeValidator(lambda value: UUID(value) if isinstance(value, str) else value)] = None
+    destination: Literal["discord", "telegram"] = "discord"
     _job_reference: str | None = PrivateAttr(default=None)
     title: Title
     summary: Summary
@@ -43,7 +44,7 @@ class RecruiterPublishRequest(BaseModel):
     work_arrangement: Literal["on_site", "remote", "hybrid"] | None = None
 
     def mcp_job(self) -> dict:
-        job = self.model_dump(mode="json", exclude={"job_id"})
+        job = self.model_dump(mode="json", exclude={"job_id", "destination"})
         if job["work_arrangement"] == "on_site":
             job["work_arrangement"] = "onsite"
         # Temporary demo identity: stable for normalized content, not a database ID.
@@ -54,6 +55,12 @@ class RecruiterPublishRequest(BaseModel):
 
 class PublicationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True, hide_input_in_errors=True)
-    destination: Literal["discord"]
+    destination: Literal["discord", "telegram"]
     status: Literal["published"]
-    external_id: Annotated[str, StringConstraints(pattern=r"^[0-9]{17,20}$")]
+    external_id: Annotated[str, StringConstraints(pattern=r"^[1-9][0-9]{0,19}$")]
+
+    @model_validator(mode="after")
+    def valid_destination_receipt(self):
+        if self.destination == "discord" and not 17 <= len(self.external_id) <= 20:
+            raise ValueError("Invalid Discord receipt.")
+        return self
