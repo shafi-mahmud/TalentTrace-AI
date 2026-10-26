@@ -84,3 +84,85 @@ not itself connect submissions to this database. The existing bridge requires
 an exact operator-approved mapping and SELECT-only source role; respondent-entered
 email is not verified mailbox ownership. Real Google intake needs separate review
 and authorization.
+
+## D. Docker OCR and downstream screening
+
+**Confirmed defects:** the running image had no native Tesseract library or English
+trained data. A newly added mixed-PDF regression also failed before the code fix:
+a digital first page plus an image-only second page was classified as fully
+digitally extracted, hiding scanned-page evidence. A digital page plus an ordinary
+blank page correctly passed and continues to do so.
+
+**Implemented:** standard and cached backend Dockerfiles install the free Debian
+`libtesseract5` and `tesseract-ocr-eng` packages and set `OCR_TESSDATA_PATH` to their
+English data directory. No global Windows installation or Python dependency
+upgrade was made. The active cached image was rebuilt and only this runtime's
+backend container was replaced. Existing PostgreSQL/frontend containers and data
+were retained; no migration ran. The standard Dockerfile has the same package
+instructions but was not rebuilt from scratch in this increment.
+
+Digital extraction now flags a PDF for the existing OCR fallback when a page has
+too little digital text and contains raster images, even if other pages satisfy
+the total/ratio threshold. Ordinary blank pages do not independently trigger OCR.
+The OCR service preserves digital page text and uses existing 300 DPI, 25-page,
+100-batch-page, pixel, byte and text limits. Failed/unconfigured OCR remains
+unavailable evidence, never fabricated qualifications. Vector-only outlined text
+or inaccurate OCR is not guaranteed by this raster-page detection rule.
+
+**Actual HTTP/container verification:** synthetic digital, scanned and mixed PDFs
+were uploaded under the owned test job. Digital extraction passed without OCR;
+scanned/mixed extraction requested OCR and real Tesseract recovered their text.
+Mixed-page evidence retained digital page 1 and OCR page 2. A direct real-service
+pipeline, with only the profile interpreter replaced by a deterministic test
+double, verified all three documents reached eligibility matching with correct
+source methods. No synthetic recognition text was inserted into that real OCR run.
+
+**Actual Groq integration PASS:** one separately selected synthetic scanned PDF
+was screened through the authenticated existing `/screen` API with explicit Groq
+external-processing confirmation. Real OCR output reached the real Groq profile
+extractor, exact source-grounded matching, weighted scoring and PostgreSQL.
+The response was `decision_complete`, eligible, and numerically scored. Saved
+scores were retrieved through the API and the real browser displayed 100/100
+with `Python — page 1 · ocr`. This is a deliberately simple, skill-only synthetic
+acceptance, not a benchmark or proof of extraction accuracy on real CVs. There was
+one screening request, no automatic retry, and no real candidate data.
+
+**Tests:** extraction/OCR/profile/batch suites: **140 passed, 4 skipped**. Three
+Windows symlink-creation cases lacked OS permission; the optional host native OCR
+test lacked host tessdata. These skips do not count as passes. The separate
+container verification above used real English tessdata and real OCR. The added
+mocked OCR-to-profile-to-screening regression passed. Frontend publishing tests
+passed (4); TypeScript and production Vite build passed with the existing large
+interview-chunk warning. Application schema remains `0017_booked_interview_email`.
+
+## Owner verification in the existing runtime
+
+Open <http://groq-20261026.localhost:5280/> using the existing private synthetic
+login. [Startup and private-account location](groq_runtime.md) remain unchanged.
+
+1. Home → existing generated job → **Refine saved JD**. Refresh, select its saved
+   conversation, and verify the same Job Reference. The refinement change passed
+   offline, but the sole real attempt was blocked; a new real refinement requires
+   a separately considered request and a still-valid conversation. Do not repeatedly
+   click Send or silently extend an expired conversation.
+2. Type `publish` → inspect the complete preview/reference. All destinations start
+   unchecked. Select **LinkedIn — manual** only, check review, confirm destinations,
+   then **Copy job content**. Expect **Copied — not posted**. Do not choose/confirm
+   Discord or Telegram: no actual posting is authorized and Docker MCP is unavailable.
+3. Home → **Task 2 Synthetic Intake A** → **Continue Screening**. **Load imported
+   batches** shows only A's one import; **Load saved scores** retrieves the scanned
+   PDF's actual saved score without inference. Expand **Saved requirement evidence**
+   to check page 1 / OCR. Switch to **Task 2 Synthetic Intake B** and verify its
+   separate import and absence of A's saved score.
+4. Home's application counts reflect these synthetic uploads/imports once each.
+   At the initial intake snapshot A had 2, B had 1; subsequent three OCR test uploads
+   increased A to 5. This is expected additional intake, not duplicate import.
+5. Optional further upload: **Choose CV files** → a controlled synthetic PDF →
+   **Upload CVs** under the chosen Job Reference. Upload does not invoke a model.
+   Selecting Groq, checking its CV disclosure and explicitly screening consumes
+   quota; reading existing scores/batches does not. The ignored acceptance folder
+   contains generated synthetic digital/scanned/mixed PDFs for owner reuse.
+
+Keep Google source/OAuth configuration, actual Discord/Telegram delivery and a
+second real refinement outside this completed acceptance. No real email, Cloud,
+STT, biometric processing, publishing, migration, merge or push occurred.

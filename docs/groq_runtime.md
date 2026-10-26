@@ -1,5 +1,9 @@
 # Opt-in Groq JD application — 26 October 2026
 
+Subsequent scoped work: [Task 2 refinement, publishing, intake and OCR evidence](task2_acceptance_20261026.md).
+The Docker image now includes English OCR; that record distinguishes the blocked
+single real refinement from successful real scanned-PDF Groq screening.
+
 ## Implemented and verified boundary
 
 The existing Groq interpreter, LangGraph JD generation, company-policy retrieval,

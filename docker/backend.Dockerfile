@@ -1,5 +1,9 @@
 FROM python:3.12.10-slim-bookworm@sha256:fd95fa221297a88e1cf49c55ec1828edd7c5a428187e67b5d1805692d11588db
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libtesseract5 tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+ENV OCR_TESSDATA_PATH=/usr/share/tesseract-ocr/5/tessdata
 WORKDIR /app/backend
 COPY backend/requirements.txt /tmp/requirements.txt
 # CPU-only PyTorch avoids downloading CUDA libraries. No model is downloaded.

@@ -26,6 +26,40 @@ from app.schemas.recruiter_chat import RecruiterChatRequest
 REFERENCE = "TT-JOB-0123456789ABCDEF"
 
 
+def test_mixed_pdf_ocr_text_reaches_profile_extractor_and_screening(monkeypatch, tmp_path):
+    from test_cv_extraction import mixed_pdf_bytes, stored
+    from test_candidate_profile import blank_interpretation
+    from app.schemas.candidate_profile import CandidateProfileInterpretation
+    from app.services import cv_ocr
+    config = Settings(_env_file=None, groq_api_key='synthetic-only', cv_upload_root=tmp_path)
+    batch, _, _ = stored(tmp_path, ('pdf', mixed_pdf_bytes()))
+    monkeypatch.setattr(cv_ocr, 'resolve_tessdata', lambda configured: tmp_path)
+    recognized = 'SYNTHETIC ONLY Docker container development and automated software testing.'
+    monkeypatch.setattr(cv_ocr, 'ocr_page_text', lambda page, data: recognized)
+
+    class Extractor:
+        calls = 0
+        async def extract(self, document):
+            self.calls += 1
+            assert [u.source.method for u in document.units] == ['digital','ocr']
+            assert document.units[1].text == recognized
+            value = blank_interpretation()
+            value['qualifications']['skills'] = [{'value':'Docker','evidence':'Docker','source_id':'page:2'}]
+            return CandidateProfileInterpretation.model_validate(value)
+
+    extractor = Extractor()
+    matcher = FakeMatcher(error=AssertionError('Exact recovered skill must not need semantic inference'))
+    service = BatchScreeningService(CandidateProfileService(config,extractor=extractor),CandidateScreeningWorkflow(matcher))
+    supplied = ReviewedJobSnapshot.model_validate(snapshot(job_reference='TT-JOB-30BB2CDF9A5CCCA9', criteria=[
+        {'criterion_id':'docker','description':'Docker','category':'skill','is_hard':True}]))
+    result = asyncio.run(service.screen_batch(supplied.job_reference,batch,supplied))
+    row = result.candidates[0].result
+    assert extractor.calls == 1 and not matcher.calls
+    assert row.screening_decision == 'eligible'
+    assert row.matching_result.matches[0].evidence[0].source.method == 'ocr'
+    assert row.matching_result.matches[0].evidence[0].source.number == 2
+
+
 def snapshot(**changes):
     return {"job_reference": REFERENCE, "job_title": "Backend Engineer", "criteria_confirmed": True,
         "criteria": [{"criterion_id": "python", "description": "Python", "category": "skill", "is_hard": True}], **changes}

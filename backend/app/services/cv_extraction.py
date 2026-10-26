@@ -127,10 +127,11 @@ class CvExtractionService:
         try:
             validate_document(path, file_type)
             if file_type == "pdf":
-                units = self._pdf_units(path)
+                units, image_page_needs_ocr = self._pdf_units(path)
                 meaningful = sum(alnum_count(unit.text) >= MIN_PAGE_ALNUM for unit in units)
                 sufficient = (sum(alnum_count(unit.text) for unit in units) >= MIN_PDF_ALNUM
-                    and meaningful / len(units) >= MIN_MEANINGFUL_PAGE_RATIO)
+                    and meaningful / len(units) >= MIN_MEANINGFUL_PAGE_RATIO
+                    and not image_page_needs_ocr)
                 status = "text_extracted" if sufficient else "ocr_required"
             else:
                 units = []
@@ -150,15 +151,19 @@ class CvExtractionService:
                 extraction_status="extraction_failed", text="", text_char_count=0, source_units=())
 
     @staticmethod
-    def _pdf_units(path: Path) -> list[PdfPageText]:
+    def _pdf_units(path: Path) -> tuple[list[PdfPageText], bool]:
         with pdf_access(), pymupdf.open(path) as document:
             if document.needs_pass or not 1 <= document.page_count <= MAX_PDF_PAGES:
                 raise ValueError("Unsupported PDF")
-            units, chars = [], 0
+            units, chars, image_page_needs_ocr = [], 0, False
             for index, page in enumerate(document):
                 text = normalize_text(page.get_text("text", sort=True))
                 chars += len(text) + (2 if units else 0)
                 if chars > MAX_TEXT_CHARS:
                     raise ValueError("Extraction limit")
+                # Enough text on other pages must not hide a scanned page. Blank
+                # digital pages alone do not require the optional OCR engine.
+                if alnum_count(text) < MIN_PAGE_ALNUM and page.get_images():
+                    image_page_needs_ocr = True
                 units.append(PdfPageText(page_number=index + 1, text=text))
-            return units
+            return units, image_page_needs_ocr

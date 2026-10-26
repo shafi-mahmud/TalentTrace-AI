@@ -63,6 +63,30 @@ def stored(root, *files):
     return batch_id, batch, paths
 
 
+def mixed_pdf_bytes():
+    """A real digital first page and an image-only second page; no private media."""
+    with pymupdf.open(stream=pdf_bytes(), filetype='pdf') as mixed:
+        with pymupdf.open() as source:
+            page = source.new_page()
+            page.insert_text((50,90),'SYNTHETIC ONLY Docker container development and testing.',fontsize=18)
+            image = page.get_pixmap(dpi=100)
+        mixed.new_page().insert_image(pymupdf.Rect(0,0,595,842),pixmap=image)
+        return mixed.tobytes()
+
+
+def test_mixed_pdf_image_page_requires_ocr_even_with_enough_digital_text(storage):
+    batch, _, _ = stored(storage, ('pdf',mixed_pdf_bytes()))
+    result, = service.CvExtractionService(storage).extract_batch(REFERENCE,batch)
+    assert result.extraction_status == 'ocr_required'
+    assert result.source_units[0].text and not result.source_units[1].text
+
+
+def test_blank_page_does_not_force_ocr_on_digital_document(storage):
+    batch, _, _ = stored(storage, ('pdf',pdf_bytes((TEXT,''))))
+    result, = service.CvExtractionService(storage).extract_batch(REFERENCE,batch)
+    assert result.extraction_status == 'text_extracted'
+
+
 def request(batch_id, reference=REFERENCE):
     async def send():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
