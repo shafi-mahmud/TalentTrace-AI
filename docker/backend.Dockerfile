@@ -10,6 +10,12 @@ COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.14.1+cpu \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
     && pip check
+COPY job-publishing-mcp/requirements.txt /tmp/job-publishing-requirements.txt
+# Keep the MCP server's pinned versions separate from FastAPI's environment.
+RUN python -m venv --without-pip --system-site-packages /app/job-publishing-mcp/.venv \
+    && pip --python /app/job-publishing-mcp/.venv/bin/python install --no-cache-dir -r /tmp/job-publishing-requirements.txt \
+    && pip --python /app/job-publishing-mcp/.venv/bin/python check
+COPY job-publishing-mcp/talenttrace_job_publishing /app/job-publishing-mcp/talenttrace_job_publishing
 RUN useradd --uid 10001 --create-home app \
     && mkdir -p /app/data/cv_uploads /app/docker \
     && chown -R app:app /app/data
@@ -17,6 +23,7 @@ COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini
 COPY docker/backend_ready.py /app/docker/backend_ready.py
+COPY docker/check_discord_mcp.py /app/docker/check_discord_mcp.py
 USER 10001:10001
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

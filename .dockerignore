@@ -21,6 +21,12 @@
 !frontend/vite.config.ts
 !docker/
 !docker/**
+!job-publishing-mcp/
+!job-publishing-mcp/requirements.txt
+!job-publishing-mcp/talenttrace_job_publishing/
+!job-publishing-mcp/talenttrace_job_publishing/*.py
+!job-publishing-mcp/talenttrace_job_publishing/publishers/
+!job-publishing-mcp/talenttrace_job_publishing/publishers/*.py
 # Keep exclusions last, including files placed beneath allowed directories.
 **/.env*
 **/*.env

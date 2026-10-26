@@ -50,13 +50,42 @@ contract tests and 4 frontend review tests passed. These use mocked transports,
 including ownership/current-draft validation and process-local duplicate fencing.
 The existing fence is not durable across restarts or shared between workers.
 
-**Discord runtime BLOCKED:** private original configuration contains webhook and
+**Earlier Discord runtime BLOCKED (superseded below):** private original configuration contains webhook and
 form-link settings, and the original checkout has its MCP Python environment.
 The active worktree lacks that environment; the Docker image has neither the
 MCP package/executable nor webhook/form configuration. Those credentials were not
 copied or activated. Reusing a Windows executable inside the Linux image is not
 valid. A separately reviewed Docker MCP dependency/configuration step is required
 before any separately authorized actual post. No webhook was probed.
+
+**Follow-up Discord local readiness PASS; real delivery UNTESTED:** both backend
+Dockerfiles now package the existing MCP source. The build-context allowlist adds
+only its Python modules and pinned requirements, not its Windows environment,
+private configuration, OAuth artifacts or data. A Linux child virtual environment
+reuses installed dependencies and overlays the standalone server's exact pins.
+Its Pydantic pin differs from the cached backend's version; an initial no-download
+dependency check failed safely, so only the child venv received the necessary pinned
+Pydantic/core wheels. The backend's global package versions were not downgraded.
+Both environments pass dependency checks. No new publisher or business endpoint
+was introduced.
+
+The original office webhook/form values were validated with existing configuration
+contracts and copied by explicit allowlist into the owner-restricted, ignored
+runtime `groq.env`. Its previous contents were preserved in an ignored backup.
+No original configuration was edited, no credential entered Git/build layers and
+no webhook was contacted. Only this project's backend was recreated; PostgreSQL
+and frontend identities/start times were verified unchanged. The existing startup
+command is unchanged. Baseline Compose still has no publishing credentials.
+
+`docker/check_discord_mcp.py` passed in the built image with **network disabled**
+and again in the deployed container. It checks pinned versions, discovers the real
+stdio `publish_job` tool without invoking it, then uses the existing in-process
+MCP server and an explicit synthetic `httpx.MockTransport` to check one delivery
+receipt and Job Reference/mention rules. It cannot send a real publication.
+The relevant **9 protocol tests passed**, with no skips. This does not prove webhook
+ownership, remote channel permissions or actual Discord receipt. Automatic
+destinations still start unchecked. Do not confirm Discord/Telegram without the
+owner's separate actual-publication approval.
 
 ## C. Native and trusted imported intake
 
@@ -94,6 +123,24 @@ not itself connect submissions to this database. The existing bridge requires
 an exact operator-approved mapping and SELECT-only source role; respondent-entered
 email is not verified mailbox ownership. Real Google intake needs separate review
 and authorization.
+
+**Follow-up local revalidation:** read-only authenticated discovery and exact
+synthetic-row checks still returned two import records, A/B application counts
+5/1, and one correctly associated imported batch per job. Existing deduplication
+evidence was preserved; no new import was needed. The Google adapter/OAuth files
+remain on the intake branch. In addition, the current operator bridge configuration
+contract explicitly pins the older host loopback databases/ports and requires a
+SELECT-only source role; those identities are not this Docker runtime. Reusing its
+old source/job mapping or writer credentials would be unsafe. The existing bridge
+library can be reused only after a reviewed current-job mapping, source read-only
+access and adapter deployment are established. No branch merge, source database
+change, Google resource access or OAuth refresh was performed.
+
+Earlier local checks found client/token artifacts and source configuration in the
+intake worktree; their existence does not verify present scopes, freshness or mapping.
+Automatic approval review blocked the later combined command containing deeper
+OAuth-file inspection, without a detailed reason. That inspection was not executed;
+these credential properties remain UNVERIFIED. No alternate access path was used.
 
 ## D. Docker OCR and downstream screening
 
@@ -158,7 +205,7 @@ login. [Startup and private-account location](groq_runtime.md) remain unchanged.
 2. Type `publish` → inspect the complete preview/reference. All destinations start
    unchecked. Select **LinkedIn — manual** only, check review, confirm destinations,
    then **Copy job content**. Expect **Copied — not posted**. Do not choose/confirm
-   Discord or Telegram: no actual posting is authorized and Docker MCP is unavailable.
+   Discord or Telegram: Docker MCP is locally ready, but actual posting is not authorized.
 3. Home → **Task 2 Synthetic Intake A** → **Continue Screening**. **Load imported
    batches** shows only A's one import; **Load saved scores** retrieves the scanned
    PDF's actual saved score without inference. Expand **Saved requirement evidence**
@@ -172,6 +219,15 @@ login. [Startup and private-account location](groq_runtime.md) remain unchanged.
    Selecting Groq, checking its CV disclosure and explicitly screening consumes
    quota; reading existing scores/batches does not. The ignored acceptance folder
    contains generated synthetic digital/scanned/mixed PDFs for owner reuse.
+6. On A's saved candidate, expand **Score breakdown** to inspect approved weights
+   and supported requirements, and **Saved requirement evidence** for OCR/page
+   attribution. Switch to B, load its imports and saved scores, and verify A's score
+   is absent. Persisted `_ai_provenance` was checked read-only for the exact synthetic
+   score: provider Groq, model identity recorded, external-processing confirmation
+   true. That metadata is currently stripped from the public score response and
+   has no saved-score UI label. **Browser provider-provenance display remains a gap**;
+   choosing Groq in the selector is not proof of a historical run. No UI/provenance
+   contract was invented or scoring changed in this follow-up.
 
 Keep Google source/OAuth configuration and actual Discord/Telegram delivery
 outside this completed acceptance. No real email, Cloud,

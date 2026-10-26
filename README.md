@@ -37,7 +37,9 @@ JD and saved scores are seeded fixtures; they do not establish inference quality
 The separate [opt-in Groq Docker runtime](docs/groq_runtime.md) now serves
 `http://groq-20261026.localhost:5280/`. One real synthetic Groq JD request, local
 policy retrieval, saved Job Reference/revision and fresh-session/browser retrieval
-passed. Other external integrations remain disabled. Its documented single
+passed. [Task 2 acceptance](docs/task2_acceptance_20261026.md) additionally records
+real refinement/OCR screening and locally ready, mocked-only Discord MCP delivery.
+Google access remains blocked; no actual publishing occurred. Its documented single
 Compose startup command reuses explicitly prepared private configuration, images
 and a fresh schema-0017 database; first-time setup remains separate.
 

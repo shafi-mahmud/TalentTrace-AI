@@ -1,8 +1,9 @@
 # Opt-in Groq JD application — 26 October 2026
 
 Subsequent scoped work: [Task 2 refinement, publishing, intake and OCR evidence](task2_acceptance_20261026.md).
-The Docker image now includes English OCR; that record distinguishes the blocked
-single real refinement from successful real scanned-PDF Groq screening.
+The Docker image now includes English OCR and the existing Discord MCP server.
+That record distinguishes successful real refinement/scanned-PDF Groq screening
+from locally configured, mocked-only Discord delivery and blocked Google access.
 
 ## Implemented and verified boundary
 
@@ -97,6 +98,15 @@ The ellipsis in first-time examples means the same private `--env-file` and two
 Compose files; it is not a literal runnable argument. No automatic first-time
 database setup or model download is hidden in `up`.
 
+Optional Discord preparation is separate from the Groq helper. The helper still
+imports only the Groq key/model. Only after owner approval, validate the existing
+`DISCORD_WEBHOOK_URL` with the standalone MCP Settings contract and the optional
+`APPLICATION_FORM_URL` with backend Settings, then add only those two values to
+the ignored runtime `groq.env`. Keep its original private backup. Do not copy the
+old `.env`, database URL or Google OAuth credentials. Recreate only this backend
+with the same Compose files and `--no-deps`; no post occurs on startup. Actual
+publication remains a separate explicit recruiter/owner action and was not tested.
+
 ## Reusing verified office dependencies
 
 An initial standard build began an unnecessary repeat PyTorch download and was
@@ -119,8 +129,11 @@ configuration files enter either build context.
 ## Safety and validation
 
 LiveKit credentials, AssemblyAI, Ollama, caption/transcript storage, F11,
-interview email, publishing and biometric processing remain absent/disabled.
-No Cloud, STT, email, publishing or CV processing was exercised. Existing CORS,
+interview email and biometric processing remain absent/disabled. Later Task 2
+explicitly configured the existing Discord webhook/form settings; it performed
+tool discovery and mocked delivery only, not an actual publication. Current
+synthetic OCR/CV screening and refinement evidence is in the linked Task 2 record.
+No Cloud, STT, email or actual publishing was exercised. Existing CORS,
 HttpOnly/SameSite cookies, mutation protection and recruiter/job ownership remain
 in force. Do not expose this development HTTP origin publicly.
 
