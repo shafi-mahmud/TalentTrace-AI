@@ -5,6 +5,25 @@ Inspected source: `9e9c503`. Scheduling/browser/database acceptance is recorded 
 [trainer status](trainer_feature_status_20261026.md). No tokens, invitation,
 fixture, consent, media connection or inference were created during preparation.
 
+## Subsequent authorized preflight — blocked before trial
+
+On 26 October, current Cloud dashboard checks confirmed the Build plan, $0.00 next
+invoice and sufficient included participant/data allowance. One filtered read-only
+control-plane request validated credentials without creating a room or participant
+grant. The actual local Whisper worker started within its existing deadline and
+was closed; no audio was transcribed. Synthetic DB identity/schema were rechecked.
+
+The trial **did not run**: the historical F4 harness lacks validated simultaneous
+current-source F11 API/DOM capture and enforced test-only 90-second caption/four-
+minute media cleanup guards. Its launcher disables F11; application caption limits
+remain 120–300 seconds. This is a test readiness gap, not a proven application bug.
+An ignored collector/timer preparation increment is needed before activation; do
+not weaken application limits or infer privacy acceptance from post-cleanup absence.
+Sanitized detail is retained locally in ignored
+`data/office-f3f4f11-20261026/preflight-outcome.md`. No trial fixture, invitation,
+participant token, media connection or transcript was created. Existing baseline
+runtime and its original shutdown deadline were preserved.
+
 ## Verified prerequisites and current blockers
 
 - **Implemented:** Cloud `wss` configuration, scoped recruiter/candidate grants,
