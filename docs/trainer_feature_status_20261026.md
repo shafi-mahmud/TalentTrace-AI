@@ -24,7 +24,7 @@ no remote publication or main update is performed.
 | JD chat refinement / Job Reference | Saved owned jobs, refinement, reference/revision display | Recruiter-record, workflow and full frontend regressions | Actual generated content still requires human review and configured policy/RAG resources |
 | Multi-platform publishing | Review/confirm destinations; Discord uses existing MCP adapter; opt-in Telegram channel uses Bot API; LinkedIn/other manual copy | Mocked confirmed receipt, failure/duplicate handling, auth and chat review | No real post made; no automatic LinkedIn capability; deduplication is process-local, not durable across restarts/workers |
 | Job-isolated CV processing | Existing owned intake/screening; deduplicated native/imported application discovery | Counts/source/ownership cases and existing frontend validations | No new real CV parsing/provider-quality benchmark; application identity is not universal person identity |
-| Reviewed scheduling / appointment email | Existing reviewed booking/contact/SMTP workflow from base | Existing frontend tests and historical Sprint 4 evidence | This run does not revalidate live SMTP or full booking-to-email PostgreSQL pipeline; no email sent |
+| Reviewed scheduling / appointment email | Existing reviewed booking/contact/SMTP workflow from base | **26 October office browser confirmation PASS; start/duration review PASS; booking persistence and recruiter/job/application association PASS**, independently reconciled in isolated PostgreSQL | Deterministic eligible fixture; appointment email disabled and not live-tested; no message sent. See office acceptance below |
 | Candidate access | One-use invitations, hashed scoped sessions, current criteria/window checks; bounded exact-ready polling | Auth/replay/rotation/revocation and separate-client isolation regressions | Invitation possession is not identity verification; Leave permits reconnect; cached media JWT revocation limitations remain |
 | F11 follow-up questions | Trusted caption bridge → model-free graph → recruiter-only optional suggestion; dismiss fixes late-poll race | Graph/bridge/API/consent/candidate projection/dismiss regressions | Fresh Cloud browser visibility, simultaneous candidate exclusion and terminal lifecycle observation remain unverified |
 | Concurrent interviews | Independent room grants, cookie/profile and logical F11 run isolation | JWT/role/session/source isolation; rejecting second caption room leaves first intact | **One caption room per backend process**; multi-room F4/live F11 not implemented; no new simultaneous Cloud media trial |
@@ -93,6 +93,39 @@ See [functional integration](trainer_functional_integration.md),
 [F11](f11_trainer_finalization.md), [access/concurrency](candidate_access_concurrency.md),
 [screen sharing](interview_screen_sharing.md), [provider choice](jd_ai_provider_selection.md)
 and [optional integrity](interview_integrity.md).
+
+## Office browser booking acceptance — 26 October 2026
+
+**Implemented and browser-verified:** on office source `9e9c503`, the authenticated
+synthetic recruiter selected an eligible application in the correct saved job,
+reviewed a future appointment's candidate, start/end, timezone and 45-minute
+duration, checked the explicit acknowledgement and clicked **Confirm booking**
+once. Confirmation was disabled before acknowledgement. A full browser refresh
+restored the same saved interview. **Scheduling confirmation: PASS. Start-time
+and duration review: PASS. Booking persistence and recruiter/job isolation: PASS**
+within this synthetic fixture; independent read-only SQL verified the exact
+recruiter/job/batch/upload/current criteria-revision associations. The previous
+other-job booking remained unchanged. This is scoped association/isolation
+evidence, not a newly executed full cross-recruiter adversarial suite.
+
+The existing fictional application received a deterministic validated score from
+the test fixture builder; no actual AI screening/inference is claimed. Booking
+itself used the real frontend, authenticated HTTP API and PostgreSQL with no mocked
+browser responses or backend booking shortcut. The appointment email UI showed
+**Not configured**, and both email-attempt tables remained empty. **Appointment
+email: disabled, not live-tested**; SMTP acceptance/mailbox delivery are unverified.
+
+Sanitized local evidence is retained under ignored
+`data/office-runtime-20261026/`: `BROWSER_BOOKING_PASS.md`,
+`browser-booking-verification.json`, and the review/persisted screenshots.
+Private identity journals and credentials remain ignored. No earlier scheduling
+test was repeated for this documentation update. The Windows filename/import
+collision was separately fixed and build-verified at `9e9c503`.
+
+**Recommended next acceptance:** see
+[office F3 → F4 → F11 preparation](office_f3_f4_f11_acceptance_preparation_20261026.md).
+This booking PASS does not establish media, recognition, transcript persistence,
+live assistant privacy or real email acceptance.
 
 ## Final offline regression results
 
