@@ -89,6 +89,13 @@ def grounded_value(field: str, item, message: str, *, pending_experience: bool =
         left = re.split(r"[;!?]|(?<!\d)\.(?!\d)", text[:match.start()])[-1]
         right = re.split(r"[;!?]|(?<!\d)\.(?!\d)", text[match.end():])[0]
         clause = left + evidence + right
+        if field == "preferred_skills":
+            # This terminal instruction preserves a DIFFERENT list. It does not
+            # negate the preferred skill; keep all other polarity checks intact.
+            clause = re.sub(
+                r"\bwithout (?:changing|altering|modifying) (?:the )?(?:existing )?required skills(?: list)?\s*\.?\s*$",
+                "", clause,
+            )
         if NEGATION.search(clause) or (field in {"required_skills", "responsibilities"} and re.search(r"\boptional\b", clause)):
             raise ValueError("Negated or ambiguous evidence.")
     if field == "minimum_experience_years":
