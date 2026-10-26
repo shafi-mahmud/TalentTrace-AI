@@ -36,7 +36,9 @@ test("profile action follows digital extraction and OCR attempt, with disabled l
   assert.match(renderToStaticMarkup(createElement(CandidateProfileAction, {...props, extraction: extraction(true), ocrAttempted: true})), /Extract candidate profiles/);
   const loading = renderToStaticMarkup(createElement(CandidateProfileAction, {...props, busy: true, parsing: true}));
   assert.match(loading, /Extracting candidate profiles/); assert.match(loading, /disabled/);
-  assert.match(loading, /Sends CV-derived text to Groq/);
+  assert.match(loading, /Uses the selected CV AI provider/);
+  assert.doesNotMatch(loading, /Sends CV-derived text to Groq/);
+  assert.match(loading, /no screening or scoring/);
 });
 
 test("parsed profiles show contact, education, work and skills with safe locators", () => {

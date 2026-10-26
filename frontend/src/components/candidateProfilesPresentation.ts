@@ -8,7 +8,7 @@ export function CandidateProfileAction({extraction, ocrAttempted, busy, parsing,
   if (!extraction || (extraction.files.some(file => file.extraction_status === "ocr_required") && !ocrAttempted)) return null;
   return h("div", {className: "cv-upload-success"},
     h("button", {type: "button", className: "button button-primary", disabled: busy, onClick: onParse}, parsing ? "Extracting candidate profiles…" : "Extract candidate profiles"),
-    h("p", {className: "helper-text"}, "Sends CV-derived text to Groq. Synthetic/sample data only; no screening or scoring."));
+    h("p", {className: "helper-text"}, "Uses the selected CV AI provider. Synthetic/sample data only; no screening or scoring."));
 }
 
 function fact(value: CandidateAttribute | null, label: string, index = 0) {

@@ -237,7 +237,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           </fieldset>
           <button className="button button-primary" type="submit" disabled={busy}>{loading ? "Uploading CVs…" : "Upload CVs"}</button>
           {loading && <p role="status">Validating and storing your batch…</p>}
-          <p className="form-note">Synthetic/sample CVs only. Profile extraction sends CV-derived text to Groq.</p>
+          <p className="form-note">Synthetic/sample CVs only. AI processing uses the selected CV provider.</p>
           <details className="supporting-details"><summary>How screening works</summary><p>Files are stored privately. CV data is not sent to JD, RAG or MCP. Review extracted evidence before making hiring decisions.</p></details>
         </form>
         </details>
