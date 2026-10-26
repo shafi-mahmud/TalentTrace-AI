@@ -123,9 +123,52 @@ changing the initial receipt to PASS. The sanitized recovery outcome, memory
 samples, startup health checks and reconciliation remain in the ignored trial
 directory; earlier trials are unchanged.
 
-**Recommended next action:** correct the isolated candidate initial-entry procedure
-to load `/interview-join` before observer arming, and validate the pre-Join
-navigation/cleanup lifecycle offline before requesting another live attempt.
+### Corrected entry and subsequent single attempt
+
+**Candidate initial-entry PASS.** The ignored owner-run helper now has an explicit
+`-OpenEntries` phase after READY. It verifies existing exclusive browser identities
+and a single-use reservation, then opens the private role URLs directly from the
+blank profiles. Candidate starts at `/interview-join` with the original invitation
+fragment; normal application extraction clears it before display. Initial-entry
+validation rejects a wrong origin/role/port/path before observer arming. The existing
+page-exit guard is unchanged. Both roles durably acknowledged their initial
+observations; candidate acceptance succeeded exactly once through the real UI.
+An accidentally repeated blank-profile command safely refused duplicate profiles;
+it did not reset or recreate anything.
+
+Final offline gates: **42 Python and 11 Node tests passed**, no failed/skipped cases.
+They cover initial paths/fragments/origins, observer acknowledgements and unchanged
+page-exit failure, real owned parent/child cleanup and interrupted independent
+watchdog operation. A receipt-shape assertion was updated for explicit fixed cleanup
+categories. These are test-harness checks, not Cloud/media/STT acceptance.
+
+The owner then clicked recruiter Join once and reported failure/Left interview,
+followed by both trial windows closing. Server evidence records a successful
+recruiter token response, but **no SDK-start acknowledgement, SDK connection,
+track publication/subscription or DOM Connected observation**. Candidate did not
+Join. The observer stopped with `evidence_failure`; the exact triggering collector/
+gate exception was not retained and remains **UNKNOWN**. The 1,405 saved sanitized
+observations did not exhaust retention bounds. Do not attribute this to memory,
+ICE, signaling or a production F3 defect without additional evidence.
+
+**F3 PARTIAL: authenticated access passed, connection failed/unverified. F4, F11,
+active candidate exclusion, transcript persistence and withdrawal UNOBSERVED.**
+There was no consented caption capture or real recognition in this attempt.
+Historical Cloud two-party success remains separate. No retry or new media fix.
+
+Minimum measured free RAM was 2,692 MB; the 1 GiB floor and all existing caps stayed
+intact. Watchdog cleanup now recorded `cleanup_ok=true` with no error categories.
+Independent checks found no owned marked process or open trial port; the new DB
+was stopped. Initial room deletion returned unconfirmed, so one exact-room read-only
+Cloud check was made and confirmed the trial room absent. This proves current
+absence, not whether a historical signaling/Join occurred. No additional connection.
+Private records, fragments and all prior diagnostics remain ignored and preserved.
+
+Trainer matrix/walkthrough review found no evidence justifying another feature
+claim or application change. Keep the five bounded verified areas separate from
+the nine partial/blocked areas and demonstrate unavailable-provider states honestly.
+**Recommended next action:** use the recruiter walkthrough for submission, clearly
+disclosing the unaccepted current live F4/F11 path instead of another deadline trial.
 
 ## Recommended executable recruiter walkthrough
 

@@ -14,15 +14,18 @@ review, provider selection and scheduling review): **17 passed, 0 failed/skipped
 These use test doubles/rendered components, not live AI or browser acceptance.
 The isolated, ignored runner/resource/observer validation ultimately passed 38 Python and
 8 Node checks; these are harness checks, not application/live acceptance.
-The earlier startup stopped before readiness with AttributeError. Subsequent
-source-level reproduction confirmed the ignored launcher's variable overwrite
-(resource observer replaced by SQL command result); its minimal fix and regression
-now pass. One fresh runtime reached READY, schema 0017 and actual browser recruiter
-authentication, with a live watchdog and the 1 GiB floor preserved. The new focused
-selection passed 39 Python and 8 Node checks. No Cloud Join/token/media occurred:
-candidate initial-route/observer lifecycle blocked the live phase. Owned resources
-are stopped; independent cleanup reconciliation preserved the initial watchdog's
-negative cleanup receipt as a warning. See the walkthrough's recovery section.
+The earlier startup AttributeError was confirmed as an ignored-launcher variable
+overwrite and fixed. Subsequent candidate-entry correction passed real browser
+entry/initial durable acknowledgement and one invitation acceptance, with unchanged
+page-exit protection. Final focused harness gates passed 42 Python and 11 Node tests.
+One recruiter Join was attempted: token response succeeded, but no SDK-start ack,
+connected state or media publication/subscription was recorded before an observer
+evidence failure stopped the attempt. Candidate did not Join. Exact observer failure
+cause remains unknown; current live F4/F11/privacy/persistence are UNOBSERVED.
+No retry or application fix was made. Minimum free RAM was 2,692 MB; 1 GiB floor
+preserved. Latest cleanup receipt has no errors, owned resources/ports are absent,
+DB stopped and a scoped read-only Cloud check found the trial room absent. Earlier
+negative cleanup receipt remains preserved separately. See the walkthrough.
 No new feature, provider inference or UI redesign is introduced by this update.
 
 Source before this documentation: `6d9ce5ecb4dbe048b95280261bc495f40542f077`.
