@@ -91,8 +91,10 @@ docker compose -p talenttrace-docker-demo --env-file data/docker-demo.env run --
 docker compose -p talenttrace-docker-demo --env-file data/docker-demo.env up -d --wait --wait-timeout 180
 ```
 
-Migration is an explicit operator action and currently reaches
-`0015_reviewer_confirmation`. Neither the container entrypoint nor `up` migrates,
+Migration is an explicit operator action and the current office source reaches
+`0017_booked_interview_email`, following `0016_submission_deletion` and
+`0015_reviewer_confirmation`. Older 0015 startup evidence below is historical;
+it is not verification of a new image/schema. Neither the entrypoint nor `up` migrates,
 restores, seeds or creates a recruiter. If code introduces a future migration,
 review/backup the disposable data and approve that migration separately.
 

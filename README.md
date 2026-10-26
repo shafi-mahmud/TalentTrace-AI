@@ -1,6 +1,6 @@
 # TalentTrace AI
 
-> **Positioning Statement**: An evidence-backed interview intelligence platform that bridges automated CV screening with verifiable live conversation analysis to enable defensible, bias-free technical hiring decisions.
+> **Positioning Statement**: A recruitment workspace connecting job-specific CV screening, reviewed interviews and source-linked assessment to support human recruiter review.
 
 ## Project Information
 * **Programme**: AI Trainee Developer Programme — Final Evaluation Assignment
@@ -20,6 +20,41 @@ be enabled merely to demonstrate an unavailable capability.
 
 The older release records below remain historical; newer scoped evidence
 supersedes them only for the explicitly tested boundary.
+
+### Submission-day application and setup
+
+- [Final demo results, tests, limitations and submission instructions](docs/submission_package_20261026.md)
+- [Implemented architecture and security boundaries](docs/architecture/application_overview.md)
+- [Step-by-step recruiter walkthrough and fourteen-area trainer matrix](docs/submission_walkthrough_20261026.md)
+
+The current isolated office demo is `http://submission-20261026.localhost:5276/`,
+scheduled to stop **26 October 2026 at 16:14:34 Asia/Dhaka**. Its synthetic account
+details and disposable data are local, ignored artifacts, not transferable Git assets.
+It uses real authenticated APIs and PostgreSQL schema 0017. AI generation/screening,
+Cloud, STT, email, publishing and biometric integrations remain disabled. The sample
+JD and saved scores are seeded fixtures; they do not establish inference quality.
+
+For a new machine, follow [Docker setup](docs/docker_startup.md) using a verified
+unused Compose project and a fresh database. `python docker/configure.py` creates
+private configuration without printing its password. Build, explicitly migrate only
+the new database to the single current head `0017_booked_interview_email`, start the
+baseline and provision a synthetic recruiter using that guide. Existing databases
+must not be upgraded automatically. The baseline does not bundle working Cloud/STT
+models or complete F5 inference; do not promise those integrations from startup alone.
+
+For local frontend checks, use Node 24, the pinned pnpm version and existing lockfile:
+
+```text
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend test
+pnpm --dir frontend exec tsc -b
+pnpm --dir frontend exec vite build
+```
+
+Backend tests run from `backend/` with a compatible Python environment containing
+the pinned requirements. Keep real credentials out of tests. When configuring a
+provider-disabled native environment, leave provider secrets empty rather than
+using the example placeholder keys; optional features must remain false.
 
 ## Pre-viva release-candidate checkpoint — 19 October 2026
 

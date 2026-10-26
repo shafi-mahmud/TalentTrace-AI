@@ -2,6 +2,17 @@
 
 ## Office deadline evidence update
 
+Latest [provider-disabled application demonstration](submission_package_20261026.md):
+real browser login/Home, saved sample draft/reference, unchecked publishing preview,
+new native CV upload/local extraction, saved score retrieval, job-isolated counts,
+explicit viewed acknowledgement/reload, reviewed browser booking/reload, disabled
+email/interview controls, actual CV-only report and logout all observed. Generation,
+refinement and new screening inference remained unavailable; seeded JD/score examples
+are explicitly simulated, with no browser API response mocks. Desktop 1528 px and
+compact 480 px Home/navigation inspected. No new Cloud attempt, model, email, post or
+biometric operation. Final application checks: 337 frontend passes; TypeScript/build
+pass; focused backend 66 passes/19 PG-gated skips; separate real HTTP/DB 30 passes.
+
 The [submission walkthrough and fourteen-area matrix](submission_walkthrough_20261026.md)
 separates current implementation, recorded automated checks, actual office browser
 evidence and remaining acceptance gaps. It supersedes historical limitations below
@@ -60,7 +71,7 @@ no remote publication or main update is performed.
 | Local/API AI choice | JD interpreter and generator route to allowlisted Ollama or configured Groq; explicit new-UI choice and cloud disclosure; conversation pin | Mocked local routing, schema/timeouts/no fallback, owner and pin tests | JD and CV have independent selectors; CV profile/matching both route explicitly and cloud requires transfer confirmation. No actual model quality/performance claim; legacy JD API behavior remains |
 | Tab / page-fullscreen indicators | Optional candidate consent; scoped coarse current snapshot; expiry/withdrawal; recruiter-only last-reported view | Synthetic DOM, backend consent/auth/isolation/revocation/expiry and late-consent cleanup | Self-reported and spoofable; not cheating proof. Browser F11/window fullscreen not reliably detected; no activity history or browser surveillance |
 | Screen sharing | Explicit SDK start/stop, screen video only, distinct remote display, late-picker cleanup | Mocked track/native-stop/denial/leave tests; scoped SDK grants | Real picker, browser/mobile support and Cloud delivery/revocation unverified; no recording or screen audio |
-| Home / consistent interface | Existing approved navigation/Home and functional controls preserved | Full frontend rendering/workflow tests and production build | Unapproved UI pass excluded; no new desktop/390px browser visual acceptance |
+| Home / consistent interface | Approved navigation/Home preserved; bounded copy/spacing polish and compact two-column nav | Full frontend/workflow tests and production build; actual Home/nav at 480 px and 1528 px | No 390px/all-device or full accessibility certification; unapproved redesign remains excluded |
 | Counts / new applications / viewed | Received/new/viewed/available, source breakdown, All/New/Viewed, displayed-snapshot acknowledgement | Count/reconciliation/auth/late-arrival/filter tests | No reliable arrival dates, complete failure-history analytics, predictive metrics or automatic acknowledgement |
 
 Automated cases use synthetic fixtures and mocked provider/media boundaries. SQL

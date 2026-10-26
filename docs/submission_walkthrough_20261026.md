@@ -1,5 +1,32 @@
 # Submission walkthrough and acceptance — 26 October 2026
 
+## Current provider-disabled recruiter demonstration
+
+The latest [submission package](submission_package_20261026.md) records a complete
+browser navigation session on the actual frontend/backend and fresh schema-0017
+PostgreSQL, with all external integrations disabled. This supersedes earlier
+limitations only for the explicitly listed boundaries below; no new Cloud trial.
+
+| Journey | Observed result |
+| --- | --- |
+| Login / Home / saved jobs | PASS, real authentication and saved references. |
+| JD creation / revision | Model execution BLOCKED; all options unavailable and selection validation displayed. Restored sample draft is seeded with test doubles, not a model-quality proof. |
+| Publishing preview | PASS, correct saved reference, all destinations unchecked and confirmation disabled. No post. |
+| Native CV upload / text extraction | PASS, new fictional DOCX uploaded through UI and two blocks extracted locally. |
+| Screening / score retrieval | New AI screening BLOCKED, not configured. Persisted deterministic score fixture retrieved successfully. |
+| Counts / acknowledgement / switching | PASS, Job B 2/0/2 after explicit acknowledgement and reload; Job A remains 1/0/1. |
+| Review / confirmation / reload | PASS, 27 October 11:00–11:45 Asia/Dhaka; owner handled native date input, actual UI performed final confirmation once. Independent SQL verified exact association and unchanged other booking. |
+| Email / interview access | Disabled state PASS. Zero email attempts/invitations; no token, Join or external send. |
+| F6 / logout | CV-only real report PASS, missing interview evidence explicit; print/PDF untested. Logout returned sign-in. |
+
+Final UI checks used 480 px and 1528 px Home/navigation views with no horizontal
+overflow. Home copy/spacing is lighter, compact navigation is two columns, and CV
+processing disclosures now refer to the selected provider while retaining explicit
+Groq-transfer consent. No hiring/security/consent logic changed. Full frontend 337
+passes, TypeScript/build pass; focused backend 66 passes/19 opt-in PG skips; separate
+actual HTTP/database selection 30 passes. Counts overlap historical source suites
+and are not added to them. See the package for setup, evidence and limitations.
+
 Scope: office branch `feature/office-20261026-acceptance`, implementation at
 `34a0674`. This record does not merge the office branch into develop. Schema head:
 `0017_booked_interview_email`, following `0016_submission_deletion`.
