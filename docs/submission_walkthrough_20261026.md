@@ -84,9 +84,48 @@ application/frontend source is unchanged since the previously passing Windows
 TypeScript/build fix, so another expensive build was not required by this
 documentation/ignored-harness increment. No new visual acceptance is claimed.
 
-**Recommended next operator action:** close unused editor/browser windows to free
-memory. A later startup-only validation must first attribute any recurrence of
-the startup error, preserve the floor and show sustained headroom before Join.
+### Subsequent runtime recovery
+
+The startup exception is now **CONFIRMED and fixed in the ignored harness**.
+In `runner.py`, `run_trial()` assigned the SQL-readiness command's
+`subprocess.CompletedProcess` to `probe` at line 227, replacing the resource
+observer. Line 248 then called missing attribute `mark`. The later `error`/`close`
+uses would also address the wrong object. Renaming the command result to
+`database_probe` preserves the observer. Memory did not cause this AttributeError.
+The previous UNKNOWN record above describes the evidence available at that time.
+
+A regression executes the actual launcher through database readiness and the
+migration-boundary observation with explicit offline doubles. Final focused
+selection: **39 Python tests and 8 Node tests passed**, no failed/skipped cases.
+Initial warnings from overly broad socket mocking in the new test were corrected;
+the final Python run emitted no warnings. Application source was unchanged.
+
+Exactly one fresh startup then reached **READY**: actual new disposable PostgreSQL
+schema 0017, validated owned synthetic fixture, healthy backend/frontend proxy and
+live independent watchdog. Seven minutes of ready-phase samples were retained.
+Minimum observed available RAM was 1,768 MB, with 3,004 MB at the pre-stop snapshot.
+The 1 GiB stop floor, consent, ownership and single-Join guards were unchanged.
+Recruiter sign-in, saved-job display and saved schedule used the actual browser
+and authenticated backend. No local recognition or media result is claimed.
+
+**Live acceptance BLOCKED before any token/Join:** the candidate initially opened
+the login root rather than `/interview-join`. A full-page navigation would trigger
+the armed observer's existing fail-closed page-exit handler. No navigation bypass,
+reload, server restart or second trial was attempted. F3/F4/F11, overlapping
+candidate exclusion and persisted transcript remain **UNOBSERVED** in this run.
+This is a test-entry lifecycle issue, not an established application media defect.
+
+The initial watchdog receipt reported `cleanup_ok=false`; its detailed reason
+was not retained. Independent reconciliation subsequently found all exact owned
+roots and marked descendants absent, trial ports closed and the new database
+stopped. Cloud was unused. Preserve this warning rather than retroactively
+changing the initial receipt to PASS. The sanitized recovery outcome, memory
+samples, startup health checks and reconciliation remain in the ignored trial
+directory; earlier trials are unchanged.
+
+**Recommended next action:** correct the isolated candidate initial-entry procedure
+to load `/interview-join` before observer arming, and validate the pre-Join
+navigation/cleanup lifecycle offline before requesting another live attempt.
 
 ## Recommended executable recruiter walkthrough
 

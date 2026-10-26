@@ -14,10 +14,15 @@ review, provider selection and scheduling review): **17 passed, 0 failed/skipped
 These use test doubles/rendered components, not live AI or browser acceptance.
 The isolated, ignored runner/resource/observer validation ultimately passed 38 Python and
 8 Node checks; these are harness checks, not application/live acceptance.
-The final startup stopped before backend readiness with AttributeError (origin
-unknown because no stack was retained). No Cloud Join/token/media occurred;
-trial-owned resources were stopped and preserved. See the walkthrough's final
-execution outcome for measured resource evidence and the remaining blocker.
+The earlier startup stopped before readiness with AttributeError. Subsequent
+source-level reproduction confirmed the ignored launcher's variable overwrite
+(resource observer replaced by SQL command result); its minimal fix and regression
+now pass. One fresh runtime reached READY, schema 0017 and actual browser recruiter
+authentication, with a live watchdog and the 1 GiB floor preserved. The new focused
+selection passed 39 Python and 8 Node checks. No Cloud Join/token/media occurred:
+candidate initial-route/observer lifecycle blocked the live phase. Owned resources
+are stopped; independent cleanup reconciliation preserved the initial watchdog's
+negative cleanup receipt as a warning. See the walkthrough's recovery section.
 No new feature, provider inference or UI redesign is introduced by this update.
 
 Source before this documentation: `6d9ce5ecb4dbe048b95280261bc495f40542f077`.
