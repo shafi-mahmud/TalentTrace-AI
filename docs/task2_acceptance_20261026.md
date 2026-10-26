@@ -47,3 +47,40 @@ MCP package/executable nor webhook/form configuration. Those credentials were no
 copied or activated. Reusing a Windows executable inside the Linux image is not
 valid. A separately reviewed Docker MCP dependency/configuration step is required
 before any separately authorized actual post. No webhook was probed.
+
+## C. Native and trusted imported intake
+
+**Verified with actual HTTP, application services, storage and the existing isolated
+PostgreSQL database:** two new fictional jobs received confirmed criteria through
+the authenticated API. One native PDF was uploaded to A; one trusted synthetic
+application was imported into each job through `ApplicationImportBridge`. The
+injected trusted reader supplied synthetic bytes/manifest, not a Google response.
+All remaining import/storage/ledger operations used real application code. Each
+stable import identifier was deliberately submitted twice and reused its existing
+record and file. No candidate inference, Google request or migration occurred.
+
+Authenticated discovery returned A=2 applications and B=1, each with exactly its
+one imported batch. The native file and imported ledger/file were not counted
+twice. Imported discovery returned only bounded metadata, with no contact/hash/path.
+Trying A's native batch through B's reference returned 404; normal digital text
+extraction passed. Original jobs and files were not modified by these fixtures.
+Exact new identities and operation intents remain in ignored local evidence.
+
+Focused tests: **107 passed, 3 skipped**. Skips were the separately gated disposable
+PostgreSQL variants for external intake, application bridge and imported screening;
+they were not pointed at the existing database. Other tests verify foreign-owner
+rejection, source trust, duplicate identities, file integrity and isolation. The
+additive live HTTP/database check above is separate from these mocked SQL tests.
+
+**Google integration BLOCKED in this runtime:** the active branch contains native
+intake, the external ledger, trusted bridge and read-only source-ledger reader.
+The Forms/Drive pull adapter, local OAuth helper and associated tests exist on
+`feature/external-cv-intake`; they are not integrated automatically. Its private
+worktree has source mapping plus one client/token artifact. Presence alone does
+not establish valid scopes, token freshness, folder permissions or current source
+approval. No private Drive data was read, token validated remotely, Google resource
+changed, branch merged or credential copied. A displayed application form link does
+not itself connect submissions to this database. The existing bridge requires
+an exact operator-approved mapping and SELECT-only source role; respondent-entered
+email is not verified mailbox ownership. Real Google intake needs separate review
+and authorization.
