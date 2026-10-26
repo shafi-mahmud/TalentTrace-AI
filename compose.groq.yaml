@@ -1,0 +1,27 @@
+# Explicit opt-in: the baseline remains provider-disabled and private.
+# The backend alone gets outbound networking. Other integrations stay disabled.
+services:
+  backend:
+    build:
+      dockerfile: ${TALENTTRACE_GROQ_DOCKERFILE:-docker/backend.Dockerfile}
+      args:
+        GROQ_DEPENDENCY_IMAGE: ${TALENTTRACE_BACKEND_DEPENDENCY_IMAGE:-unused}
+    env_file:
+      - ${TALENTTRACE_GROQ_ENV_FILE:?Run the private Groq configuration helper first}
+    environment:
+      CORS_ORIGINS: '["${TALENTTRACE_BROWSER_ORIGIN:?Private runtime origin required}"]'
+      HF_HUB_CACHE: /models/hub
+      OLLAMA_ENABLED: 'false'
+      ASSEMBLYAI_SYNTHETIC_ENABLED: 'false'
+      TELEGRAM_PUBLISHING_ENABLED: 'false'
+      FACE_SYNTHETIC_DEMO_ENABLED: 'false'
+      FACE_WORKFLOW_ENABLED: 'false'
+    volumes:
+      - type: bind
+        source: ${TALENTTRACE_BGE_CACHE:?Existing offline BGE cache required}
+        target: /models/hub/models--BAAI--bge-small-en-v1.5
+        read_only: true
+    networks: [private, groq_egress]
+
+networks:
+  groq_egress: {}

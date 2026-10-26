@@ -27,12 +27,19 @@ supersedes them only for the explicitly tested boundary.
 - [Implemented architecture and security boundaries](docs/architecture/application_overview.md)
 - [Step-by-step recruiter walkthrough and fourteen-area trainer matrix](docs/submission_walkthrough_20261026.md)
 
-The current isolated office demo is `http://submission-20261026.localhost:5276/`,
+The earlier provider-disabled office demo was `http://submission-20261026.localhost:5276/`,
 scheduled to stop **26 October 2026 at 16:14:34 Asia/Dhaka**. Its synthetic account
 details and disposable data are local, ignored artifacts, not transferable Git assets.
 It uses real authenticated APIs and PostgreSQL schema 0017. AI generation/screening,
 Cloud, STT, email, publishing and biometric integrations remain disabled. The sample
 JD and saved scores are seeded fixtures; they do not establish inference quality.
+
+The separate [opt-in Groq Docker runtime](docs/groq_runtime.md) now serves
+`http://groq-20261026.localhost:5280/`. One real synthetic Groq JD request, local
+policy retrieval, saved Job Reference/revision and fresh-session/browser retrieval
+passed. Other external integrations remain disabled. Its documented single
+Compose startup command reuses explicitly prepared private configuration, images
+and a fresh schema-0017 database; first-time setup remains separate.
 
 For a new machine, follow [Docker setup](docs/docker_startup.md) using a verified
 unused Compose project and a fresh database. `python docker/configure.py` creates
