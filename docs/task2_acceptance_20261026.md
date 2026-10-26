@@ -24,3 +24,26 @@ correction has not been retried against Groq. No automatic retry was performed.
 Final focused refinement/chat/record suite: **143 passed**, no skips.
 The existing saved draft remains available; Task 1's real generation/persistence
 PASS remains separate evidence. Private request/result summaries stay ignored.
+
+## B. Publishing review and manual LinkedIn
+
+**Verified in the actual browser:** typing `publish` with a saved draft opens local
+review without selecting/consenting to Groq. Preview contains the original Job
+Reference and complete JD. Discord, Telegram, LinkedIn and Other start unchecked.
+Selecting only LinkedIn, reviewing and confirming exposes manual copying. Clipboard
+content retained the original reference/skills; UI reports “Copied — not posted”.
+No Discord, Telegram or LinkedIn network publication was performed. LinkedIn
+automatic posting is not implemented or claimed.
+
+**Offline tests:** 38 backend publishing tests, 97 standalone MCP Discord/config/
+contract tests and 4 frontend review tests passed. These use mocked transports,
+including ownership/current-draft validation and process-local duplicate fencing.
+The existing fence is not durable across restarts or shared between workers.
+
+**Discord runtime BLOCKED:** private original configuration contains webhook and
+form-link settings, and the original checkout has its MCP Python environment.
+The active worktree lacks that environment; the Docker image has neither the
+MCP package/executable nor webhook/form configuration. Those credentials were not
+copied or activated. Reusing a Windows executable inside the Linux image is not
+valid. A separately reviewed Docker MCP dependency/configuration step is required
+before any separately authorized actual post. No webhook was probed.
