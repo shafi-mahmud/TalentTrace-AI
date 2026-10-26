@@ -12,8 +12,12 @@ Join/media/caption timer. No new Cloud success is inferred.
 Deadline preparation reran 17 focused frontend checks (Home/workspace, publishing
 review, provider selection and scheduling review): **17 passed, 0 failed/skipped**.
 These use test doubles/rendered components, not live AI or browser acceptance.
-The isolated, ignored runner/resource/observer validation passed 36 Python and
+The isolated, ignored runner/resource/observer validation ultimately passed 38 Python and
 8 Node checks; these are harness checks, not application/live acceptance.
+The final startup stopped before backend readiness with AttributeError (origin
+unknown because no stack was retained). No Cloud Join/token/media occurred;
+trial-owned resources were stopped and preserved. See the walkthrough's final
+execution outcome for measured resource evidence and the remaining blocker.
 No new feature, provider inference or UI redesign is introduced by this update.
 
 Source before this documentation: `6d9ce5ecb4dbe048b95280261bc495f40542f077`.

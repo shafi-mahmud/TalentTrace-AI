@@ -36,6 +36,57 @@ Private office reports remain ignored: `data/office-runtime-20261026/INTEGRATED_
 and `BROWSER_BOOKING_PASS.md`. Their **30 HTTP/database checks** and **17 focused
 frontend tests** are historical recorded results, not newly rerun counts.
 Fourteen implemented areas do not mean fourteen complete acceptance passes.
+Five areas (2, 4, 5, 6 and 14) have bounded real office HTTP/database/browser
+evidence as specified above. The other nine retain partial or blocked acceptance;
+this count is not a BID score or a claim of complete end-to-end verification.
+
+## Final coordinated execution outcome
+
+**Resource recovery: BLOCKED; sustained readiness not established.** The previous
+run's manifest records `resource_limit`, without Join roles or media/caption timers.
+It has no peak-memory journal. The new ignored test runner now records bounded
+one-second memory samples, fixed startup phases and grouped process RSS without
+command lines, credentials or browser contents. Fixture setup runs in a bounded
+child process so its imports/pools exit before backend startup. This lifetime
+change is offline-tested; its operational memory benefit remains unmeasured.
+
+One new startup attempt stopped with **AttributeError before backend readiness**.
+Its retained exception category has no stack, so the exact originating line is
+**UNKNOWN**. A missing process-memory field case is now guarded and tested; that
+does not prove it caused this attempt's failure. Future failures retain only
+allowlisted component names and line numbers, never exception messages/locals.
+No additional startup/Cloud attempt followed this failure.
+
+Eight saved samples reached a minimum observed 2,098 MB available RAM, above the
+unchanged 1,024 MB stop floor. WSL RSS reached 2,123 MB during Docker startup;
+the two trial browser trees used about 1.3 GB combined and unrelated editors about
+3.8 GB. Process RSS can double-count shared pages. No Whisper worker started, and
+these measurements do not prove enough memory for two-role recognition. Unrelated
+apps were neither terminated nor reconfigured. Docker/WSL limits were unchanged.
+
+The Cloud dashboard showed Build, 404 of 5,000 included participant minutes,
+2 GB of 50 GB included transfer and a $0.00 next invoice. This was a read-only
+billing check, not a participant connection or guarantee about future billing.
+**F3, F4, F11, simultaneous candidate exclusion, transcript persistence and
+withdrawal: UNOBSERVED in this execution.** Historical Cloud media PASS remains
+separate. The new database/complete fixture did not reach validation.
+
+Cleanup confirmed Cloud unused, new disposable database stopped, both exact owned
+browser roots absent and trial ports 5278/8078/55480 closed. Earlier data, evidence
+and unrelated services were preserved. Private diagnostics remain Git-ignored.
+
+Final focused checks: **38 Python harness/resource tests, 8 Node observer/SDK tests
+and 17 frontend workflow tests passed**, zero failed/skipped in these selections.
+These distinct suites are not added to historical broad-suite totals. Offline
+migration inspection found exactly one head, `0017_booked_interview_email`, whose
+parent is `0016_submission_deletion`; no preserved database was migrated. The
+application/frontend source is unchanged since the previously passing Windows
+TypeScript/build fix, so another expensive build was not required by this
+documentation/ignored-harness increment. No new visual acceptance is claimed.
+
+**Recommended next operator action:** close unused editor/browser windows to free
+memory. A later startup-only validation must first attribute any recurrence of
+the startup error, preserve the floor and show sustained headroom before Join.
 
 ## Recommended executable recruiter walkthrough
 
