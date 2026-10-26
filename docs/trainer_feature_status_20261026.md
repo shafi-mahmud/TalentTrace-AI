@@ -1,5 +1,21 @@
 # Trainer-feature evaluation candidate — 26 October 2026
 
+## Office deadline evidence update
+
+The [submission walkthrough and fourteen-area matrix](submission_walkthrough_20261026.md)
+separates current implementation, recorded automated checks, actual office browser
+evidence and remaining acceptance gaps. It supersedes historical limitations below
+only where explicitly stated. The combined F3/F4/F11 trial remains unaccepted;
+the latest pre-Join watchdog stopped for resource pressure, without any recorded
+Join/media/caption timer. No new Cloud success is inferred.
+
+Deadline preparation reran 17 focused frontend checks (Home/workspace, publishing
+review, provider selection and scheduling review): **17 passed, 0 failed/skipped**.
+These use test doubles/rendered components, not live AI or browser acceptance.
+The isolated, ignored runner/resource/observer validation passed 36 Python and
+8 Node checks; these are harness checks, not application/live acceptance.
+No new feature, provider inference or UI redesign is introduced by this update.
+
 Source before this documentation: `6d9ce5ecb4dbe048b95280261bc495f40542f077`.
 Base local develop: `cba35ab376ade05afb5a896bb64fba3bed5172c5`.
 This is an **offline-tested source candidate**, not full live/trainer/BID acceptance.

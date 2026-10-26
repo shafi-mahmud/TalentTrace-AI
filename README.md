@@ -7,6 +7,20 @@
 * **BID Reference**: Version 1.0 (Pages 1–34)
 * **Author**: Shafi Mahmud
 
+## Current office submission checkpoint — 26 October 2026
+
+The office evaluation branch is separate from `develop` and `main`.
+See the [current acceptance matrix and recruiter walkthrough](docs/submission_walkthrough_20261026.md)
+and [trainer feature status](docs/trainer_feature_status_20261026.md).
+Real synthetic browser scheduling/reload passed. Complete current-source
+F3 → local F4 → F11 media/privacy acceptance remains pending; historical Cloud
+media success and mocked integration tests are labelled separately. Optional
+providers, publishing, email and Windows-incompatible biometric storage must not
+be enabled merely to demonstrate an unavailable capability.
+
+The older release records below remain historical; newer scoped evidence
+supersedes them only for the explicitly tested boundary.
+
 ## Pre-viva release-candidate checkpoint — 19 October 2026
 
 Published private release branch: `feature/pre-viva-release-docs` at `5b6f172`.
