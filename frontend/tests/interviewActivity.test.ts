@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {activity,observeActivity} from '../src/components/interviewActivity.ts';
+import {activity,observeActivity} from '../src/components/interviewActivityObserver.ts';
 
 function documentDouble(){return Object.assign(new EventTarget(),{visibilityState:'visible',fullscreenEnabled:true,fullscreenElement:null}) as unknown as Document;}
 const tick=async()=>{for(let i=0;i<10;i++)await Promise.resolve();};

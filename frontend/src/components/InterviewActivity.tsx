@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import * as api from '../api/interviewAttention';
-import {observeActivity} from './interviewActivity';
+import {observeActivity} from './interviewActivityObserver';
 export default function InterviewActivity({candidate,connected,jobId,interviewId}:{candidate:boolean;connected:boolean;jobId?:string;interviewId?:string}){
  const [checked,setChecked]=useState(false),[sharing,setSharing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [value,setValue]=useState<api.Activity|null>(null);const [fullscreen,setFullscreen]=useState(false);
