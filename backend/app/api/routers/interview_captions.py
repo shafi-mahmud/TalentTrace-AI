@@ -27,13 +27,15 @@ sessions = {}
 def trusted_socket(socket):
     return (not socket.query_params and socket.headers.get("origin") in settings.cors_origins
             and settings.environment == "development" and settings.livekit_synthetic_demo_enabled
-            and (settings.local_caption_model_path is not None or settings.assemblyai_synthetic_enabled))
+            and (settings.local_caption_model_path is not None or settings.assemblyai_synthetic_enabled
+                 or settings.assemblyai_live_enabled))
 
 
 @router.get("/interview-captions/config")
 async def caption_config():
     # No identities, credentials or invitation information.
-    return {"assemblyai_synthetic": settings.assemblyai_synthetic_enabled}
+    return {"assemblyai_synthetic": settings.assemblyai_synthetic_enabled,
+            "assemblyai_live": settings.assemblyai_live_enabled}
 
 
 async def authorize(socket, job_id=None, interview_id=None):
@@ -91,10 +93,18 @@ async def serve(socket, job_id=None, interview_id=None):
         key, role, _, expires = association
         if settings.assemblyai_synthetic_enabled and key != settings.assemblyai_synthetic_interview_id:
             raise ValueError("Interview is not the configured synthetic demonstration")
+        if settings.assemblyai_live_enabled and key != settings.assemblyai_live_interview_id:
+            raise ValueError('Interview is not the configured live demonstration')
         if key not in sessions:
             if sessions:  # Explicit single-room proof bound.
                 raise ValueError("Caption capacity unavailable")
-            if settings.assemblyai_synthetic_enabled:
+            if settings.assemblyai_live_enabled:
+                from app.services.live_streaming_captions import LiveStreamingCaptions
+                from app.integrations.stt.assemblyai_live import AssemblyAILiveStream
+                sessions[key] = LiveStreamingCaptions(
+                    lambda role,final,failure: AssemblyAILiveStream(settings.assemblyai_api_key,final,failure), key,
+                    storage=CaptionTranscript(runtime(),key) if settings.transcript_storage_enabled else None)
+            elif settings.assemblyai_synthetic_enabled:
                 from app.services.synthetic_streaming_captions import SyntheticStreamingCaptions
                 from app.integrations.stt.assemblyai_synthetic import AssemblyAISyntheticStream
                 sessions[key] = SyntheticStreamingCaptions(

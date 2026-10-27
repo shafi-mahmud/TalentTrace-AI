@@ -2,9 +2,10 @@ import {useEffect,useRef,useState} from "react";
 import {captionUrl,isCaption,isFinalization} from "../api/captions";
 import type {Caption} from "../api/captions";
 
-export default function InterviewCaptions({connected,candidate,jobId,interviewId,microphone,microphoneMuted=false,finalizerRef,storageAvailable=false,onFinalizing}:{
+export default function InterviewCaptions({connected,candidate,jobId,interviewId,microphone,microphoneMuted=false,finalizerRef,storageAvailable=false,onFinalizing,generatedMedia=true}:{
   connected:boolean;candidate:boolean;jobId?:string;interviewId?:string;microphone:()=>MediaStreamTrack|null;microphoneMuted?:boolean;
   storageAvailable?:boolean;
+  generatedMedia?:boolean;
   onFinalizing?:(active:boolean)=>void;
   finalizerRef?:{current:(()=>Promise<void>)|null};
 }) {
@@ -26,6 +27,7 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
   const flushTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const terminalStatus=useRef<string|null>(null);
   const [storageStatus,setStorageStatus]=useState("");
+  const [liveCloud,setLiveCloud]=useState(false);
   function closeAudio() {
     audioCleanup.current?.();audioCleanup.current=null;
     workletRef.current=null;trackRef.current=null;
@@ -46,7 +48,11 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
   useEffect(()=>{let cancelled=false;
     void fetch("/api/v1/interview-captions/config",{credentials:"include",cache:"no-store"})
       .then(async r=>{if(!r.ok)throw Error();return r.json();})
-      .then(v=>{if(!cancelled&&typeof v.assemblyai_synthetic==="boolean")setCloud(v.assemblyai_synthetic);})
+      .then(v=>{if(!cancelled&&typeof v.assemblyai_synthetic==="boolean"
+        &&(v.assemblyai_live===undefined||typeof v.assemblyai_live==="boolean")
+        &&!(v.assemblyai_synthetic&&v.assemblyai_live)){
+          setCloud(v.assemblyai_synthetic);setLiveCloud(v.assemblyai_live===true);
+        }})
       .catch(()=>{if(!cancelled)setCloud(null);});
     return()=>{cancelled=true;};},[]);
   if(finalizerRef)finalizerRef.current=finish;
@@ -121,7 +127,7 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
     if(current===generation.current && audio.state!=="running")throw Error();
   }
   function consent() {
-    if(!connected || cloud===null || !agreed || socket.current)return;
+    if(!connected || cloud===null || !agreed || socket.current || (liveCloud&&!generatedMedia))return;
     const current=++generation.current;setRows([]);setState("Connecting captions…");
     duration.current=120;
     forwarded.current={frames:0,samples:0};captured.current=0;endSent.current=false;acknowledged.current=false;finishing.current=false;terminalStatus.current=null;
@@ -140,10 +146,12 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
           if(cloud!==true){stop();return;}
           setReplayReady(true);setState("Synthetic cloud replay ready. Prepare the assistant and obtain both assistant consents before recruiter starts.");return;
         }
-        if(cloud===true){stop();return;}
+        if(cloud===true || (value.source==='assemblyai-live')!==liveCloud){stop();return;}
         setState("Starting caption audio capture…");
         void startAudio(current,ws).then(()=>{
-          if(current===generation.current && context.current?.state==="running")setState(`Live — local CPU captions, maximum ${duration.current===120?"two minutes":`${duration.current} seconds (isolated test)`}`);
+          if(current===generation.current && context.current?.state==="running")setState(liveCloud
+            ? 'Live — AssemblyAI synthetic audio; capture ends after 90 seconds. No automatic retry.'
+            : `Live — local CPU captions, maximum ${duration.current===120?"two minutes":`${duration.current} seconds (isolated test)`}`);
         }).catch(()=>{
           if(current===generation.current){stop();setState("Captions unavailable. Video continues.");}
         });
@@ -153,6 +161,15 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
       else if(value?.kind==="synthetic-termination" && cloud===true){
         if(typeof value.confirmed!=="boolean" || !Number.isInteger(value.sessions) || value.sessions<0 || value.sessions>2){stop();return;}
         terminalStatus.current=value.confirmed ? `Synthetic cloud cleanup acknowledged; sessions: ${value.sessions}.` : "Synthetic cloud termination unconfirmed. Check provider usage; do not retry.";
+      }
+      else if(value?.kind==='provider-termination' && liveCloud){
+        if(Object.keys(value).length!==3 || typeof value.confirmed!=='boolean' || !Number.isInteger(value.sessions) || value.sessions<0 || value.sessions>2){stop();return;}
+        terminalStatus.current=(terminalStatus.current?terminalStatus.current+' ':'')+(value.confirmed
+          ? `AssemblyAI termination acknowledged; streams: ${value.sessions}.`
+          : 'AssemblyAI termination unconfirmed. Check usage; do not retry.');
+      }
+      else if(value?.kind==='error' && liveCloud){
+        terminalStatus.current='Cloud captions failed. No retry; check termination and saved capture status.';
       }
       else if(value?.kind==="stopped"){
         const status=terminalStatus.current;stop();if(status)setState(status);
@@ -182,11 +199,12 @@ export default function InterviewCaptions({connected,candidate,jobId,interviewId
     ws.onclose=()=>{if(current===generation.current){stop();setState("Captions unavailable or stopped. Video continues.");}};
     ws.onerror=()=>{if(current===generation.current){stop();setState("Captions unavailable. Video continues.");}};
   }
-  return <section aria-label="Temporary interview captions"><h2>{cloud ? "Synthetic cloud captions" : "Local captions"}</h2>
-    {cloud===true ? <p>AssemblyAI receives only the fixed server-owned eSpeak question and answer. Free-tier audio/text may be used for model training. No microphone audio is sent to AssemblyAI. Both participants must consent; assistant processing requires separate consent. No saved transcript. One attempt per interview per backend process; no retries.</p> : <p>{storageAvailable ? "Optional English captions processed on this computer. Both participants must consent to captions. No audio/video recording. Temporary captions clear on stop; optional transcript storage requires separate consent." : "Optional English captions processed on this computer. Both participants must consent. No recording or saved transcript; stop clears captions."}</p>}
+  return <section aria-label="Temporary interview captions"><h2>{liveCloud ? 'AssemblyAI live captions' : cloud ? "Synthetic cloud captions" : "Local captions"}</h2>
+    {liveCloud ? <p>Development test only: generated microphone-track audio is sent to AssemblyAI in two authenticated role streams. Free-tier audio/text may be used for model training. Both participants must independently consent. No audio/video recording. Optional transcript storage requires separate consent before capture; F11 consent is not required. One attempt per configured interview per backend process; no retries or silent fallback.</p> : cloud===true ? <p>AssemblyAI receives only the fixed server-owned eSpeak question and answer. Free-tier audio/text may be used for model training. No microphone audio is sent to AssemblyAI. Both participants must consent; assistant processing requires separate consent. No saved transcript. One attempt per interview per backend process; no retries.</p> : <p>{storageAvailable ? "Optional English captions processed on this computer. Both participants must consent to captions. No audio/video recording. Temporary captions clear on stop; optional transcript storage requires separate consent." : "Optional English captions processed on this computer. Both participants must consent. No recording or saved transcript; stop clears captions."}</p>}
+    {liveCloud&&!generatedMedia&&<p role="alert">Select generated synthetic media before using cloud captions.</p>}
     {storageStatus && <p role="status">{storageStatus}</p>}
-    <label><input type="checkbox" checked={agreed} disabled={!connected || cloud===null || !!socket.current} onChange={e=>setAgreed(e.target.checked)}/> {cloud ? "I consent to transmitting the fixed synthetic eSpeak audio to AssemblyAI, including possible model-training use." : "I consent to temporary microphone processing for this synthetic test: two minutes by default, up to five minutes only in an isolated extended test."}</label>
-    <button disabled={!connected || cloud===null || !agreed || !!socket.current} onClick={consent}>Consent to captions</button>
+    <label><input type="checkbox" checked={agreed} disabled={!connected || cloud===null || !!socket.current || (liveCloud&&!generatedMedia)} onChange={e=>setAgreed(e.target.checked)}/> {liveCloud ? 'I consent to transmitting my generated synthetic microphone-track audio to AssemblyAI, including possible model-training use.' : cloud ? "I consent to transmitting the fixed synthetic eSpeak audio to AssemblyAI, including possible model-training use." : "I consent to temporary microphone processing for this synthetic test: two minutes by default, up to five minutes only in an isolated extended test."}</label>
+    <button disabled={!connected || cloud===null || !agreed || !!socket.current || (liveCloud&&!generatedMedia)} onClick={consent}>Consent to captions</button>
     {cloud===true && !candidate && <button disabled={!replayReady || replayStarted} onClick={()=>{
       if(socket.current?.readyState===WebSocket.OPEN){setReplayStarted(true);socket.current.send("synthetic-start");}
     }}>Start fixed synthetic cloud replay</button>}

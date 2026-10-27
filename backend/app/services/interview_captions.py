@@ -75,7 +75,7 @@ class CaptionSession:
             if self.consent == ROLES and self.started is None:
                 try:
                     for name in ROLES:
-                        provider = self.factory()
+                        provider = self._provider_for(name)
                         self.providers[name] = provider
                         await provider.start()
                         if self.stopped or self.expired():
@@ -85,11 +85,17 @@ class CaptionSession:
                         await self.storage.start()
                     self.started = self.clock()
                     self.started_wall = time.time()
-                    await self.broadcast({"kind": "active", "duration_seconds": self.duration_seconds})
+                    await self.broadcast(self.active_event())
                 except Exception:
                     await self.stop()
             elif self.started is None:
                 await self.broadcast({"kind": "waiting"})
+
+    def _provider_for(self, role):
+        return self.factory()
+
+    def active_event(self):
+        return {"kind":"active", "duration_seconds":self.duration_seconds}
 
     async def stop(self):
         # Close the consent gate synchronously before awaiting cleanup.

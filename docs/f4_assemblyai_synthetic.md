@@ -1,5 +1,10 @@
 # Optional synthetic-only AssemblyAI → F4 captions → F11 demonstration
 
+This historical fixed replay is distinct from the later
+[Task 4 live-development F4 implementation and acceptance](task4_assemblyai_live_20261027.md).
+The new opt-in flag accepts authenticated browser PCM, supports separate optional
+storage and does not require F11. This document's replay contract stays unchanged.
+
 Initial implementation increment, 20 October 2026: not activated or externally
 exercised at that point. Later attempt diagnosis and offline fix are recorded below.
 The release checkout and running environments are unchanged. No new provider

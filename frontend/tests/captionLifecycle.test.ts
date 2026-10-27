@@ -7,7 +7,7 @@ import ts from "typescript";
 import {isCaption,isFinalization} from "../src/api/captions.ts";
 
 // Exercise production handlers with controlled hooks/browser APIs, no media/network.
-function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspended?:boolean;cloud?:boolean;recruiter?:boolean}={}) {
+function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspended?:boolean;cloud?:boolean;recruiter?:boolean;liveCloud?:boolean;generatedMedia?:boolean}={}) {
   const states:any[]=[],refs:any[]=[],effects:any[]=[],sockets:any[]=[],audios:any[]=[],worklets:any[]=[],timers=new Map<number,{callback:()=>void;ms:number}>();
   const finalizerRef:{current:(()=>Promise<void>)|null}={current:null};let timerId=100;
   let stateIndex=0,refIndex=0,finishModule=()=>{},finishResume=()=>{};
@@ -42,12 +42,12 @@ function harness(options:{pendingModule?:boolean;pendingResume?:boolean;suspende
     URL,AudioContext:Audio,MediaStream:class{},AudioWorkletNode:class{port:any={onmessage:null,sent:[],postMessage(v:any){this.sent.push(v);}};constructor(){worklets.push(this);}connect(){}},WebSocket:Socket,
     setTimeout:(callback:()=>void,ms:number)=>{const id=++timerId;timers.set(id,{callback,ms});return id;},clearTimeout:(id:number)=>timers.delete(id),setInterval:()=>2,clearInterval(){}});
   let microphoneMuted=false;
-  function render(){stateIndex=0;refIndex=0;return exports.default({connected:true,candidate:!options.recruiter,microphone:()=>track,microphoneMuted,finalizerRef});}
+  function render(){stateIndex=0;refIndex=0;return exports.default({connected:true,candidate:!options.recruiter,microphone:()=>track,microphoneMuted,finalizerRef,generatedMedia:options.generatedMedia??true});}
   function find(node:any,p:(n:any)=>boolean):any {
     if(!node || typeof node!=="object")return null;if(p(node))return node;
     for(const child of [node.props?.children].flat(Infinity)){const found=find(child,p);if(found)return found;}return null;
   }
-  render();states[3]=options.cloud??false;const cleanup=effects[0]();
+  render();states[3]=options.cloud??false;states[7]=options.liveCloud??false;const cleanup=effects[0]();
   function consent(){let tree=render();find(tree,n=>n.type==="input").props.onChange({target:{checked:true}});tree=render();
     find(tree,n=>n.type==="button" && n.props.children==="Consent to captions").props.onClick();const ws=sockets.at(-1);ws.onopen();return ws;}
   async function flush(){for(let i=0;i<12;i++)await Promise.resolve();}
@@ -171,4 +171,22 @@ test("candidate has no replay control and mode mismatch fails closed",async()=>{
   const ws=h.consent();h.event(ws,{kind:"active"});assert.equal(ws.readyState,3);assert.equal(h.audios.length,0);
   const local=harness(),other=local.consent();local.event(other,{kind:"active",source:"assemblyai-synthetic"});
   assert.equal(other.readyState,3);assert.equal(local.audios.length,0);
+});
+
+test('live cloud uses the existing AudioWorklet after independent consent, without F11 replay',async()=>{
+  const h=harness({liveCloud:true}),ws=h.consent();
+  h.event(ws,{kind:'active',duration_seconds:120,source:'assemblyai-live'});await h.flush();
+  assert.equal(h.audios.length,1);assert.equal(h.worklets.length,1);
+  assert.match(h.states[1],/AssemblyAI/);
+  assert.equal(h.find(h.render(),(n:any)=>n.type==='button'&&n.props.children==='Start fixed synthetic cloud replay'),null);
+  h.event(ws,{kind:'provider-termination',confirmed:false,sessions:2});h.event(ws,{kind:'stopped'});
+  assert.match(h.states[1],/termination unconfirmed/);
+});
+
+test('live mode rejects physical-media selection and local/live source mismatch',()=>{
+  const physical=harness({liveCloud:true,generatedMedia:false});
+  const button=physical.find(physical.render(),(n:any)=>n.type==='button'&&n.props.children==='Consent to captions');
+  assert.equal(button.props.disabled,true);
+  const live=harness({liveCloud:true}),ws=live.consent();live.event(ws,{kind:'active'});
+  assert.equal(ws.readyState,3);assert.equal(live.audios.length,0);
 });

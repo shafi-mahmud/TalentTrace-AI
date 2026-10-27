@@ -94,9 +94,15 @@ async def setup(runtime,slow=False):
 def test_authorized_bridge_suggestion_private_delivery_and_withdrawal(runtime):
  async def run():
   manager,access,clock=runtime;s,b,events,workers,_,_=await setup(runtime)
+  # Mock transport yields can exceed the 10 ms test settle under Windows load.
+  # Hold calculation until the complete replay/fake clock is ready; otherwise an
+  # early provisional calculation can clear records before this assertion.
+  replay_ready=asyncio.Event();work=b._work
+  async def after_replay():await replay_ready.wait();await work()
+  b._work=after_replay
   with pytest.raises(ValueError):await s.start_replay('candidate')
   with pytest.raises(ValueError):await s.audio('candidate',b'private microphone')
-  await s.start_replay('recruiter');await s.replay;clock[0]+=4
+  await s.start_replay('recruiter');await s.replay;clock[0]+=4;replay_ready.set()
   if b.task:await asyncio.wait_for(asyncio.shield(b.task),3)
   assert [r.role for r in b.records]==['recruiter','candidate']
   assert all(r.source.caption_run_id==s.caption_run_id for r in b.records)

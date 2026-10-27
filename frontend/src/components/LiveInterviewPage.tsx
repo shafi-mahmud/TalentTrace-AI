@@ -147,7 +147,7 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
       <label>Generated synthetic speech WAV<input type="file" accept=".wav" disabled={joined} onChange={e=>void loadSynthetic(e.target.files?.[0])}/></label>
       <button disabled={!joined||!syntheticSpeech} onClick={()=>media.current?.play()}>Play generated synthetic speech</button></section>}
     {!candidate && jobId && interview && <InterviewAnalysis key={`analysis:${interview.id}`} jobId={jobId} interviewId={interview.id} revision={interview.criteria_revision}/>}
-    <InterviewCaptions onFinalizing={active=>{captionDraining.current=active;}} storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
+    <InterviewCaptions generatedMedia={synthetic} onFinalizing={active=>{captionDraining.current=active;}} storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
     <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
     <div className="interview-media"><section hidden={!sharing.active}><h2>Your shared screen</h2><div ref={localScreen}/></section><section hidden={!remoteSharing}><h2>Shared screen</h2><div ref={remoteScreen}/></section></div>

@@ -1,6 +1,6 @@
 # Optional STT dependencies; not part of normal backend installation.
 # Local CPU captions need a separately provisioned model; no runtime downloads.
-# websockets also supports explicitly enabled fixed synthetic AssemblyAI replay.
-# No automatic cloud fallback or browser-audio upload is supported.
+# websockets supports separately opt-in live-development AssemblyAI captions
+# and the old fixed synthetic replay. No automatic provider fallback.
 faster-whisper==1.2.1
 websockets==16.1.1
