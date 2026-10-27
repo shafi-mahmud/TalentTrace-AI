@@ -112,3 +112,26 @@ test('late discovery and screening responses cannot populate a changed job conte
     assert.equal(write.props.busy, false);
     assert.equal(write.button('Screen imported batch'), undefined);
 });
+
+test('discovery and explicit batch selection clear external consent without model calls', async () => {
+    const x = harness();
+    let consent = true;
+    x.props.onContextChange = () => { consent = false; };
+    x.button('Load imported batches').props.onClick();
+    await x.tick();
+    assert.equal(consent, false);
+    consent = true;
+    x.button('Review imported batch').props.onClick();
+    assert.equal(consent, false);
+    assert.equal(x.writes, 0);
+
+    const late = harness({ holdRead: true });
+    let staleResets = 0;
+    late.props.onContextChange = () => { staleResets++; };
+    late.button('Load imported batches').props.onClick();
+    late.props.jobId = batch;
+    late.render();
+    late.release();
+    await late.tick();
+    assert.equal(staleResets, 0);
+});

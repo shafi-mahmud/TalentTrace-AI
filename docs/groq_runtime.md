@@ -5,6 +5,12 @@ The Docker image now includes English OCR and the existing Discord MCP server.
 That record distinguishes successful real refinement/scanned-PDF Groq screening
 from locally configured, mocked-only Discord delivery and blocked Google access.
 
+Latest scoped follow-up: [Task 3 recruiter/F3 acceptance](task3_acceptance_20261027.md).
+Available Groq now defaults after authenticated discovery for new JD/CV contexts;
+external consent remains unchecked and existing conversations keep their provider.
+The one authorized two-party synthetic Cloud trial passed; its temporary F3
+configuration was removed afterward. The ordinary startup below keeps F3 disabled.
+
 ## Implemented and verified boundary
 
 The existing Groq interpreter, LangGraph JD generation, company-policy retrieval,
@@ -26,7 +32,8 @@ full BID acceptance or future free-tier availability.
 
 Fresh authenticated HTTP retrieval and browser refresh/retrieval passed. The
 browser displayed the persisted draft and carried the same job into Candidate
-Screening. Groq is the first available provider option; selection remains explicit.
+Screening. In the original Task 1 acceptance Groq required explicit selection;
+Task 3 now defaults it only after authenticated discovery confirms availability.
 Its external-processing checkbox starts unchecked. A request without that consent
 was rejected before inference. No screening request or second model request was
 made during the browser checks. Saved-conversation responses omit null fields;

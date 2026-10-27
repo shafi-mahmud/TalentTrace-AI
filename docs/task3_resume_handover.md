@@ -1,6 +1,27 @@
 # Task 3 resume handover
 
-Updated 27 October 2026 (Asia/Dhaka). This is a checkpoint, not completed F3 acceptance.
+Updated 27 October 2026 (Asia/Dhaka). Current results are in the resumed closeout;
+the earlier checkpoint is retained below for continuity.
+
+## Resumed acceptance closeout
+
+The checkpoint below was committed as `86699858d990ace28fb46e98096a56f4645411d1`.
+Subsequent actual acceptance is recorded in
+[Task 3 acceptance](task3_acceptance_20261027.md), which supersedes the unfinished
+statuses below: provider defaults/pinning, stored provenance, consent reset,
+reviewed booking/reload, fresh candidate invitation and two-party Cloud F3 passed.
+One Join per role lasted 61.9 seconds through both normal Leaves. No F4/F11 trial
+was performed. The claimed invitation and completed trial appointment must not
+be reused for another acceptance attempt.
+
+Additional files: `frontend/tests/importedBatches.test.ts` adds consent-reset and
+stale-context regression coverage; `docs/task3_acceptance_20261027.md` records live
+evidence; `docs/groq_runtime.md` links the new result/default-provider behavior.
+The normal Docker app remains healthy with F3 disabled and private Cloud credentials
+removed from its active backend configuration. No merge or push occurred.
+
+The sections below preserve the exact earlier checkpoint context. For a future
+task, read the closeout first and do not repeat the completed Cloud acceptance.
 
 ## Git and scope
 
@@ -103,7 +124,7 @@ Keep captions, storage, evaluation, assistant, email and biometrics disabled.
 After a trial, restore only the backend to the two-file baseline using
 `up -d --no-deps --no-build --wait backend`; preserve the database and frontend.
 
-## NEXT SAFE ACTION
+## Earlier checkpoint next action (completed by the closeout above)
 
 Continue authenticated browser acceptance without model requests. Select the
 existing Task 2 Synthetic Intake A saved candidate, verify it remains unbooked,
