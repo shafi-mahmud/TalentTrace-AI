@@ -85,3 +85,11 @@ Recheck current AssemblyAI free credits/no paid billing and LiveKit Build allowa
 use fresh fictional access, independent storage/caption consents, bounded capture
 and no automatic retry. Task 4's earlier real API recognition/persistence evidence
 and historical F3 success remain separate from this mocked browser evidence.
+
+## Task 4C follow-up
+
+The receipt-timeline defect was reproduced and corrected offline. A fresh browser
+run saved and reloaded 24/24 turns and verified deletion. See
+[Task 4C evidence and historical evidence limits](task4c_transcript_persistence_20261027.md).
+The original Task 4B PARTIAL record above remains historical; no live provider
+browser acceptance is implied by the follow-up.

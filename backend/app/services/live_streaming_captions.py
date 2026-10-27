@@ -60,9 +60,9 @@ class LiveStreamingCaptions(CaptionSession):
             await self.stop()
 
     def _time(self, role, sample, *, is_end=False):
-        for lower,upper,start in self.timeline[role]:
+        for lower,upper,start,end in self.timeline[role]:
             if (lower <= sample < upper if not is_end else lower < sample <= upper or sample == lower == 0):
-                return start+(sample-lower)/16000
+                return start+(sample-lower)/(upper-lower)*(end-start)
         raise ValueError('Unverified recognition interval')
 
     async def audio(self, role, pcm):
@@ -78,10 +78,14 @@ class LiveStreamingCaptions(CaptionSession):
         if lower+samples>120*16000 or lower+samples>(now+.5)*16000 or len(self.timeline[role])>=1201:
             raise ValueError('Live audio limit')
         last = self.timeline[role][-1] if self.timeline[role] else None
-        start=max(0,now-samples/16000,last[2]+(last[1]-last[0])/16000 if last else 0)
-        if start+samples/16000>120:
+        # Receipt-based estimates must never outrun observed elapsed time.
+        # Burst/jitter admission can deliver samples slightly ahead of nominal
+        # pacing; stretching the previous frame forward invents future times.
+        # Compress that frame's estimate within its observed receipt interval.
+        start=max(0,now-samples/16000,last[3] if last else 0)
+        if now>120:
             raise ValueError('Live audio interval limit')
-        self.timeline[role].append((lower,lower+samples,start))
+        self.timeline[role].append((lower,lower+samples,start,now))
         self.frames[role]+=1; self.accepted_samples[role]+=samples
         if len(pcm)!=3200:self.tail_roles.add(role)
         self.processing.add(role); self.idle[role].clear()

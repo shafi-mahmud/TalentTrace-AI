@@ -236,3 +236,74 @@ def test_ninety_second_capture_guard_requests_normal_drain(monkeypatch):
         await s.finalizer
         assert s.stopped and s.final_result['outcome']=='drained' and all(ws.closed for ws in sockets.values())
     asyncio.run(run())
+
+
+def test_receipt_jitter_never_pushes_live_turns_into_future_storage_time():
+    """Browser-sized frames can arrive 10 ms early without losing sequence 3."""
+    from datetime import datetime, timezone
+    from app.services.caption_transcript import CaptionTranscript
+    from app.services.interview_transcripts import TranscriptError
+
+    async def run():
+        saved = []
+        rejected = []
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        clock = [100.0]
+
+        async def append(owner, event, **kwargs):
+            if event.end_ms > round((clock[0] - 100) * 1000):
+                rejected.append((event.sequence, 'invalid_recognition_time'))
+                raise TranscriptError('invalid_recognition_time')
+            saved.append(event)
+
+        storage = CaptionTranscript(SimpleNamespace(storage=SimpleNamespace(append_final=append)), uuid4())
+        storage.capture, storage.owner, storage.started_at = uuid4(), uuid4(), base
+        # ready() starts the capture; use an already-authorized in-memory storage
+        # adapter so the test isolates mapping, not database setup.
+        storage.start = AsyncMock()
+        s, workers, _, _, clock = await ready(storage=storage)
+        start = clock[0]
+        try:
+            for frame in range(1, 21):
+                clock[0] = start + frame / 10 - (.01 if frame > 10 else 0)
+                for role in ('recruiter', 'candidate'):
+                    await s.audio(role, bytes(3200))
+                if frame % 10 == 0:
+                    for role in ('recruiter', 'candidate'):
+                        await workers[role].on_final('Synthetic final.', frame * 100 - 100, frame * 100)
+            assert rejected == []
+            assert [e.sequence for e in saved] == [1, 2, 3, 4]
+            assert [e.role for e in saved] == ['recruiter', 'candidate'] * 2
+            assert all(e.start_ms <= e.end_ms <= 1990 for e in saved)
+        finally:
+            # Avoid mocking a storage success result for this mapping-only test.
+            s.storage = None
+            await s.stop()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('category,uncertain,expected_status', [
+    ('invalid_recognition_time', False, 'incomplete'),
+    ('transcript_storage_unavailable', False, 'incomplete'),
+    ('transcript_storage_unavailable', True, 'unconfirmed'),
+])
+def test_live_storage_failure_never_becomes_saved_or_retried(category, uncertain, expected_status):
+    from app.services.caption_transcript import CaptionTranscript
+    from app.services.interview_transcripts import TranscriptError
+
+    async def run():
+        append = AsyncMock(side_effect=TranscriptError(category, outcome_uncertain=uncertain))
+        finish = AsyncMock(return_value=SimpleNamespace(status='interrupted', persistence_outcome='partial'))
+        storage = CaptionTranscript(SimpleNamespace(storage=SimpleNamespace(append_final=append, finish_session=finish)), uuid4())
+        storage.capture, storage.owner = uuid4(), uuid4()
+        value = dict(sequence=1, role='recruiter', start=0., end=.1, text='Synthetic final.')
+        await storage.caption(value)
+        await storage.caption({**value, 'sequence':2})
+        counts = {role:dict(accepted_samples=1600, processed_samples=1600) for role in ('recruiter','candidate')}
+        result = await storage.finish(dict(outcome='drained', roles=counts))
+        assert result == dict(kind='storage', status=expected_status, committed_turns=0)
+        assert append.await_count == 1
+        assert finish.await_args.kwargs['completed'] is False
+        assert finish.await_args.kwargs['persistence_failed'] is True
+        assert finish.await_args.kwargs['evidence']['commit_uncertain'] is uncertain
+    asyncio.run(run())

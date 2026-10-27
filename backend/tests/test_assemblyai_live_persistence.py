@@ -198,6 +198,13 @@ def run_connected(*, real=False, storage=True, monkeypatch=None, evidence=None):
             result['persisted_turns']=len(rows)
             if storage:
                 result['capture_completed']=any(row['status']=='completed' and row['outcome']=='saved' for row in page.json()['captures'])
+                by_sequence={event['sequence']:event for event in captions}
+                assert {row['sequence'] for row in rows}==set(by_sequence)
+                assert all(row['role']==by_sequence[row['sequence']]['role'] for row in rows)
+                offsets={row[key+'_ms']-round(by_sequence[row['sequence']][key]*1000)
+                    for row in rows for key in ('start','end')}
+                assert len(offsets)==1 and min(offsets)>=0
+
                 # New authenticated GET reads persisted rows, not the WebSocket event buffer.
                 reloaded=recruiter.get(f['path']+'/transcript')
                 result['reload_consistent']=reloaded.status_code==200 and [t['id'] for t in reloaded.json()['turns']]==[t['id'] for t in rows]
