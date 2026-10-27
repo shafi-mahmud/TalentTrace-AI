@@ -25,10 +25,10 @@ export default function InterviewSchedulingPage({draft,selection,onSelect,onOpen
     !draft.reviewed || !draft.savedSnapshot || !draft.revision ? h('p',{className:'card empty-state',role:'status'},'Confirm the current job requirements in Candidate Screening before scheduling.') :
     h('div',{className:'scheduling-sections'},
       h('p',{className:'session-confirmation'},`${draft.jobReference} · Confirmed criteria revision ${draft.revision}`),
-      h(BulkScheduling,{jobId:draft.draftId,revision:draft.revision}),
       h(SavedScores,{jobId:draft.draftId,revision:draft.revision,onSelectCandidate:onSelect}),
       h(InterviewScheduling,{jobId:draft.draftId,criteriaRevision:draft.revision,scoring:selected?.batch??null,candidate:selected?.candidate??null,onOpenInterview}),
       selected && h('section',{className:'card selected-candidate','aria-label':'Selected candidate invitation'},
         h('h2',null,'Alternative: candidate chooses a slot'),h('p',null,`Candidate reference: ${selected.candidate.upload_id.slice(0,8)}`),
-        h(SchedulingInvite,{key:selected.batch.batch_id+selected.candidate.upload_id,batch:selected.batch,candidate:selected.candidate})))));
+        h('details',{className:'supporting-details'},h('summary',null,'Candidate self-scheduling invitation'),h(SchedulingInvite,{key:selected.batch.batch_id+selected.candidate.upload_id,batch:selected.batch,candidate:selected.candidate}))),
+      h('details',{className:'stage-disclosure'},h('summary',null,'Email scheduling invitations (optional)'),h(BulkScheduling,{jobId:draft.draftId,revision:draft.revision})))));
 }

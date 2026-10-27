@@ -40,7 +40,7 @@ export function AssessmentView({report:r,preparedAt}:{report:ConsolidatedReport;
   r.cv.dimensions.length===0&&h('p',null,'No persisted F2 dimension evidence is available; no breakdown is invented.'),
   h('h4',null,'Interview evidence and F5'),h('p',{role:'status'},messages[r.interview.state]),
   r.interview.state==='available'&&h('div',null,
-   h('p',null,`Interview ${r.interview.interview_id} · saved operation ${r.interview.operation_id} · rubric ${r.interview.rubric_version}`),
+   h('details',{className:'supporting-details'},h('summary',null,'Interview evidence details'),h('p',null,`Interview ${r.interview.interview_id} · saved operation ${r.interview.operation_id} · rubric ${r.interview.rubric_version}`)),
    h('p',null,`Interview evidence retention deadline (UTC): ${r.interview.retention_deadline}`),
    h('p',null,r.interview.warning),
    h('h4',null,'Requirement coverage and gaps'),

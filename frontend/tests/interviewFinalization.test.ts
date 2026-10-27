@@ -16,6 +16,7 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     on(){return this;}async connect(){joined++;}async disconnect(){disconnected++;}
   }
   function Panel(){return null;}
+  function StoragePanel(){return null;}
   const source=ts.transpileModule(readFileSync(new URL("../src/components/LiveInterviewPage.tsx",import.meta.url),"utf8").replace('import.meta.env.DEV','false'),
     {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   const require=createRequire(import.meta.url),exports:any={};
@@ -26,7 +27,7 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     if(name==="livekit-client")return {Room,RoomEvent:{},Track:{Source:{},Kind:{}},setLogLevel(){}};
     if(name==="../api/livekitInterview")return {interviewAccess:async()=>({server_url:"wss://synthetic.invalid",token:"synthetic"})};
     if(name==="./InterviewActivity")return {__esModule:true,default:()=>null};
-    if(name==="./TranscriptPanel")return {__esModule:true,default:()=>null};
+    if(name==="./TranscriptPanel")return {__esModule:true,default:StoragePanel};
     if(name==="./FaceWorkflowPanel")return {__esModule:true,default:()=>null};
     if(name==="./InterviewCopilot")return {__esModule:true,default:()=>null};
     if(name==="./InterviewAnalysis")return {__esModule:true,default:()=>null};
@@ -40,7 +41,12 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     return [...(p(node)?[node]:[]),...[node.props?.children].flat(Infinity).flatMap(n=>all(n,p))];
   }
   const tick=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
-  let tree=render();let inputs=all(tree,n=>n.type==="input");
+  let tree=render();
+  const ordered=all(tree,n=>n.type===StoragePanel||n.type===Panel);
+  assert.equal(ordered[0].type,StoragePanel,'storage must be presented before optional captions');
+  assert.equal(ordered[1].type,Panel);
+  assert.equal(all(tree,n=>n.props?.['aria-label']==='Interview controls').length,1);
+  let inputs=all(tree,n=>n.type==="input");
   inputs[0].props.onChange({target:{checked:false}});inputs[1].props.onChange({target:{checked:true}});
   tree=render();all(tree,n=>n.type==="button"&&n.props.children==="Join interview")[0].props.onClick();await tick();
   assert.equal(joined,1);tree=render();

@@ -30,11 +30,11 @@ export default function RecruiterHome({jobs,activeJobId,loading,error,busy=false
       h('div',{className:'home-job-grid'},...jobs.map(job=>h('article',{key:job.id,className:`card home-job${job.id===activeJobId?' is-active':''}`},
         h('div',{className:'home-job-heading'},h('h3',null,job.job_title),job.id===activeJobId?h('span',{className:'review-badge'},'Active job'):null),
         h('p',{className:'home-job-reference'},h('span',null,'Job Reference'),h('strong',null,job.job_reference)),
-        h('p',{className:'helper-text'},`Revision ${job.revision} · ${job.snapshot?'Screening criteria confirmed':'Screening criteria need review'}`),
-        h('p',null,`Next: ${job.snapshot?'Review applicants and select an eligible candidate.':'Review and confirm this job’s screening criteria.'}`),
-        h('div',{className:'button-row'},
+        h('p',{className:'helper-text'},`Revision ${job.revision}`),
+        h('ol',{className:'job-progress','aria-label':'Saved job progress'},h('li',null,'Job saved'),h('li',null,job.snapshot?'Screening criteria confirmed':'Screening criteria need review')),
+        h('button',{type:'button',className:'button button-primary',disabled:busy,onClick:()=>onOpen(job,'cv')},job.snapshot?'Review applicants':'Review criteria'),
+        h('details',{className:'supporting-details home-job-actions'},h('summary',null,'More job actions'),h('div',{className:'button-row'},
           job.conversation_id ? h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>onOpen(job,'jd')},'Refine saved JD') : null,
           h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>onSelect(job),'aria-pressed':job.id===activeJobId},'Select active job'),
-          h('button',{type:'button',className:'button button-primary',disabled:busy,onClick:()=>onOpen(job,'cv')},job.snapshot?'Review applicants':'Review criteria'),
-          h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>onOpen(job,'scheduling')},'Interview Scheduling')))))));
+          h('button',{type:'button',className:'button button-secondary',disabled:busy,onClick:()=>onOpen(job,'scheduling')},'Interview Scheduling'))))))));
 }

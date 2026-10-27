@@ -59,3 +59,9 @@ test('saved provenance is allowlisted and never inferred for legacy scores',()=>
  assert.match(renderToStaticMarkup(h(ScoringProvenance,{provenance:metadata})),/Groq.*synthetic-model/);
  assert.match(renderToStaticMarkup(h(ScoringProvenance,{provenance:null})),/not recorded/);
 });
+
+test('provider options collapse while Groq disclosure and unchecked consent stay visible',()=>{
+ const html=renderToStaticMarkup(h(ProviderSelection,{value:'groq',consent:false,disabled:false,onChange(){},onConsent(){}}));
+ assert.match(html,/JD AI · Groq/);assert.ok(html.indexOf('Send JD conversation')>html.indexOf('</details>'));
+ assert.doesNotMatch(html,/checked=""/);assert.match(html,/aria-label="JD AI"/);
+});

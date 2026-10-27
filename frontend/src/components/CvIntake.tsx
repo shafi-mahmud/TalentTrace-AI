@@ -187,7 +187,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
 
   return <div className="app-shell chat-page recruiter-page screening-page">
     <main>
-      <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>Review Applicants</h1><p className="page-description">Confirm requirements, choose CVs and review ranked applicants.</p></div>
+      <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>Review Applicants</h1><p className="page-description">Confirm criteria, choose CVs, then review screening evidence before selecting candidates.</p></div>
       <button className="button button-secondary" onClick={() => onGoToScheduling()}>Schedule Interview</button>
       <ScreeningWorkflowSteps hasSuggestions={Boolean(criteriaDraft)} hasSnapshot={Boolean(snapshot)} hasBatch={Boolean(result)} isScreened={Boolean(screening)} />
       <section className="screening-setup" aria-label="Candidate screening workspace">

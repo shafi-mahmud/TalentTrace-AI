@@ -61,7 +61,17 @@ test('Home treats server job titles as text',()=>{
 test('Home provides a five-stage journey and honest next action from confirmed criteria',()=>{
  const html=renderToStaticMarkup(h(RecruiterHome,base));
  for(const label of ['Create Job','Review Applicants','Schedule Interview','Conduct Interview','Assessment'])assert.ok(html.includes(label));
- assert.match(html,/Next: Review and confirm/);
+ assert.match(html,/Screening criteria need review/);assert.match(html,/>Review criteria<\/button>/);
  const ready={...jobs[0],snapshot:{job_reference:jobs[0].job_reference,job_title:jobs[0].job_title,criteria_confirmed:true as const,criteria:jobs[0].suggestions.criteria}};
- assert.match(renderToStaticMarkup(h(RecruiterHome,{...base,jobs:[ready]})),/Next: Review applicants/);
+ assert.match(renderToStaticMarkup(h(RecruiterHome,{...base,jobs:[ready]})),/>Review applicants<\/button>/);
+});
+
+test('each Home job has one primary next action and secondary actions stay expandable',()=>{
+ const tree=RecruiterHome(base);const cards=all(tree,n=>n.type==='article');assert.equal(cards.length,2);
+ for(const card of cards){
+  assert.equal(all(card,n=>n.type==='button'&&n.props.className==='button button-primary').length,1);
+  const actions=all(card,n=>n.type==='details'&&n.props.className.includes('home-job-actions'));
+  assert.equal(actions.length,1);assert.notEqual(actions[0].props.open,true);
+  assert.equal(all(card,n=>n.type==='ol'&&n.props['aria-label']==='Saved job progress').length,1);
+ }
 });

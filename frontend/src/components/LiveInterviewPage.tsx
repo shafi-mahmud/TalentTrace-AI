@@ -117,40 +117,43 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
     catch {if(current===generation.current)setError("Media control failed. Leave the interview if privacy is uncertain.");}
     finally {if(current===generation.current)setBusy(false);}
   }
-  return <main className="app-shell"><section className="card" aria-label="Synthetic interview proof">
+  return <main className="app-shell interview-page"><section className="card" aria-label="Synthetic interview proof">
     <h1>{candidate?"Candidate interview":"Recruiter interview"}</h1><p>Synthetic development testing only. No audio/video recording. Optional text storage has separate consent controls below.</p>
     {interview&&<p role="status">{interview.job_reference} · {interviewJoinWindow(interview.scheduled_at,interview.duration_minutes,interview.timezone)}</p>}
-    {!candidate && <section aria-label="Candidate invitation"><h2>Candidate invitation</h2><p>One-use link. Treat it as a secret. Join window: 10 minutes before until 15 minutes after the interview.</p>
+    {candidate&&<p className="helper-text">Check your appointment time in your confirmation. This page checks access to the scheduled interview before joining.</p>}
+    {!candidate && <details className="supporting-details"><summary>Manage candidate invitation</summary><section aria-label="Candidate invitation"><h2>Candidate invitation</h2><p>One-use link. Treat it as a secret. Join window: 10 minutes before until 15 minutes after the interview.</p>
       <button disabled={inviteBusy} onClick={()=>void createInvite()}>Create candidate invitation</button>
       <button disabled={inviteBusy} onClick={()=>void revoke()}>Revoke candidate access</button>
       {invite && <><p>Expires: {new Date(invite.expires).toLocaleString()}</p><button onClick={()=>void navigator.clipboard.writeText(invite.url).catch(()=>setError("Clipboard unavailable. Generate and copy in a supported browser."))}>Copy invitation link</button><p>Only the newly generated link can be copied. Previous links are invalidated.</p></>}
-    </section>}
+    </section></details>}
     <p role="status">{state} · Remote participants: {peers}</p>
     {peers>0 && <p>Remote microphone: {remoteMuted?"muted":"active"} · Remote camera: {remoteCameraOff?"off":"on"}</p>}
+    <h2>Prepare your interview</h2>
     <fieldset disabled={busy || joined}><legend>Test session</legend>
       <label><input type="checkbox" checked={synthetic} onChange={e=>setSynthetic(e.target.checked)} /> Use generated synthetic audio/video (no physical devices)</label>
       <label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} /> I confirm this is a synthetic test in an isolated environment.</label>
     </fieldset><p className="helper-text">Recruiter signs in; candidate uses the invitation in a separate browser session. Device mode requires camera/microphone permission and headphones.</p>
-    <button className="button button-primary" onClick={()=>void join()} disabled={!confirmed || busy || joined}>Join interview</button>
+    <div className="interview-controls" role="group" aria-label="Interview controls"><button className="button button-primary" onClick={()=>void join()} disabled={!confirmed || busy || joined}>Join interview</button>
     <button className="button button-secondary" onClick={()=>void toggle("microphone")} disabled={!joined || busy}>{muted?"Unmute microphone":"Mute microphone"}</button>
     <button className="button button-secondary" onClick={()=>void toggle("camera")} disabled={!joined || busy}>{cameraOff?"Turn camera on":"Turn camera off"}</button>
     <button className="button button-secondary" disabled={!joined||busy||sharing.busy||leaving.current} onClick={()=>void screenController.current?.toggle()}>{sharing.active?'Stop sharing':'Start sharing'}</button>
     {sharing.error&&<p role="alert">{sharing.error}</p>}
-    <button className="button button-secondary" onClick={()=>void leave(true)} disabled={(!joined && !busy) || leaving.current}>Leave interview</button>
+    <button className="button button-secondary" onClick={()=>void leave(true)} disabled={(!joined && !busy) || leaving.current}>Leave interview</button></div>
     {audioBlocked && <button onClick={()=>void room.current?.startAudio().catch(()=>setError("Remote audio could not start."))}>Enable remote audio</button>}
     {error && <p role="alert" className="error-banner">{error}</p>}
-    <InterviewActivity candidate={candidate} connected={joined} jobId={jobId} interviewId={interview?.id}/>
-    <FaceWorkflowPanel candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined}/>
-    <InterviewCopilot key={`copilot:${candidate?"candidate":jobId}:${interview?.id??"current"}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined}/>
+    <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
+    <h2>Optional captions and storage</h2><p className="helper-text">Choose storage first if you want a saved transcript. Captions can be used without storage. Each person decides independently.</p>
     <TranscriptPanel key={`${candidate?'candidate':jobId}:${interview?.id??'current'}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined} onAvailability={setStorageAvailable}/>
-    {import.meta.env.DEV&&synthetic&&<section aria-label="Synthetic speech rehearsal"><p>Development-only generated speech; no physical microphone. Select before joining; play only after both caption consents. WAV stays in browser memory.</p>
+    {import.meta.env.DEV&&synthetic&&<details className="supporting-details"><summary>Generated speech (synthetic test)</summary><section aria-label="Synthetic speech rehearsal"><p>Development-only generated speech; no physical microphone. Select before joining; play only after both caption consents. WAV stays in browser memory.</p>
       <label>Generated synthetic speech WAV<input type="file" accept=".wav" disabled={joined} onChange={e=>void loadSynthetic(e.target.files?.[0])}/></label>
-      <button disabled={!joined||!syntheticSpeech} onClick={()=>media.current?.play()}>Play generated synthetic speech</button></section>}
-    {!candidate && jobId && interview && <InterviewAnalysis key={`analysis:${interview.id}`} jobId={jobId} interviewId={interview.id} revision={interview.criteria_revision}/>}
+      <button disabled={!joined||!syntheticSpeech} onClick={()=>media.current?.play()}>Play generated synthetic speech</button></section></details>}
     <InterviewCaptions generatedMedia={synthetic} onFinalizing={active=>{captionDraining.current=active;}} storageAvailable={storageAvailable} connected={joined} candidate={candidate} jobId={jobId} interviewId={interview?.id} microphoneMuted={muted} finalizerRef={captionFinalizer}
       microphone={()=>room.current?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null}/>
-    <div className="interview-media"><section><h2>Local video</h2><div ref={local} /></section><section><h2>Remote video/audio</h2><div ref={remote} /></section></div>
+    <InterviewCopilot key={`copilot:${candidate?"candidate":jobId}:${interview?.id??"current"}`} candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined}/>
+    <details className="supporting-details"><summary>Additional interview options</summary><InterviewActivity candidate={candidate} connected={joined} jobId={jobId} interviewId={interview?.id}/>
+    <FaceWorkflowPanel candidate={candidate} jobId={jobId} interviewId={interview?.id} connected={joined}/></details>
+    {!candidate && jobId && interview && <details className="supporting-details"><summary>Interview analysis (recruiter only)</summary><InterviewAnalysis key={`analysis:${interview.id}`} jobId={jobId} interviewId={interview.id} revision={interview.criteria_revision}/></details>}
     <div className="interview-media"><section hidden={!sharing.active}><h2>Your shared screen</h2><div ref={localScreen}/></section><section hidden={!remoteSharing}><h2>Shared screen</h2><div ref={remoteScreen}/></section></div>
-    <button className="button button-secondary" onClick={onBack}>Back to screening</button>
+    <button className="button button-secondary" onClick={onBack}>{candidate?'Exit interview':'Back to workspace'}</button>
   </section></main>;
 }
