@@ -227,7 +227,10 @@ def test_ninety_second_capture_guard_requests_normal_drain(monkeypatch):
         s,_,sockets,messages,clock=await ready()
         clock[0]+=.1
         for role in messages:await s.audio(role,bytes(3200))
-        await sleep(.04)
+        # Wait for the observable broadcast, not a 40 ms scheduler assumption.
+        async with asyncio.timeout(1):
+            while not any(e['kind']=='finishing' for e in messages['candidate']):
+                await sleep(0)
         assert s.finishing and any(e['kind']=='finishing' for e in messages['candidate'])
         for role in messages:await s.end_audio(role,dict(kind='end',frames=1,samples=1600,captured_samples=1600))
         await s.finalizer
