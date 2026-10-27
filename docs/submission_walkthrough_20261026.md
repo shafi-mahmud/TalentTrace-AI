@@ -1,5 +1,35 @@
 # Submission walkthrough and acceptance â€” 26 October 2026
 
+
+## 27 October — operator-only F3/F4 gate
+
+Automated collectors, SDK acknowledgement instrumentation and diagnostic trial
+runners are stopped and must not be used for the next manual acceptance.
+Local trial processes and PostgreSQL stopped; ports 5278/8078/55480 are released.
+The last Cloud cleanup receipt is **unconfirmed**. New external connections and
+fresh live access preparation are blocked until the owner verifies the prior
+trial room has no active participants or is absent. Do not assume room absence
+from missing local SDK events, and do not stop unrelated Cloud rooms.
+
+The preserved recruiter application remains at
+<http://groq-20261026.localhost:5280/> with its healthy existing containers/data.
+This URL is not an enabled F3/F4 acceptance runtime; its optional media/STT flags
+remain disabled. No valid new candidate acceptance URL has been provisioned.
+Do not reuse expired or claimed invitations from earlier trials.
+
+Verified boundaries remain separate: Task 3 real two-party F3 passed; Task 4 real
+AssemblyAI API recognition/storage/deletion passed; Task 4C offline browser capture
+with simulated STT saved/reloaded 24/24 turns. Combined real browser F3+F4 is still
+**UNOBSERVED**, not a proven application failure. The latest diagnostic trial
+stopped before SDK-start acknowledgement after a successful local token response.
+
+After room clearance, the next separately prepared manual runtime must use the
+existing application directly, fresh synthetic booking/access, generated WAVs,
+independent storage/caption consent, one Join per role and normal Finish/Leave.
+No observer/SDK wrapper or new harness is required or authorized by this plan.
+No external connection, new fixture or runtime change was made for this checkpoint.
+
+
 ## Current provider-disabled recruiter demonstration
 
 The latest [submission package](submission_package_20261026.md) records a complete
