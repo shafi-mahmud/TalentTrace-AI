@@ -1,5 +1,15 @@
 # Submission walkthrough and acceptance â€” 26 October 2026
 
+## Latest 27 October manual result
+
+Owner reports two participants joined and AssemblyAI captions became active;
+transcript-storage consent was incomplete. LiveKit is confirmed CLOSED by the
+owner; provider termination acknowledgement is unconfirmed. Full F4 remains
+**PARTIAL**. See [the final report](task4d_live_acceptance_20261027.md) and
+[submission artifact inventory](submission_package_20261026.md#required-submission-artifacts).
+The setup gate and older demo records below are historical. No new external trial
+is authorized for submission preparation.
+
 
 ## 27 October — operator-only F3/F4 gate
 

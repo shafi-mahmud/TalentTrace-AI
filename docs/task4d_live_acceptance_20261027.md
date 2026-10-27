@@ -1,4 +1,36 @@
-# Task 4D â€” Live browser acceptance payment-gate stop
+# Task 4D — final live F4 acceptance, 27 October 2026
+
+
+## Latest result — manual application trial: PARTIAL
+
+Owner report, 27 October 2026, using the ordinary isolated application without
+collectors, observers, SDK acknowledgement wrappers or browser automation:
+
+- Two participants joined successfully.
+- AssemblyAI captions became active.
+- Optional transcript-storage consent was **not completed**.
+- The owner confirmed the LiveKit room is **CLOSED**.
+- Provider termination acknowledgement remains **unconfirmed**.
+
+These are owner-observed facts, not independently collected browser/provider
+telemetry. Finalized caption count, recognized text correctness, complete role/time
+reconciliation, stored-turn count, retrieval and deletion were not supplied or
+verified for this manual trial. Caption activity alone does not prove completed
+recognition or durable storage. Incomplete storage consent is not permission to
+store text. Do not infer zero stored turns without a verified query, or successful
+AssemblyAI termination from the closed LiveKit room.
+
+**Full live browser F4 acceptance remains PARTIAL.** Task 3's recorded real F3
+acceptance, Task 4's actual API recognition/storage/deletion and Task 4C's 24/24
+mock-provider browser persistence remain separate evidence. No further external
+test is authorized by this report. Review provider usage/termination separately if
+needed; do not open another stream to investigate the acknowledgement.
+
+The billing evidence, failed diagnostic setups and gate records below are historical
+context. They do not supersede this later manual result. No application defect is
+proven by the abandoned collector's failures.
+
+## Historical preparation and diagnostic attempts
 
 Date: 27 October 2026. Inspected baseline:
 `514cca98b104c44d0248175ce1f7bba4ace7c636`, branch

@@ -23,6 +23,14 @@ supersedes them only for the explicitly tested boundary.
 
 ### Submission-day application and setup
 
+Latest 27 October [manual F4 acceptance](docs/task4d_live_acceptance_20261027.md)
+is **PARTIAL**: two participants joined and captions became active according to
+the owner; storage consent was incomplete and AssemblyAI termination acknowledgement
+is unconfirmed. LiveKit is owner-confirmed closed. No full live transcript-storage
+acceptance is claimed. The [submission artifact inventory](docs/submission_package_20261026.md#required-submission-artifacts)
+distinguishes tracked source/docs from local SRS draft, WBS and presentation files
+that require separate owner review/attachment.
+
 - [Final demo results, tests, limitations and submission instructions](docs/submission_package_20261026.md)
 - [Implemented architecture and security boundaries](docs/architecture/application_overview.md)
 - [Step-by-step recruiter walkthrough and fourteen-area trainer matrix](docs/submission_walkthrough_20261026.md)

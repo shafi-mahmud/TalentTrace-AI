@@ -1,4 +1,39 @@
-# Submission package â€” 26 October 2026
+# Submission package — final preparation, 27 October 2026
+
+
+## Current submission status — 27 October 2026
+
+The latest [manual F4 report](task4d_live_acceptance_20261027.md) is **PARTIAL**:
+the owner reports two participants joined and AssemblyAI captions became active,
+but storage consent was not completed. LiveKit is owner-confirmed CLOSED;
+AssemblyAI termination acknowledgement is unconfirmed. Do not claim live transcript
+persistence, reload, deletion or complete F4 acceptance from this trial. No new
+external test is part of submission preparation.
+
+The working Groq application remains separately available at
+<http://groq-20261026.localhost:5280/>; see [its existing setup](groq_runtime.md).
+Do not present the expired 26 October demo URL below as the current runtime.
+
+### Required submission artifacts
+
+| Artifact | Verified representation | Submission limitation/action |
+| --- | --- | --- |
+| README/setup | [README](../README.md), [Docker guide](docker_startup.md), [Groq runtime](groq_runtime.md) tracked | Private credentials, databases and model assets are intentionally excluded. |
+| SRS | Local `TalentTrace_AI_SRS_Draft_v0.1_2026-10-26.docx` exists in the owner's Downloads | Draft, not tracked or content/approval reviewed in this checkpoint. Review and attach the approved version separately; do not label it final automatically. |
+| WBS | Local `TalentTrace-AI_wbs_v1.0.0.xlsx`, task-level v1.0.2 and estimation/task-rows v1.0.3 workbooks exist in Downloads | Multiple versions; owner must select the authoritative final workbook and attach it separately. No invented `docs/wbs.md`. |
+| Architecture | [Implemented overview](architecture/application_overview.md); tracked HLD v2.1, System Design v2.1, Database Design v1.3 and LangGraph Workflows v1.1 PDFs in `docs/architecture/` | Design records are not proof every optional runtime integration is accepted. |
+| Presentation | Local `TalentTrace_AI_BJIT_Project_Presentation.pdf` exists in Downloads | Not tracked or content/privacy reviewed here. Review and attach separately; do not claim it is bundled in the Git push. |
+| Walkthrough / feature matrix | [Recruiter walkthrough](submission_walkthrough_20261026.md), [trainer matrix](trainer_feature_status_20261026.md) tracked | Preserve real, seeded, mocked, historical and unverified distinctions. |
+| Known limitations | This document's remaining-limits section, [release traceability](release_traceability.md) and [latest F4 result](task4d_live_acceptance_20261027.md) tracked | F4 PARTIAL; live F11 and complete live F5/F6 remain unaccepted; other limits below remain relevant. |
+
+Local artifact existence was checked by filename/size only. These external files
+were not copied into Git, rendered, reconciled against current code, or certified
+free of sensitive content in this documentation-only checkpoint. The source branch
+can be publishable while the complete submission attachment set still needs owner
+review. No expensive test suite or provider connection was run for this checkpoint.
+
+## Historical 26 October checkpoint
+
 
 Application changes: provider disclosure fix `cc5cfef` and Home/navigation polish
 `946458e`, on `feature/office-20261026-acceptance`. Develop/main and remotes are
