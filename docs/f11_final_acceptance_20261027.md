@@ -5,12 +5,11 @@ Implementation baseline: `a14daa9e808c4f21966219195b29a5cb9af57289`,
 
 ## Result and evidence boundaries
 
-**Offline browser: PARTIAL overall.** The positive recruiter suggestion and
-overlapping candidate exclusion **passed in the actual application**. Explicit
-native-browser dismissal during a pending poll and explicit browser withdrawal
-were not observed successfully before the bounded result/run ended; those
-lifecycle paths passed focused component/service tests instead. They must not be
-described as live browser PASS. Real F4-to-F11 Cloud acceptance remains unverified.
+**Offline browser: PASS within the bounded synthetic scope**, including the
+subsequent Dismiss/withdrawal closeout below at baseline `90e7418`. The first pass
+was PARTIAL because the two explicit lifecycle clicks were unobserved; that
+historical gap is now closed using the actual application. Media and recognition
+remain simulated. Real F4-to-F11 Cloud acceptance remains unverified.
 
 The existing Task 4C offline media module and fake AssemblyAI connector approach
 were reused in an ignored, test-owned runtime. The frontend used simulated
@@ -51,12 +50,13 @@ No model inference, external socket, real SMTP or physical device was used.
    those observations. Candidate responses contained no suggestion, processing or
    exploration fields. The candidate DOM contained consent controls, not the
    provisional question or private reasoning. Shared captions remained separate.
-7. The suggestion disappeared under its existing short lifetime; the recruiter
+7. **First pass, historical:** the suggestion disappeared under its short lifetime; the recruiter
    later displayed `Assistant: withdrawn`. No suggestion remained. An attempted
    Dismiss observation missed the bounded card, and an attempted explicit
    withdrawal missed expired controls. Both are **UNOBSERVED in the browser**.
    Both participants left the simulated interview. Candidate terminal wording
    was not independently confirmed to match the recruiter simultaneously.
+   The later lifecycle closeout below supersedes these two unobserved outcomes.
 8. An exact-interview database check found **zero transcript sessions**. F11 has
    no transcript/suggestion table or persistence writer; its bounded state is
    process-local. Test evidence stores sanitized metadata, not application
@@ -70,6 +70,55 @@ After verification, both simulated browser participants left, and only the
 test-owned frontend, API and reused test database were stopped. The named volume,
 earlier synthetic records and ignored evidence remain. Working Groq container
 identities and start times matched their preflight snapshot.
+
+## Browser lifecycle closeout — 27 October 2026
+
+Verified clean branch/HEAD `90e7418447ba8d3782327eac057ae2368293df14` before work.
+Reused the same owned containers, database, fictional booking, current candidate
+session and existing offline browser setup. The join window remained open; no new
+application, booking, invitation, database or migration was needed. A fresh F11
+run received independent consent through the existing recruiter/candidate UI.
+
+- **Dismiss PASS:** the real recruiter card appeared. The existing test-owned
+  response observer held one actual suggestion GET reply for four seconds, without
+  changing its contents. The recruiter clicked **Dismiss / Ignore** while that
+  request was pending. The card cleared and stayed absent after the held reply
+  and subsequent polling. The authenticated Dismiss response contained no
+  suggestion. No automatic Dismiss retry occurred.
+- A replacement assistant context within the same caption run produced no fresh
+  card before the normal caption limit. That intermediate result was preserved;
+  no timeout was extended or question forced. Only the isolated backend was then
+  restarted for a fresh offline caption run, reusing the same valid booking.
+- **Withdrawal PASS:** after fresh independent F11/caption consent and another
+  trusted fake-recognition question/answer, the real card appeared again. A second
+  actual suggestion GET was held for four seconds. Recruiter clicked **Withdraw
+  assistant consent** while it was pending. After the reply and ten seconds of
+  further polling, the card remained absent and **both browsers** displayed
+  `Assistant: withdrawn`. Candidate DOM and actual API observations continued to
+  omit private suggestion, processing and exploration fields.
+- **F4 unaffected:** the real caption component remained active after F11
+  withdrawal. Sanitized fake-provider metadata recorded new finalized events from
+  both roles after the withdrawal response. These were simulated recognition
+  outputs through the unchanged authenticated F4 path, not external recognition.
+- **No storage:** the exact interview still had zero PostgreSQL transcript
+  sessions; there was no co-pilot persistence table. Application F11 state remains
+  transient; test evidence contains only bounded status/count metadata.
+
+The latency holds are confined to the already ignored evidence adapter. They do
+not fabricate API bodies, bypass authorization, change F4 or expose a new route.
+The ordinary database locks serialized the held GET before the mutation response;
+this proves the browser handles an older request already pending at the click,
+not a claim that a server read occurred after withdrawal was committed.
+
+Evidence in the same ignored directory: `dismiss-browser.json`,
+`withdrawal-browser.json`, `api-metadata-lifecycle.jsonl`,
+`api-metadata-withdrawal.jsonl`, `withdrawal-f4-metadata.jsonl`,
+`lifecycle-reconciliation.json` and `lifecycle-no-storage.json`.
+All successful browser-result checks and API reconciliation checks passed.
+Only the adjusted ignored adapter's Python compilation was checked; the previous
+184 backend/19 frontend tests and build were not unnecessarily repeated. No
+application source change was needed. Both simulated participants left; test-owned
+services were stopped, earlier evidence/volume preserved and Groq unchanged.
 
 ## Confirmed correction and compatibility
 
@@ -169,4 +218,4 @@ cross-browser clearing is not instantaneous. Already delivered information canno
 be remotely erased; clearing references is not memory zeroization. Restarts lose
 assistant state. A positive offline question is not real F4-to-F11 Cloud acceptance.
 Do not claim measured live latency, arbitrary speech coverage, multi-worker
-deployment readiness or a complete native-browser lifecycle PASS from this task.
+deployment readiness from this bounded synthetic acceptance.
