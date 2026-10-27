@@ -64,3 +64,18 @@ def test_public_routes_require_mutation_header_and_hide_unknown_token():
    assert r.status_code==401 and 'A'*43 not in r.text
   assert '/api/v1/interview-scheduling/book' in app.openapi()['paths']
  finally:app.dependency_overrides.clear();app.dependency_overrides.update(old)
+
+def test_booking_refuses_unconfigured_joining_access_before_writes(monkeypatch):
+ from app.api.routers import self_scheduling as m
+ from app.services.livekit_interview import LiveKitUnavailable
+ async def authorized(*args):return N(recruiter_id=uuid4(),job_id=uuid4(),batch_id=uuid4(),upload_id=uuid4(),criteria_revision=2,unscored_confirmed=False)
+ def unavailable():raise LiveKitUnavailable()
+ async def unexpected(*args,**kwargs):pytest.fail('Booking must not be written without joining configuration')
+ monkeypatch.setattr(m,'capability',authorized)
+ monkeypatch.setattr('app.services.livekit_interview.livekit_configuration',unavailable)
+ monkeypatch.setattr(m,'create_selected_interview',unexpected)
+ async def run():
+  with pytest.raises(HTTPException) as error:
+   await m.book(Booking(token='A'*43,scheduled_at=offered_slots()[0]),N(),N())
+  assert error.value.status_code==503
+ asyncio.run(run())

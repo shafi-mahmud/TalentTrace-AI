@@ -75,6 +75,12 @@ async def slots(body:Capability,request:Request,session=Depends(database_session
 async def book(body:Booking,request:Request,session=Depends(database_session)):
  row=await capability(session,body,request);start=body.scheduled_at.astimezone(timezone.utc)
  if start not in offered_slots():raise HTTPException(422,'Choose a currently offered demo slot.')
+ # This flow promises joining access, unlike appointment-only confirmation.
+ # Validate configuration before committing a booking or sending its bearer.
+ from app.services.livekit_interview import livekit_configuration,LiveKitUnavailable
+ try:livekit_configuration()
+ except LiveKitUnavailable:
+  raise HTTPException(503,'Interview joining access is not configured. Contact recruiter.') from None
  selection=InterviewRequest(batch_id=row.batch_id,upload_id=row.upload_id,criteria_revision=row.criteria_revision,selection_confirmed=True,confirm_eligible_unscored=row.unscored_confirmed,scheduled_at=start,timezone='Asia/Dhaka',duration_minutes=60)
  result=await create_selected_interview(row.job_id,selection,SimpleNamespace(id=row.recruiter_id),session,commit=False)
  row.interview_id=result.id

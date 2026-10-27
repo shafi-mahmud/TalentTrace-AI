@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createElement as h} from 'react';import {renderToStaticMarkup} from 'react-dom/server';
 import {SchedulingInvite,takeSchedulingToken,schedulingRequest,BookingNotice} from '../src/components/CandidateScheduling.ts';
+import CandidateScheduling from '../src/components/CandidateScheduling.ts';
 const id='00000000-0000-4000-8000-000000000001';
 const score={job_reference:'TT-JOB-0000000000000001',upload_id:id,screening_decision:'eligible' as const,status:'not_evaluated' as const,reason:'uncertain_evidence' as const,weights:{skill:100,experience:0,education:0},score:null,dimensions:[]};
 const batch={job_id:id,job_reference:score.job_reference,batch_id:id,criteria_revision:2,scoring_version:'f2-coverage-v1' as const,weights:score.weights,candidates:[score],ranking:[]};
@@ -9,3 +10,5 @@ test('booking uses protected POST once without retry or raw errors',async()=>{co
 test('selected candidate has approved-recipient send action',()=>{const html=renderToStaticMarkup(h(SchedulingInvite,{batch,candidate:score}));assert.ok(html.includes('Send Scheduling Invitation'));assert.ok(html.includes('Approved synthetic test recipient'));assert.ok(html.includes('type="email"'));});
 
 test('booking notice offers correct joining link and uncertain email state',()=>{const html=renderToStaticMarkup(h(BookingNotice,{booked:{time:'2026-10-15T02:00:00Z',link:'https://demo.example.test/interview-join#invite=synthetic',emailStatus:'uncertain'},onCopyError:()=>{}}));assert.ok(html.includes('Copy joining link'));assert.ok(html.includes('Confirmation email: uncertain'));assert.ok(html.includes('/interview-join#invite='));assert.ok(!html.includes('/interview-schedule'));});
+
+test('candidate page describes conditional email accurately',()=>{const html=renderToStaticMarkup(h(CandidateScheduling));assert.ok(html.includes('SMTP acceptance is not proof of delivery'));assert.ok(!html.includes('No email delivery yet'));assert.ok(html.includes('No recruiter login required'));});
