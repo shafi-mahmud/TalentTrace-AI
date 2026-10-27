@@ -306,7 +306,7 @@ body { background: var(--page); color: var(--ink); }
 .cv-intake-card { padding: 28px; }
 .cv-intake-card > form { padding: 0; }
 .cv-intake-card form .form-note { text-align: left; }
-.workflow-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0 0 22px; gap: 10px; counter-reset: workflow; }
+.workflow-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); list-style: none; padding: 0; margin: 0 0 22px; gap: 10px; counter-reset: workflow; }
 .workflow-steps li { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 11px; background: #fff; color: #71837d; font-size: 12px; font-weight: 600; box-shadow: 0 2px 7px rgb(26 61 51 / 3%); }
 .workflow-step-number { flex: 0 0 27px; display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: #eef2f0; color: #60746d; font-size: 12px; }
 .workflow-steps .is-complete { color: #236c57; border-color: #c9e2d5; background: #f4faf6; }

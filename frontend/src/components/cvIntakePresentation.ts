@@ -49,9 +49,11 @@ export function ScreeningWorkflowSteps({hasSuggestions, hasSnapshot, hasBatch, i
 }) {
   const steps = [
     {label: hasSuggestions ? "Review job criteria" : "Set up job criteria", complete: hasSnapshot, available: true},
-    {label: "Upload candidate CVs", complete: hasBatch, available: true},
-    {label: "Screen candidates", complete: isScreened, available: hasBatch && hasSnapshot},
-    {label: "Review results", complete: isScreened, available: isScreened},
+    {label: "Upload or select imported CVs", complete: hasBatch, available: true},
+    {label: "Prepare documents · OCR when needed", complete: isScreened, available: hasBatch},
+    {label: "Run AI screening", complete: isScreened, available: hasBatch && hasSnapshot},
+    {label: "Review ranked applicants and evidence", complete: false, available: isScreened},
+    {label: "Select an eligible candidate to schedule", complete: false, available: isScreened},
   ];
   return h("ol", {className: "workflow-steps", "aria-label": "Screening workflow progress"},
     ...steps.map((step, index) => h("li", {key: step.label, className: step.complete ? "is-complete" : step.available ? "is-current" : "is-upcoming"},

@@ -2,17 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createElement as h} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import ProviderSelection from '../src/components/ProviderSelection.ts';
+import ProviderSelection,{defaultProvider} from '../src/components/ProviderSelection.ts';
 import {listAIProviders,sendRecruiterMessage} from '../src/api/recruiterChat.ts';
 const options=[{id:'groq',label:'Groq API',available:false,external:true},
  ...['qwen2.5:1.5b','smollm2:360m-instruct-q4_K_M'].map(model=>({id:'ollama:'+model,label:'Local '+model,available:false,external:false}))];
-test('selector starts without automatic choice; cloud disclosure is explicit and unchecked',()=>{
+test('selector is empty until authenticated discovery; cloud disclosure stays unchecked',()=>{
  const base={value:'',consent:false,disabled:false,onChange(){},onConsent(){}};
  const html=renderToStaticMarkup(h(ProviderSelection,base));
  assert.match(html,/Choose AI/);assert.match(html,/JD provider selection is separate from CV screening/);
  assert.doesNotMatch(html,/checked=""/);
  const cloud=renderToStaticMarkup(h(ProviderSelection,{...base,value:'groq'}));
  assert.match(cloud,/Send JD conversation and policy context to Groq/);assert.doesNotMatch(cloud,/checked=""/);
+});
+
+test('Groq defaults only after confirmed availability; choices and pinned contexts win',()=>{
+ const ready=options.map(p=>({...p,available:p.id==='groq'}));
+ for(const scope of ['jd','cv']){
+  assert.equal(defaultProvider([],''),'');assert.equal(defaultProvider(ready,''),'groq',scope);
+  assert.equal(defaultProvider(options,''),'');
+  assert.equal(defaultProvider(ready,'ollama:qwen2.5:1.5b'),'');
+  assert.equal(defaultProvider(ready,'',true),'');
+  assert.equal(defaultProvider(ready,'',false,false),'');
+ }
 });
 test('authenticated capability response has strict allowlisted identities and no secret fields',async t=>{
  t.mock.method(globalThis,'fetch',async(_url,init)=>{assert.equal(init?.credentials,'include');return Response.json({providers:options});});
@@ -35,4 +46,16 @@ test('CV selector discloses CV transfer separately and local selection needs no 
  const cloud=renderToStaticMarkup(h(ProviderSelection,base));
  assert.match(cloud,/CV AI/);assert.match(cloud,/Send CV text and derived qualifications to Groq/);assert.doesNotMatch(cloud,/checked=""/);
  assert.doesNotMatch(renderToStaticMarkup(h(ProviderSelection,{...base,value:'ollama:qwen2.5:1.5b'})),/Send CV text/);
+});
+
+import {ScoringProvenance} from '../src/components/scorePresentation.ts';
+import {isAIProvenance} from '../src/api/scoring.ts';
+test('saved provenance is allowlisted and never inferred for legacy scores',()=>{
+ const metadata={provider:'groq' as const,model:'synthetic-model',external_processing_confirmed:true};
+ assert.ok(isAIProvenance(metadata));assert.ok(isAIProvenance(null));
+ assert.ok(!isAIProvenance({...metadata,token:'PRIVATE'}));
+ assert.ok(!isAIProvenance({...metadata,model:'https://private.invalid'}));
+ assert.ok(!isAIProvenance({...metadata,external_processing_confirmed:false}));
+ assert.match(renderToStaticMarkup(h(ScoringProvenance,{provenance:metadata})),/Groq.*synthetic-model/);
+ assert.match(renderToStaticMarkup(h(ScoringProvenance,{provenance:null})),/not recorded/);
 });

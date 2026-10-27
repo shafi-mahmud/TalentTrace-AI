@@ -19,9 +19,13 @@ from test_recruiter_records import workspace, client, login, TABLES
 def test_owned_scoring_approval_persistence_reload_and_revision(monkeypatch, workspace):
     db, users, password = workspace
     monkeypatch.setitem(TABLES, "candidate_scores", CandidateScoreRecord)
-    profiles = [candidate(), candidate(skills=("Java",)), candidate("parsing_failed")]
+    profiles = [candidate(), candidate(skills=("Java",)), candidate(skills=("Java",))]
     service = BatchScreeningService(Profiles(profiles), CandidateScreeningWorkflow(FakeMatcher([semantic_result("python", "not_found", evidence=[])])))
+    service.ai_provenance = {'provider':'groq','model':'synthetic-model','external_processing_confirmed':True}
     monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: service)
+    async def selected_service(request, configuration):
+        return service  # Mock only the provider factory; retain real owner/revision checks.
+    monkeypatch.setattr(route, 'selected_screening', selected_service)
 
     async def scenario():
         async with client() as owner, client() as foreign:
@@ -44,12 +48,13 @@ def test_owned_scoring_approval_persistence_reload_and_revision(monkeypatch, wor
             assert response.status_code == 200
             body = response.json(); scoring = body["scoring"]
             assert scoring["criteria_revision"] == 2 and scoring["scoring_version"] == "f2-coverage-v1"
+            assert scoring['ai_provenance'] == service.ai_provenance
             assert scoring["ranking"] == [{"upload_id": str(profiles[0].upload_id), "score": 100.0, "rank": 1, "tied": False}]
             scores = {c["upload_id"]: c for c in scoring["candidates"]}
             assert scores[str(profiles[0].upload_id)]["dimensions"][0]["matches"] == body["candidates"][0]["result"]["matching_result"]["matches"]
             assert scores[str(profiles[1].upload_id)]["score"] is None
             assert body["candidates"][1]["result"]["screening_decision"] == "excluded"
-            assert scores[str(profiles[2].upload_id)]["reason"] == "screening_incomplete"
+            assert scores[str(profiles[2].upload_id)]["reason"] == "not_eligible"
             assert len(db[CandidateScoreRecord]) == 3
             from app.services.score_records import restore_candidate_score
             from pydantic import ValidationError
@@ -63,6 +68,19 @@ def test_owned_scoring_approval_persistence_reload_and_revision(monkeypatch, wor
             assert (await foreign.post(endpoint, json=reviewed)).status_code == 404
             restored = await owner.get(read_url)
             assert restored.status_code == 200 and restored.json()["ranking"] == scoring["ranking"]
+            assert restored.json()['ai_provenance'] == service.ai_provenance
+            original = db[CandidateScoreRecord][0].payload['_ai_provenance']
+            db[CandidateScoreRecord][0].payload['_ai_provenance'] = {**original,'model':'different-model'}
+            assert (await owner.get(read_url)).status_code == 500
+            db[CandidateScoreRecord][0].payload['_ai_provenance'] = original
+            for row in db[CandidateScoreRecord]:row.payload.pop('_ai_provenance')
+            assert (await owner.get(read_url)).json()['ai_provenance'] is None
+            for row in db[CandidateScoreRecord]:row.payload['_ai_provenance'] = original
+            complete_profile = profiles[2]
+            profiles[2] = candidate('parsing_failed')
+            assert (await owner.post(endpoint,json=reviewed)).json()['scoring'] is None
+            assert len(db[CandidateScoreRecord]) == 3  # Incomplete retries never replace saved scores.
+            profiles[2] = complete_profile
             db[CandidateScoreRecord][0].score = 101
             invalid = await owner.get(read_url)
             assert invalid.status_code == 500 and invalid.json() == {"detail": "Saved scores could not be validated."}

@@ -11,6 +11,7 @@ import TranscriptPanel from "./TranscriptPanel";
 import InterviewAnalysis from "./InterviewAnalysis";
 import InterviewActivity from "./InterviewActivity";
 import InterviewCopilot from "./InterviewCopilot";
+import {interviewJoinWindow} from './interviewTime';
 
 // SDK diagnostics can contain connection details; public UI uses fixed errors.
 setLogLevel("silent");
@@ -118,8 +119,9 @@ export default function LiveInterviewPage({jobId,interview,onBack,candidate=fals
   }
   return <main className="app-shell"><section className="card" aria-label="Synthetic interview proof">
     <h1>{candidate?"Candidate interview":"Recruiter interview"}</h1><p>Synthetic development testing only. No audio/video recording. Optional text storage has separate consent controls below.</p>
+    {interview&&<p role="status">{interview.job_reference} · {interviewJoinWindow(interview.scheduled_at,interview.duration_minutes,interview.timezone)}</p>}
     {!candidate && <section aria-label="Candidate invitation"><h2>Candidate invitation</h2><p>One-use link. Treat it as a secret. Join window: 10 minutes before until 15 minutes after the interview.</p>
-      <button disabled={inviteBusy} onClick={()=>void createInvite()}>Generate replacement invitation</button>
+      <button disabled={inviteBusy} onClick={()=>void createInvite()}>Create candidate invitation</button>
       <button disabled={inviteBusy} onClick={()=>void revoke()}>Revoke candidate access</button>
       {invite && <><p>Expires: {new Date(invite.expires).toLocaleString()}</p><button onClick={()=>void navigator.clipboard.writeText(invite.url).catch(()=>setError("Clipboard unavailable. Generate and copy in a supported browser."))}>Copy invitation link</button><p>Only the newly generated link can be copied. Previous links are invalidated.</p></>}
     </section>}

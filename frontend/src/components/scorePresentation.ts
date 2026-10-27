@@ -1,5 +1,11 @@
 import { createElement as h } from "react";
-import type { CandidateScore } from "../types/screening";
+import type { CandidateScore, ScoringBatch } from "../types/screening";
+
+export function ScoringProvenance({provenance}:{provenance:ScoringBatch['ai_provenance']}) {
+ return h('p',{className:'helper-text'},provenance
+  ? `AI processing: ${provenance.provider==='groq'?'Groq':'Local Ollama'} · ${provenance.model}. ${provenance.external_processing_confirmed?'External processing confirmed.':'Local processing.'}`
+  : 'AI provider was not recorded for this saved run.');
+}
 
 const reasons = {
   processing_failed: "Processing failed; no reliable evaluation is available.",

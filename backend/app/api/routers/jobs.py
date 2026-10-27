@@ -101,9 +101,13 @@ async def conversation(conversation_id: UUID, user=Depends(current_recruiter), s
     turns = (await session.scalars(select(ChatTurn).where(ChatTurn.conversation_id == row.id).order_by(ChatTurn.sequence).limit(20))).all()
     adapter = TypeAdapter(RecruiterChatResponse)
     try:
-        return {"id": str(row.id), "turns": [{"message": turn.recruiter_message,
+        from app.integrations.llm.selection import MODELS
+        provider = row.state.get('ai_provider', 'groq')
+        if provider not in {'groq', *('ollama:'+model for model in MODELS)}:
+            raise ValueError('Invalid stored provider.')
+        return {"id": str(row.id), "ai_provider": provider, "turns": [{"message": turn.recruiter_message,
             "reply": adapter.validate_python(turn.response).model_dump(mode="json", exclude_none=True)} for turn in turns]}
-    except ValidationError:
+    except (ValidationError, ValueError):
         raise HTTPException(500, "Saved conversation could not be validated.") from None
 
 @router.get('/jobs/{job_id}/scores', response_model=list[ScoringBatch])

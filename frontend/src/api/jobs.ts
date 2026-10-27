@@ -76,12 +76,13 @@ export async function listConversations(): Promise<{id: string; expires_at: stri
   return rows;
 }
 
-export async function loadConversation(id: string): Promise<{id: string; turns: {message: string; reply: RecruiterChatResponse}[]}> {
+export async function loadConversation(id: string): Promise<{id: string; ai_provider?:string; turns: {message: string; reply: RecruiterChatResponse}[]}> {
   if (!UUID.test(id)) throw new Error("Invalid conversation.");
   const body = await request(`/conversations/${id}`);
   if (!body || typeof body !== "object" || !("id" in body) || body.id !== id || !("turns" in body)
+    || ('ai_provider' in body&&!['groq','ollama:qwen2.5:1.5b','ollama:smollm2:360m-instruct-q4_K_M'].includes(String(body.ai_provider)))
     || !Array.isArray(body.turns) || body.turns.length > 20 || !body.turns.every(turn => turn && typeof turn.message === "string"
       && turn.message.length <= 4000 && isRecruiterChatResponse(turn.reply) && turn.reply.conversation_id === id))
     throw new Error("Saved conversation could not be validated.");
-  return body as {id: string; turns: {message: string; reply: RecruiterChatResponse}[]};
+  return body as {id: string; ai_provider?:string; turns: {message: string; reply: RecruiterChatResponse}[]};
 }

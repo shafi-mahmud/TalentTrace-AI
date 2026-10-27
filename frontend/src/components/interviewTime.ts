@@ -29,3 +29,9 @@ export function localSchedule(value: string, zone: string, now = Date.now()): Lo
 export function timezoneOptions(current: string): string[] {
   return [...new Set([current, "UTC", ...Intl.supportedValuesOf("timeZone")])].sort();
 }
+
+export function interviewJoinWindow(start:string,duration:number,zone:string) {
+ const time=Date.parse(start);
+ const format=new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short',timeZone:zone});
+ return `Join from ${format.format(new Date(time-10*60000))} until ${format.format(new Date(time+(duration+15)*60000))} (${zone}).`;
+}

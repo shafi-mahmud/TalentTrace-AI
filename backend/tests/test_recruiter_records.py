@@ -257,6 +257,14 @@ def test_chat_persists_restores_and_isolates_owners_across_requests(workspace, m
             from pydantic import TypeAdapter
             adapter = TypeAdapter(RecruiterChatResponse)
             assert adapter.validate_python(saved_reply) == adapter.validate_python(reply)
+            assert (await first.get(f"/api/v1/conversations/{identity}")).json()['ai_provider'] == 'groq'
+            record = db[RecruiterConversation][0]
+            record.state = {**record.state,'ai_provider':'ollama:qwen2.5:1.5b'}
+            assert (await first.get(f"/api/v1/conversations/{identity}")).json()['ai_provider'] == 'ollama:qwen2.5:1.5b'
+            record.state = {**record.state,'ai_provider':'unrecognized-private-value'}
+            bad = await first.get(f"/api/v1/conversations/{identity}")
+            assert bad.status_code == 500 and 'unrecognized-private-value' not in bad.text
+            record.state = {**record.state,'ai_provider':'groq'}
             assert (await second.get("/api/v1/conversations")).json() == []
             assert (await second.get(f"/api/v1/conversations/{identity}")).status_code == 404
             assert (await second.post("/api/v1/recruiter-chat", json={"message": MESSAGE, "conversation_id": identity})).status_code == 404

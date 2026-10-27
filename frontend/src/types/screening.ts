@@ -59,6 +59,7 @@ export interface CandidateScore {
     total_requirements: number; coverage_percent: number | null; weighted_points: number; matches: RequirementMatch[]}[];
 }
 export interface ScoringBatch {
+  ai_provenance?: {provider:'groq'|'ollama';model:string;external_processing_confirmed:boolean}|null;
   job_id: string; job_reference: string; batch_id: string; criteria_revision: number; scoring_version: "f2-coverage-v1";
   weights: ScoringWeights; candidates: CandidateScore[];
   ranking: {upload_id: string; score: number; rank: number; tied: boolean}[];

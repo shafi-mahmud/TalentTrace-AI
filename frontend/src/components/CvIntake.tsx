@@ -187,8 +187,8 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
 
   return <div className="app-shell chat-page recruiter-page screening-page">
     <main>
-      <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>Candidate Screening</h1><p className="page-description">Review requirements, screen CVs and select candidates. Set up criteria or upload files in either order.</p></div>
-      <button className="button button-secondary" onClick={() => onGoToScheduling()}>Go to Interview Scheduling</button>
+      <div className="page-intro"><p className="eyebrow">Recruiter workspace</p><h1>Review Applicants</h1><p className="page-description">Confirm requirements, choose CVs and review ranked applicants.</p></div>
+      <button className="button button-secondary" onClick={() => onGoToScheduling()}>Schedule Interview</button>
       <ScreeningWorkflowSteps hasSuggestions={Boolean(criteriaDraft)} hasSnapshot={Boolean(snapshot)} hasBatch={Boolean(result)} isScreened={Boolean(screening)} />
       <section className="screening-setup" aria-label="Candidate screening workspace">
         <details className="supporting-details job-reference-details" open={!criteriaDraft?.jobReference}><summary>Job reference</summary><div className="field"><label htmlFor="cv-job-reference">Job Reference</label>
@@ -219,7 +219,7 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           </section>}
         </details>
         <ProviderSelection scope="cv" value={aiProvider} consent={externalConfirmed} disabled={busy} onChange={v=>{setAiProvider(v);setExternalConfirmed(false);}} onConsent={setExternalConfirmed}/>
-        {criteriaDraft?.revision && criteriaDraft.jobReference && <ImportedBatches key={criteriaDraft.draftId+':'+criteriaDraft.revision} jobId={criteriaDraft.draftId} reference={criteriaDraft.jobReference} revision={criteriaDraft.revision} snapshot={snapshot} disabled={busy} selection={selection} onBusy={setScreeningBusy} onResult={setScreening} />}
+        {criteriaDraft?.revision && criteriaDraft.jobReference && <ImportedBatches key={criteriaDraft.draftId+':'+criteriaDraft.revision} jobId={criteriaDraft.draftId} reference={criteriaDraft.jobReference} revision={criteriaDraft.revision} snapshot={snapshot} disabled={busy} selection={selection} onBusy={setScreeningBusy} onResult={setScreening} onContextChange={()=>setExternalConfirmed(false)} />}
         <section className="card cv-intake-card" aria-label="Candidate CV upload">
           {error && <div className="error-banner" role="alert">{error}</div>}
           <details className="stage-disclosure upload-stage" open={!result}><summary>{result ? `${result.accepted_count} CVs uploaded · choose another batch` : "Upload candidate CVs"}</summary>
@@ -241,17 +241,18 @@ export default function CvIntake({draft, contextResetKey, onCriteriaChange, onCr
           <details className="supporting-details"><summary>How screening works</summary><p>Files are stored privately. CV data is not sent to JD, RAG or MCP. Review extracted evidence before making hiring decisions.</p></details>
         </form>
         </details>
-        {result && <CvUploadConfirmation result={result} onExtract={processingOcr || parsing || screeningBusy ? undefined : extract} extracting={extracting} />}
+        {result && <details className="supporting-details"><summary>Document preparation and OCR preview</summary><CvUploadConfirmation result={result} onExtract={processingOcr || parsing || screeningBusy ? undefined : extract} extracting={extracting} />
         {extraction && <CvExtractionSummary result={extraction} onOcr={runOcr} processingOcr={processingOcr} disabled={busy} />}
         {ocr && <CvOcrSummary result={ocr} />}
         <CandidateProfileAction extraction={extraction} ocrAttempted={ocrAttempted} busy={busy||!cvProviderReady(selection)} parsing={parsing} onParse={parseProfiles} />
         {profiles && <CandidateProfilesSummary result={profiles} />}
+        </details>}
         <div className="screening-action">
-          <div><h2>Screen this CV batch</h2><p className="helper-text">Uses the stored files and confirmed criteria. Parsing runs as part of screening.</p></div>
-          <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)||!cvProviderReady(selection)} onClick={() => void screen()}>{screeningBusy ? "Screening CV batch…" : "Screen CV batch"}</button>
+          <div><h2>Run AI Screening</h2><p className="helper-text">Uses confirmed criteria and prepares documents, including OCR where needed.</p></div>
+          <button type="button" className="button button-primary" disabled={Boolean(screeningPrerequisite)||!cvProviderReady(selection)} onClick={() => void screen()}>{screeningBusy ? "Screening applicants…" : "Run AI Screening"}</button>
         </div>
         {screeningPrerequisite && <p className="prerequisite-hint" role="status">{screeningPrerequisite}</p>}
-        {screening && <><p className="helper-text">Results for stored batch {screening.batch_id}</p><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={uploadId => {const batch=screening.scoring; const candidate=batch?.candidates.find(c=>c.upload_id===uploadId); if(batch && candidate) onGoToScheduling({batch,candidate});}} /></>}
+        {screening && <><details className="supporting-details"><summary>Batch details</summary><p>{screening.batch_id}</p></details><button className="button button-secondary" disabled={busy} onClick={() => void reloadScores()}>Reload saved scores</button><ScreeningResults result={screening} onSelectCandidate={uploadId => {const batch=screening.scoring; const candidate=batch?.candidates.find(c=>c.upload_id===uploadId); if(batch && candidate) onGoToScheduling({batch,candidate});}} /></>}
         {criteriaDraft?.revision && <SavedScores key={criteriaDraft.draftId} jobId={criteriaDraft.draftId} revision={criteriaDraft.revision} onSelectCandidate={onGoToScheduling} />}
         </section>
       </section>

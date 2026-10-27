@@ -12,8 +12,17 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 // All ratios are integer fractions; round half-up without floating point drift.
 const rounded = (n: number, d: number) => Math.floor((n * 200 + d) / (2 * d)) / 100;
 
+export function isAIProvenance(value:unknown):boolean {
+ return value==null || keys(value,['provider','model','external_processing_confirmed'])
+  && ['groq','ollama'].includes(String(value.provider)) && typeof value.model==='string'
+  && /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$/.test(value.model)&&!value.model.includes('://')
+  && value.external_processing_confirmed===(value.provider==='groq');
+}
+
 export function isScoringBatch(value: unknown, batch: BatchScreeningResponse): value is ScoringBatch {
-  if (!keys(value, ["job_id", "job_reference", "batch_id", "criteria_revision", "scoring_version", "weights", "candidates", "ranking"])
+  const provenanceField=value&&typeof value==='object'&&Object.hasOwn(value,'ai_provenance')?['ai_provenance']:[];
+  if (!keys(value, ["job_id", "job_reference", "batch_id", "criteria_revision", "scoring_version", "weights", "candidates", "ranking",...provenanceField])
+    || !isAIProvenance(value.ai_provenance)
     || typeof value.job_id !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.job_id)
     || value.job_reference !== batch.job_reference || value.batch_id !== batch.batch_id || value.scoring_version !== "f2-coverage-v1"
     || !Number.isInteger(value.criteria_revision) || Number(value.criteria_revision) < 1 || !isScoringWeights(value.weights)

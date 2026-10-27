@@ -1,5 +1,5 @@
 import { createElement as h } from "react";
-import { ScoreDetails } from "./scorePresentation.ts";
+import { ScoreDetails, ScoringProvenance } from "./scorePresentation.ts";
 import type { BatchScreeningResponse, CandidateRankingEntry } from "../types/screening";
 
 export function ScreeningResults({result, onSelectCandidate}: {result: BatchScreeningResponse; onSelectCandidate?: (uploadId:string)=>void}) {
@@ -56,7 +56,7 @@ export function ScreeningResults({result, onSelectCandidate}: {result: BatchScre
           h("p", {className: "coverage-label"}, `Overall requirement coverage: ${coverageLabels[candidate.overall_coverage]}`),
           ranking ? h("p", {className: "rank-label"}, h("strong", null, `Rank ${ranking.rank}${ranking.tied ? " · Tied" : ""}`),
             h("span", null, `${supported} of ${result.snapshot.criteria.length} supported`)) : null),
-        result.scoring ? h(ScoreDetails, {score: result.scoring.candidates.find(c => c.upload_id === candidate.upload_id)!}) : null,
+        result.scoring ? h("div",null,h(ScoringProvenance,{provenance:result.scoring.ai_provenance}),h(ScoreDetails, {score: result.scoring.candidates.find(c => c.upload_id === candidate.upload_id)!})) : null,
         result.scoring && decision?.status === "decision_complete" && decision.screening_decision === "eligible" && onSelectCandidate
           ? h("button", {type:"button",className:"button button-secondary",onClick:()=>onSelectCandidate(candidate.upload_id)},"Select for interview") : null,
         decision?.status === "decision_complete" ? h("p", {className: "helper-text"},

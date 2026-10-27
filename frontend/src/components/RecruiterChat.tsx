@@ -51,6 +51,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     setRestoring(true);setRestoreFailed(false);
     try {
       const saved = await loadConversation(id);
+      setAIProvider(saved.ai_provider??'');setExternalConfirmed(false);
       onConversationLoaded(id); attempt.current = null;
       dispatch({type: "conversation_restored", conversationId: id, messages: saved.turns.flatMap(turn => [
         {role: "recruiter" as const, text: turn.message, sendState: "sent" as const}, replyToChatMessage(turn.reply)])});
@@ -197,7 +198,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
       {sending && <p role="status">Checking the requirements you shared…</p>}
     </div>
     {publicationIndex!==null && messages[publicationIndex]===latestDraft && <PublishingReview key={`${latestDraft?.draftId}:${latestDraft?.jobRevision}:${publicationIndex}`} message={messages[publicationIndex]} busy={publishingBusy||sending||restoring||unresolved} onPublish={destinations=>publish(publicationIndex,destinations)} onClose={()=>setPublicationIndex(null)}/>}
-    <ProviderSelection value={aiProvider} consent={externalConfirmed} disabled={sending||restoring||publishingBusy||unresolved} onChange={value=>{setAIProvider(value);setExternalConfirmed(false);}} onConsent={setExternalConfirmed}/>
+    <ProviderSelection key={conversationId??'new'} value={aiProvider} consent={externalConfirmed} allowDefault={!conversationId&&!restoring} locked={Boolean(conversationId&&aiProvider)} disabled={sending||restoring||publishingBusy||unresolved} onChange={value=>{setAIProvider(value);setExternalConfirmed(false);}} onConsent={setExternalConfirmed}/>
     <form className="chat-composer" onSubmit={submit}>
       {latestDraft?.jobReference && latestDraft.jobRevision && <p className="chat-refinement-context">Refining {latestDraft.jobReference} · Revision {drafts[latestDraft.draftId??'']?.revision??latestDraft.jobRevision}. Describe only what should change in this conversation. Updated criteria must be reviewed and confirmed again.</p>}
       <div className="field">

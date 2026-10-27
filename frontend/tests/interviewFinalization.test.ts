@@ -1,3 +1,4 @@
+import * as interviewTiming from '../src/components/interviewTime.ts';
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {readFileSync} from "node:fs";
@@ -19,6 +20,7 @@ test("normal Leave waits for caption finalization before the existing LiveKit di
     {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   const require=createRequire(import.meta.url),exports:any={};
   runInNewContext(source,{exports,require:(name:string)=>{
+    if(name==="./interviewTime")return interviewTiming;
     if(name==="react")return hooks;
     if(name==="./interviewScreenShare")return sharing;
     if(name==="livekit-client")return {Room,RoomEvent:{},Track:{Source:{},Kind:{}},setLogLevel(){}};
@@ -63,7 +65,8 @@ test('disconnect during initial connect does not hide sanitized stage diagnostic
     {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   const require=createRequire(import.meta.url),exports:any={};
   runInNewContext(source,{exports,require:(name:string)=>{
-    if(name==='react')return hooks;
+    if(name==='./interviewTime')return interviewTiming;
+  if(name==='react')return hooks;
     if(name==='./InterviewActivity')return {__esModule:true,default:()=>null};
     if(name==='./interviewScreenShare')return sharing;
     if(name==='livekit-client')return {Room,RoomEvent:{Disconnected:'disconnected'},Track:{Source:{},Kind:{}},setLogLevel(){}};
@@ -72,7 +75,7 @@ test('disconnect during initial connect does not hide sanitized stage diagnostic
     if(['./FaceWorkflowPanel','./TranscriptPanel','./InterviewAnalysis','./InterviewCaptions','./InterviewCopilot'].includes(name))return {__esModule:true,default:()=>null};
     return require(name);
   }});
-  function render(){si=0;ri=0;return exports.default({jobId:'synthetic',interview:{id:'synthetic'},onBack(){}});}
+  function render(){si=0;ri=0;return exports.default({jobId:'synthetic',interview:{id:'synthetic',job_reference:'TT-JOB-0000000000000001',scheduled_at:'2030-01-01T00:00:00Z',timezone:'UTC',duration_minutes:60},onBack(){}});}
   function all(n:any,p:(n:any)=>boolean):any[]{if(!n||typeof n!=='object')return [];return [...(p(n)?[n]:[]),...[n.props?.children].flat(Infinity).flatMap(c=>all(c,p))];}
   let tree=render();all(tree,n=>n.type==='input')[1].props.onChange({target:{checked:true}});
   tree=render();await all(tree,n=>n.type==='button'&&n.props.children==='Join interview')[0].props.onClick();
@@ -93,6 +96,7 @@ test('remote screen subscription is separate from webcam and clears on disconnec
  const source=ts.transpileModule(readFileSync(new URL('../src/components/LiveInterviewPage.tsx',import.meta.url),'utf8').replace('import.meta.env.DEV','false'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
  const require=createRequire(import.meta.url),exports:any={};
  runInNewContext(source,{exports,require:(name:string)=>{
+  if(name==='./interviewTime')return interviewTiming;
   if(name==='react')return hooks;
     if(name==='./InterviewActivity')return {__esModule:true,default:()=>null};
   if(name==='livekit-client')return {...sdk,Room,setLogLevel(){}};
@@ -103,7 +107,7 @@ test('remote screen subscription is separate from webcam and clears on disconnec
   return require(name);
  }});
  const nodes=(n:any):any[]=>!n||typeof n!=='object'?[]:[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];
- const render=()=>{si=ri=0;return exports.default({jobId:'synthetic',interview:{id:'synthetic'},onBack(){}});};
+ const render=()=>{si=ri=0;return exports.default({jobId:'synthetic',interview:{id:'synthetic',job_reference:'TT-JOB-0000000000000001',scheduled_at:'2030-01-01T00:00:00Z',timezone:'UTC',duration_minutes:60},onBack(){}});};
  const containers:any={};let tree=render();
  for(const section of nodes(tree).filter(n=>n.type==='section')){
   const heading=[section.props.children].flat().find((n:any)=>n?.type==='h2');

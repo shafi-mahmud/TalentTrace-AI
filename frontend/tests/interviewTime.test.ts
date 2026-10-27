@@ -82,3 +82,9 @@ test("converted UTC uses the unchanged interview API payload and response associ
   });
   assert.equal((await createInterview(id, request)).scheduled_at, "2070-01-20T09:00:00.000Z");
 });
+
+import {interviewJoinWindow} from '../src/components/interviewTime.ts';
+test('join window shows ten minutes before and fifteen after duration in the selected zone',()=>{
+ const label=interviewJoinWindow('2026-10-26T11:00:00Z',15,'Asia/Dhaka');
+ assert.match(label,/4:50/);assert.match(label,/5:30/);assert.match(label,/Asia\/Dhaka/);
+});

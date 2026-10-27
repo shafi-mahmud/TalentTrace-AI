@@ -1,9 +1,10 @@
 """Owned, revision-bound score persistence; no browser-supplied evidence/results."""
 from uuid import UUID
 from copy import deepcopy
+from typing import Literal, Annotated
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, StringConstraints
 from sqlalchemy import select, delete
 
 from app.db.models.recruiter import CandidateScoreRecord
@@ -41,6 +42,19 @@ def score_ranking(candidates):
         tied=sum(other.score == c.score for other in rows) > 1) for c in rows]
 
 
+class AIProvenance(BaseModel):
+    model_config = ConfigDict(extra='forbid', frozen=True, strict=True)
+    provider: Literal['groq', 'ollama']
+    model: Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r'^[A-Za-z0-9][A-Za-z0-9_.:/-]*$')]
+    external_processing_confirmed: bool
+
+    @model_validator(mode='after')
+    def consistent(self):
+        if '://' in self.model or self.external_processing_confirmed != (self.provider == 'groq'):
+            raise ValueError('Invalid stored AI provenance.')
+        return self
+
+
 class ScoringBatch(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     job_id: UUID
@@ -51,6 +65,7 @@ class ScoringBatch(BaseModel):
     weights: ScoringWeights
     candidates: tuple[CandidateScore, ...] = Field(min_length=1, max_length=20)
     ranking: tuple[ScoreRank, ...] = Field(max_length=20)
+    ai_provenance: AIProvenance | None = None
 
     @model_validator(mode="after")
     def consistent(self):
@@ -64,13 +79,14 @@ class ScoringBatch(BaseModel):
 
 
 async def persist_scores(session, job, batch, *, ai_provenance=None):
+    provenance = AIProvenance.model_validate(ai_provenance) if ai_provenance is not None else None
     weights = ScoringWeights.model_validate(job.scoring_weights or {})
     candidates = tuple(score_candidate(item.result, job_reference=job.job_reference, criteria=batch.snapshot.criteria, weights=weights)
         if item.result else CandidateScore(job_reference=job.job_reference, upload_id=item.upload_id,
             screening_decision=None, status="not_evaluated", reason="processing_failed", weights=weights, score=None, dimensions=())
         for item in batch.candidates)
     response = ScoringBatch(job_id=job.id, job_reference=job.job_reference, batch_id=batch.batch_id,
-        criteria_revision=job.revision, weights=weights, candidates=candidates, ranking=tuple(score_ranking(candidates)))
+        criteria_revision=job.revision, weights=weights, candidates=candidates, ranking=tuple(score_ranking(candidates)), ai_provenance=provenance)
     type(batch).model_validate({**batch.model_dump(), "scoring": response.model_dump()})
     # The job row lock serializes reruns/revisions. Replace only this exact run;
     # historical revision records remain intact. Commit all candidates together.
@@ -80,7 +96,7 @@ async def persist_scores(session, job, batch, *, ai_provenance=None):
     for candidate in candidates:
         session.add(CandidateScoreRecord(job_id=job.id, batch_id=batch.batch_id, upload_id=candidate.upload_id,
             criteria_revision=job.revision, scoring_version=SCORING_VERSION, score=candidate.score,
-            payload={**candidate.model_dump(mode="json"), **({"_ai_provenance": ai_provenance} if ai_provenance else {})}))
+            payload={**candidate.model_dump(mode="json"), **({"_ai_provenance": provenance.model_dump() } if provenance else {})}))
     await session.commit()
     return response
 
@@ -94,11 +110,14 @@ async def load_scores(session, job, batch_id):
     if not rows:
         raise HTTPException(404, "No scores exist for the current approved job revision and batch.")
     try:
+        metadata = [AIProvenance.model_validate(row.payload['_ai_provenance']) if row.payload.get('_ai_provenance') is not None else None for row in rows]
+        if any(item != metadata[0] for item in metadata):
+            raise ValueError('Inconsistent stored AI provenance.')
         candidates = tuple(restore_candidate_score(row.payload) for row in rows)
         if any(c.upload_id != row.upload_id or c.score != row.score for c, row in zip(candidates, rows)):
             raise ValueError("Stored score association is invalid.")
         return ScoringBatch(job_id=job.id, job_reference=job.job_reference, batch_id=batch_id,
             criteria_revision=job.revision, weights=ScoringWeights.model_validate(job.scoring_weights or {}),
-            candidates=candidates, ranking=tuple(score_ranking(candidates)))
+            candidates=candidates, ranking=tuple(score_ranking(candidates)), ai_provenance=metadata[0])
     except (ValueError, TypeError, AttributeError, KeyError):
         raise HTTPException(500, "Saved scores could not be validated.") from None

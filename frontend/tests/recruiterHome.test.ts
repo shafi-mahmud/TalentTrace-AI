@@ -37,7 +37,7 @@ test('Home actions carry the exact job and preserve another job draft',()=>{
  buttons.find(n=>n.props.children==='Create Job through Chat').props.onClick();
  buttons.find(n=>n.props.children==='Reload saved jobs').props.onClick();
  buttons.filter(n=>n.props.children==='Select active job')[1].props.onClick();
- buttons.filter(n=>n.props.children==='Continue Screening')[1].props.onClick();
+ buttons.filter(n=>n.props.children==='Review criteria')[1].props.onClick();
  buttons.filter(n=>n.props.children==='Interview Scheduling')[1].props.onClick();
  assert.equal(state.activeDraftId,jobs[1].id);assert.equal(state.drafts[jobs[0].id],first);
  assert.deepEqual(actions,['create','reload',jobs[1].id+':cv',jobs[1].id+':scheduling']);
@@ -56,4 +56,12 @@ test('Home API rejection stays sanitized and does not retry',async t=>{
 test('Home treats server job titles as text',()=>{
  const html=renderToStaticMarkup(h(RecruiterHome,{...base,jobs:[{...jobs[0],job_title:'<script>example</script>'}]}));
  assert.doesNotMatch(html,/<script>/);assert.match(html,/&lt;script&gt;/);
+});
+
+test('Home provides a five-stage journey and honest next action from confirmed criteria',()=>{
+ const html=renderToStaticMarkup(h(RecruiterHome,base));
+ for(const label of ['Create Job','Review Applicants','Schedule Interview','Conduct Interview','Assessment'])assert.ok(html.includes(label));
+ assert.match(html,/Next: Review and confirm/);
+ const ready={...jobs[0],snapshot:{job_reference:jobs[0].job_reference,job_title:jobs[0].job_title,criteria_confirmed:true as const,criteria:jobs[0].suggestions.criteria}};
+ assert.match(renderToStaticMarkup(h(RecruiterHome,{...base,jobs:[ready]})),/Next: Review applicants/);
 });
