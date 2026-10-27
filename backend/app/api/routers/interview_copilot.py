@@ -48,7 +48,8 @@ async def configuration():
     return dict(enabled=settings.interview_copilot_enabled, live_connected=False,
         live_enabled=settings.interview_copilot_live_enabled,
         version=VERSION, wording=disclosure(),
-        synthetic_cloud=settings.assemblyai_synthetic_enabled)
+        synthetic_cloud=settings.assemblyai_synthetic_enabled,
+        live_cloud=settings.assemblyai_live_enabled)
 
 
 async def access(request, db, job_id=None, interview_id=None):

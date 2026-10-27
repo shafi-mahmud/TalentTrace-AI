@@ -23,7 +23,17 @@ CLOUD_DISCLOSURE = (
     'hiring decisions; no additional saved co-pilot transcript.')
 
 
+LIVE_CLOUD_DISCLOSURE = (
+    'AssemblyAI transcribes the generated synthetic microphone-track audio after separate cloud-caption '
+    'consent; free-tier audio and text may be used for model training. Physical devices are not authorized '
+    'for this synthetic demonstration. The model-free local interview assistant temporarily uses those '
+    'captions for job-related interviewer-only follow-up questions. Both caption and assistant consents '
+    'are required. No automatic scoring or hiring decisions; no additional saved co-pilot transcript.')
+
+
 def disclosure():
+    if settings.assemblyai_live_enabled:
+        return LIVE_CLOUD_DISCLOSURE
     return CLOUD_DISCLOSURE if settings.assemblyai_synthetic_enabled else DISCLOSURE
 
 

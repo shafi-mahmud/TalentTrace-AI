@@ -37,6 +37,17 @@ test('transport errors never expose provider details or automatically retry',asy
   assert.equal(calls,1);
 });
 
+test('assistant configuration rejects malformed or conflicting cloud source flags',async t=>{
+  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+  const base={enabled:true,live_connected:false,version:api.version,wording:'Separate consent.'};
+  for(const patch of [{live_cloud:'true'},{synthetic_cloud:true,live_cloud:true}]){
+    globalThis.fetch=async()=>new Response(JSON.stringify({...base,...patch}),{status:200});
+    await assert.rejects(()=>api.config(),/configuration unavailable/);
+  }
+  globalThis.fetch=async()=>new Response(JSON.stringify({...base,synthetic_cloud:false,live_cloud:true}),{status:200});
+  assert.equal((await api.config()).live_cloud,true);
+});
+
 test('candidate rejects suggestion/coverage payloads and recruiter rejects unsafe output',()=>{
   assert.equal(api.validStatus(view(),false),true);assert.equal(api.validStatus(view(),true),false);
   const {suggestion:_,processing:__,...candidate}=view();
@@ -52,7 +63,7 @@ test('response fences block stale polls after withdrawal, leave and replacement'
   const current=fence.next();assert.equal(fence.accepts(current),true);fence.next();assert.equal(fence.accepts(current),false);
 });
 
-function harness(candidate=false,cloud=false){
+function harness(candidate=false,cloud=false,liveCloud=false){
   let index=0;const slots:any[]=[];const effects:any[]=[];const intervals=new Map<number,()=>void>();
   const timers=new Map<number,()=>void>();let timer=0;let now=0;const calls:any[]=[];const due=new Map<number,number>();const intervalDue=new Map<number,{next:number;period:number}>();
   let nextStatus:()=>Promise<any>=async()=>{const v:any=view();if(candidate){delete v.suggestion;delete v.processing;}return v;};
@@ -64,7 +75,7 @@ function harness(candidate=false,cloud=false){
       slots[n]={deps,cleanup:before?.cleanup};effects.push(()=>{slots[n].cleanup?.();slots[n].cleanup=fn();});}}
   };
   const fake={ResponseFence:api.ResponseFence,
-    config:async()=>({enabled:true,live_connected:false,version:api.version,wording:cloud?'AssemblyAI receives only fixed synthetic eSpeak audio; model-training use is possible.':'Independent temporary processing disclosure.',synthetic_cloud:cloud}),
+    config:async()=>({enabled:true,live_connected:false,version:api.version,wording:cloud?'AssemblyAI receives only fixed synthetic eSpeak audio; model-training use is possible.':'Independent temporary processing disclosure.',synthetic_cloud:cloud,live_cloud:liveCloud,live_enabled:true}),
     status:async()=>{calls.push('status');const v=await nextStatus();if(!api.validStatus(v,candidate))throw Error('Invalid status');return v;},
     prepare:async()=>{calls.push('prepare');return nextPrepare();},
     decide:async(_c:any,_s:any,decision:string)=>{calls.push(decision);return {...view(),status:decision==='accept'?'authorized':'withdrawn',epoch:2,suggestion:null};},
@@ -215,4 +226,11 @@ test('dismiss interrupts an in-flight poll and stale suggestion cannot reappear'
   resolve(view());await h.tick();
   assert.equal(hasQuestion(h.render()),false);
   assert.equal(h.calls.filter(c=>c==='withdraw').length,0);
+});
+
+test('live cloud assistant accurately labels generated track captions before consent',async()=>{
+  const h=harness(false,false,true);h.setStatus(async()=>({...view(),recruiter_consented:false,status:'awaiting_consent',suggestion:null}));
+  const tree=await h.settle();const words=nodes(tree).flatMap(n=>typeof n.props?.children==='string'?[n.props.children]:[]).join(' ');
+  assert.match(words,/AssemblyAI live captions/);assert.doesNotMatch(words,/Local F4 adapter enabled|fixed synthetic/);
+  assert.ok(nodes(tree).some(n=>n.type==='label'&&JSON.stringify(n.props.children).includes('separate cloud-caption consent')));
 });

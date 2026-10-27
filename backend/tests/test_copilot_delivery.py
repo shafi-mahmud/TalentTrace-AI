@@ -15,6 +15,15 @@ from app.db.models.recruiter import InterviewInvitation, JobProfile, InterviewSc
 from test_recruiter_records import workspace, client, login
 from test_interview_access import invitation_workspace
 
+def test_live_cloud_source_is_disclosed_before_assistant_consent(monkeypatch):
+    monkeypatch.setattr(settings, 'assemblyai_synthetic_enabled', False)
+    monkeypatch.setattr(settings, 'assemblyai_live_enabled', True)
+    from app.services.copilot_delivery import disclosure
+    wording = disclosure()
+    assert 'AssemblyAI' in wording and 'generated' in wording and 'model training' in wording
+    assert 'fixed server-owned' not in wording
+    assert asyncio.run(route.configuration())['live_cloud'] is True
+
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):

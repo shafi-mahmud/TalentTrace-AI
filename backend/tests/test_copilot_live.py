@@ -66,6 +66,40 @@ def test_actual_decode_hook_attribution_suggestion_and_private_delivery(runtime)
         assert manager.view(access)['status']=='withdrawn' and not b.records
     asyncio.run(scenario())
 
+def test_assemblyai_live_finalized_events_use_existing_bridge_without_storage(runtime):
+    from test_assemblyai_live import ready as live_ready, turn
+    import json
+    async def scenario():
+        manager, access, graph_clock = runtime
+        caption, _, sockets, messages, audio_clock = await live_ready()
+        caption.started_wall = 100
+        async def authorize():return access
+        bridge = LiveBridge(access.interview, caption.caption_run_id, manager, authorize, settle=.01)
+        caption.assistant = bridge
+        manager.prepare(access, caption_run_id=caption.caption_run_id)
+        consent(manager, access, 'recruiter'); consent(manager, access, 'candidate')
+        graph_clock[0] = 106
+        try:
+            for role, words in [('recruiter', 'Explain Python lists.'),
+                                ('candidate', 'Python lists are mutable ordered sequences.')]:
+                audio_clock[0] += .2
+                await caption.audio(role, bytes(3200))
+                await sockets[role].q.put(json.dumps(turn(text=words)))
+                async with asyncio.timeout(2):
+                    while caption.caption_events[role] != 1:await asyncio.sleep(0)
+            await idle(bridge)
+            result = manager.view(access, recruiter=True)
+            assert result['suggestion']['requirement'] == 'Python'
+            assert caption.storage is None
+            assert [r.role for r in bridge.records] == ['recruiter', 'candidate']
+            assert all(r.source.caption_run_id == caption.caption_run_id for r in bridge.records)
+            assert 'suggestion' not in manager.view(access) and 'processing' not in manager.view(access)
+            assert all('suggestion' not in e for events in messages.values() for e in events)
+        finally:
+            await caption.stop()
+        assert manager.view(access, recruiter=True)['suggestion'] is None and not bridge.records
+    asyncio.run(scenario())
+
 
 def test_no_preconsent_audio_even_if_recognition_returns_after_consent(runtime):
     async def scenario():

@@ -1,5 +1,11 @@
 # F11 trainer finalization — 25 October 2026
 
+Current follow-up: [27 October bounded F11 acceptance](f11_final_acceptance_20261027.md)
+records an actual offline-browser recruiter suggestion, overlapping candidate API
+exclusion, a live-cloud source-disclosure correction and focused test results.
+Browser lifecycle acceptance remains partial; real F4-to-F11 Cloud acceptance is
+still unverified. The older results below retain their historical scope.
+
 Branch `feature/f11-trainer-finalization` starts at integrated trainer commit
 `fd6a320fc99767b24adc971067d0e7b130aba7b1`, not develop. Analytics and publishing
 remain included. The frozen experimental F11 branch was not merged.
