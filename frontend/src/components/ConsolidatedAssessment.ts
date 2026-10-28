@@ -17,10 +17,17 @@ const messages:Record<EvidenceState,string>={
  unavailable:'Interview evidence is unavailable or could not be verified. Missing evidence is not poor performance.',
  ambiguous:'Multiple saved analysis versions exist. Explicit version selection is required.'};
 
+export function focusAssessmentSource(id:string) {
+ const target=document.getElementById(id);
+ if(!target)return;
+ const details=target.closest('details');if(details)details.open=true;
+ target.tabIndex=-1;target.focus({preventScroll:true});target.scrollIntoView({block:'center'});
+}
+
 export function AssessmentView({report:r,preparedAt}:{report:ConsolidatedReport;preparedAt?:string}) {
  const instance=useId();
  const prefix=`f6-${instance}-${r.job_id}-${r.batch_id}-${r.upload_id}`;
- const sourceLink=(id:string,text:string)=>h('a',{key:id,href:`#${prefix}-${id}`,onClick:(event:{preventDefault:()=>void})=>{event.preventDefault();const target=document.getElementById(`${prefix}-${id}`);const details=target?.closest('details');if(details)details.open=true;target?.scrollIntoView({block:'center'});}},text);
+ const sourceLink=(id:string,text:string)=>h('a',{key:id,href:`#${prefix}-${id}`,onClick:(event:{preventDefault:()=>void})=>{event.preventDefault();focusAssessmentSource(`${prefix}-${id}`);}},text);
  const quote=(q:{turn_id:string;quote:string},n:number)=>h('li',{key:n},sourceLink(q.turn_id,`“${q.quote}” — source turn ${q.turn_id}`));
  return h('section',{className:'card consolidated-assessment','aria-label':'Consolidated candidate assessment'},
   h('header',{className:'assessment-heading'},h('p',{className:'assessment-brand'},'TalentTrace AI · Confidential recruiter report'),h('h3',null,'Consolidated candidate assessment'),h('p',null,r.job_title)),

@@ -2,12 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createElement as h} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {AssessmentView} from '../src/components/ConsolidatedAssessment.ts';
+import {AssessmentView,focusAssessmentSource} from '../src/components/ConsolidatedAssessment.ts';
 import {fetchReport,validReport,evidenceStates} from '../src/api/consolidatedAssessment.ts';
 import type {ConsolidatedReport} from '../src/api/consolidatedAssessment';
 import {SavedScoreCards} from '../src/components/SavedScores.ts';
 import {ComparisonView} from '../src/components/CandidateComparison.ts';
 const id='00000000-0000-4000-8000-000000000001';
+test('source navigation opens evidence and transfers keyboard focus without adding a Tab stop',()=>{
+ const old=Object.getOwnPropertyDescriptor(globalThis,'document');
+ const order:string[]=[],details={open:false};
+ const target={tabIndex:0,closest:()=>details,focus(options:{preventScroll:boolean}){assert.equal(details.open,true);assert.equal(options.preventScroll,true);order.push('focus');},scrollIntoView(){order.push('scroll');}};
+ Object.defineProperty(globalThis,'document',{configurable:true,value:{getElementById:(id:string)=>id==='source'?target:null}});
+ try{focusAssessmentSource('source');assert.equal(target.tabIndex,-1);assert.deepEqual(order,['focus','scroll']);focusAssessmentSource('missing');assert.equal(order.length,2);}
+ finally{if(old)Object.defineProperty(globalThis,'document',old);else Reflect.deleteProperty(globalThis,'document');}
+});
 function fixture():ConsolidatedReport {
  return {version:'f6-increment-1',job_id:id,job_title:'Synthetic Python developer',job_reference:'TT-JOB-0000000000000001',
  batch_id:id,upload_id:id,confirmed_requirements:[],criteria_revision:2,cv_source:'interview_selection_snapshot',review_required:true,
