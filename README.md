@@ -1,6 +1,6 @@
 # TalentTrace AI
 
-> **Trainer/reviewer entry point:** [Start here — current evidence and submission documents](docs/00_START_HERE.md). Final owner-managed attachments are pending upload/validation; acceptance limitations remain explicit.
+> **Trainer/reviewer entry point:** [Start here — current evidence and submission documents](docs/00_START_HERE.md). The four uploaded final documents are linked there; the current audit states remaining acceptance limitations.
 
 > **Positioning Statement**: A recruitment workspace connecting job-specific CV screening, reviewed interviews and source-linked assessment to support human recruiter review.
 
@@ -11,11 +11,11 @@
 
 ## Current office submission checkpoint — 26 October 2026
 
-Latest release reconciliation: [28 October Docker/BID audit](docs/task8_release_audit_20261028.md).
+Latest review: [final consolidated submission audit](docs/final_submission_audit_20261028.md), with [Docker/BID proof](docs/task8_release_audit_20261028.md) kept separately.
 It separates current source, recorded acceptance and remaining mandatory gaps;
 older checkpoint statements below retain their original scope.
 
-The office evaluation branch is separate from `develop` and `main`.
+The accepted office history through `7924c76` is integrated into `develop`; `main` remains separate. Later local audit/presentation commits require separate integration review.
 See the [current acceptance matrix and recruiter walkthrough](docs/submission_walkthrough_20261026.md)
 and [trainer feature status](docs/trainer_feature_status_20261026.md).
 Real synthetic browser scheduling/reload passed. Complete current-source
@@ -53,7 +53,7 @@ The separate [opt-in Groq Docker runtime](docs/groq_runtime.md) now serves
 policy retrieval, saved Job Reference/revision and fresh-session/browser retrieval
 passed. [Task 2 acceptance](docs/task2_acceptance_20261026.md) additionally records
 real refinement/OCR screening and locally ready, mocked-only Discord MCP delivery.
-Google access remains blocked; no actual publishing occurred. Its documented single
+Later scoped evidence records [one real private Discord MCP post](docs/jd_chat_publishing_20261028.md) and [one approved Google application import](docs/google_single_import_20261028.md). Telegram and automatic Google synchronization are not live-verified. Its documented single
 Compose startup command reuses explicitly prepared private configuration, images
 and a fresh schema-0017 database; first-time setup remains separate.
 

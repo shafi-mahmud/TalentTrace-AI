@@ -2,6 +2,21 @@
 
 Current code and evidence checkpoint: 28 October 2026. This index distinguishes working implementation from incomplete acceptance; it does not certify full BID compliance.
 
+## Final Submission Documents
+
+The owner uploaded these four files to `develop`. Their Git objects were retrieved and format-checked at commit `8cbad4171b412e363ccf6eff945afd9d8f855a1b` on 28 October 2026; the direct links below pin that verified revision. They are not copied into this local feature branch, and no merge was performed.
+
+- [WBS workbook (filename v1.0.0)](https://github.com/shafi-mahmud/TalentTrace-AI/blob/8cbad4171b412e363ccf6eff945afd9d8f855a1b/docs/final%20docs/TalentTrace-AI_wbs_v1.0.0%20%2830231_Md.%20Shafi%20Mahmud%29%20%281%29.xlsx)
+- [High-Level Design (PDF)](https://github.com/shafi-mahmud/TalentTrace-AI/blob/8cbad4171b412e363ccf6eff945afd9d8f855a1b/docs/final%20docs/TalentTrace_AI_HLD_Simple_Final_2026-10-28.drawio.pdf)
+- [Software Requirements Specification v1.2 (PDF)](https://github.com/shafi-mahmud/TalentTrace-AI/blob/8cbad4171b412e363ccf6eff945afd9d8f855a1b/docs/final%20docs/TalentTrace_AI_SRS_Illustrated_Final_v1.2_2026-10-28%20%281%29.pdf)
+- [System Design (PDF)](https://github.com/shafi-mahmud/TalentTrace-AI/blob/8cbad4171b412e363ccf6eff945afd9d8f855a1b/docs/final%20docs/TalentTrace_AI_System_Design_Final_2026-10-28.drawio.pdf)
+
+All three PDFs parsed without encryption (SRS: 28 pages; HLD: 1; System Design: 1). The XLSX ZIP/XML is valid and contains Estimation_web and Estimation_mobile sheets, with no external-link parts. Its filename identifies v1.0.0; no internal version marker was found, so workbook version/content approval is not inferred. Diagram files are PDF exports, not validated editable draw.io XML. Format checks do not certify requirements coverage, visual layout or completion percentages. The final presentation is not one of these four uploads.
+
+See the [final consolidated audit](final_submission_audit_20261028.md) for current evidence boundaries and release gaps. Older requested `docs/submission/` paths are superseded by the actual uploaded paths above. Preserve historical records; do not treat the SRS/design targets as proof of implementation.
+
+Never upload OAuth files, environment secrets, private CVs, transcripts, runtime databases or diagnostic screenshots containing confidential records.
+
 ## Start here
 
 1. [README and setup](../README.md) · [Docker commands](docker_startup.md) · [Groq runtime prerequisites](groq_runtime.md).
@@ -22,15 +37,3 @@ Current code and evidence checkpoint: 28 October 2026. This index distinguishes 
 
 N19 candidate-associated deletion and N21 clean-machine/full-feature deployment are incomplete; see the current BID matrix. Historical documents retain their original scope and are superseded only by explicitly newer evidence.
 
-## Owner-managed final attachments — pending upload/validation
-
-The requested ZIP was not available locally. The owner elected to upload final documents directly to develop on GitHub. The following requested paths are therefore **expected, not validated or claimed present by this checkpoint**:
-
-- `submission/WBS.xlsx`
-- `submission/SRS.pdf` and `submission/SRS.docx`
-- `submission/HLD.drawio` and `submission/HLD.pdf`
-- `submission/System_Design.drawio` and `submission/System_Design.pdf`
-
-Multiple WBS variants exist locally. Version 1.0.0 was requested, but the authoritative final workbook and contents were not approved/validated here. Final attachment integrity, draw.io XML and attachment links need checking after the owner uploads them. Do not mistake existing historical design PDFs for the requested final package. Presentation selection/review also remains an owner action.
-
-Never upload OAuth files, environment secrets, private CVs, transcripts, runtime databases or diagnostic screenshots containing confidential records.

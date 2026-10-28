@@ -1,5 +1,7 @@
 # Trainer-feature evaluation candidate — 26 October 2026
 
+> Historical 26 October matrix. For the current consolidated status, including later F3, face-workflow, F11, publishing and Google evidence, see the [28 October final audit](final_submission_audit_20261028.md). Later evidence supersedes only its explicitly tested scope.
+
 ## Office deadline evidence update
 
 Latest [provider-disabled application demonstration](submission_package_20261026.md):
