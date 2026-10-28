@@ -9,6 +9,10 @@
 
 ## Current office submission checkpoint — 26 October 2026
 
+Latest release reconciliation: [28 October Docker/BID audit](docs/task8_release_audit_20261028.md).
+It separates current source, recorded acceptance and remaining mandatory gaps;
+older checkpoint statements below retain their original scope.
+
 The office evaluation branch is separate from `develop` and `main`.
 See the [current acceptance matrix and recruiter walkthrough](docs/submission_walkthrough_20261026.md)
 and [trainer feature status](docs/trainer_feature_status_20261026.md).

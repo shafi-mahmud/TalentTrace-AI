@@ -11,6 +11,16 @@ spec.loader.exec_module(verify)
 
 
 class VerifierTests(unittest.TestCase):
+    def test_explicit_project_does_not_target_default_demo(self):
+        command = verify.compose_command(Path('private.env'), 'tt-release-test-123')
+        self.assertEqual(command[3], 'tt-release-test-123')
+        self.assertNotIn(verify.PROJECT, command)
+
+    def test_invalid_project_fails_before_docker(self):
+        for name in ('', '../old', 'UPPER', 'bad project'):
+            with self.assertRaises(ValueError):
+                verify.compose_command(Path('private.env'), name)
+
     def test_operator_input_is_bytes_without_windows_newline_translation(self):
         synthetic = 'fictional account\nfictional password\n'
         with patch.object(verify.subprocess, 'run', return_value=SimpleNamespace(

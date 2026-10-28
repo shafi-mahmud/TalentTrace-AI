@@ -163,7 +163,7 @@ After explicit migration/startup, read-only deployment checks:
 python docker/verify.py --env-file data/docker-demo.env
 ```
 
-An additional opt-in check provisions **one fictional recruiter**, tests real
+An additional opt-in check provisions **two fictional recruiters and one job**, tests real
 authentication/origin protection, writes a non-CV volume marker, and recreates
 only this project's containers while retaining volumes:
 
@@ -172,7 +172,7 @@ python docker/verify.py --env-file data/docker-demo.env --allow-synthetic-record
 ```
 
 This is a data-changing disposable test, not part of startup. Each invocation
-with that flag creates one new fictional account; do not run repeatedly without
+with that flag creates two new fictional accounts and one job; do not run repeatedly without
 intending that. Credentials are generated in memory and never printed. No
 provider, SMTP, publication, media or candidate-screening request is made.
 The WebSocket test verifies proxy configuration and a real denied handshake to
@@ -264,3 +264,16 @@ python docker/test_verifier.py
 Keep `data/docker-verification/` and `data/docker-demo.env` private and ignored.
 Do not treat a successful small synthetic authentication test as full F1–F6,
 production security, long WebSocket/media, or clean-machine acceptance.
+
+
+## Current release audit — 28 October 2026
+
+See [current Task 8 evidence and BID matrix](task8_release_audit_20261028.md).
+The verifier now accepts `--project <explicit-new-project>` and compares the
+database revision to the image's single Alembic head rather than historical 0015.
+Use the same `-p` project for configuration, build, migration, startup, verification
+and stop. A project name does not authorize using existing volumes. Verify unused
+project/volume identities first; `--allow-synthetic-records` creates two fictional
+accounts and one job and recreates only that explicitly selected project. It checks
+job/reference/revision and authenticated-session persistence, foreign-owner denial
+and unavailable-provider rejection. No inference is requested with valid keys.

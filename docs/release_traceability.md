@@ -1,6 +1,8 @@
 # BID requirement-to-evidence matrix — review checkpoint
 
-Scope: proposed code base `176ba82`, 19 October 2026. **Overall PARTIAL**.
+> Current release audit: [28 October BID matrix and Docker evidence](task8_release_audit_20261028.md). The table below is historical and is superseded where the new audit cites newer source/evidence.
+
+Scope: historical proposed code base `176ba82`, 19 October 2026. **Overall PARTIAL**.
 Source: official `Final_Project_doc_Business_Info_Document_AI_Recruitment_Platform_v2.pdf`,
 cover version 1.0, printed pages below, inspected locally in Downloads. The filename
 suffix is not a different cover version. No trainer clarification document was

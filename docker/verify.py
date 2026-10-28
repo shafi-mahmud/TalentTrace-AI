@@ -9,6 +9,7 @@ import http.client
 import http.cookiejar
 import json
 import secrets
+import re
 import subprocess
 import sys
 import uuid
@@ -31,10 +32,16 @@ def run(args, *, stdin=None):
     return result.stdout.decode('utf-8')
 
 
-def main(env_file, allow_synthetic_records):
-    compose = ['docker', 'compose', '-p', PROJECT, '--env-file', str(env_file)]
+def compose_command(env_file, project):
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,62}', project):
+        raise ValueError('Invalid isolated Compose project name.')
+    return ['docker', 'compose', '-p', project, '--env-file', str(env_file)]
+
+
+def main(env_file, allow_synthetic_records, project=PROJECT):
+    compose = compose_command(env_file, project)
     config = json.loads(run(compose + ['config', '--format', 'json']))
-    assert config['name'] == PROJECT
+    assert config['name'] == project
     assert set(config['services']) == {'db', 'backend', 'frontend'}
     assert config['networks']['private']['internal'] is True
     assert set(config['services']['db']['networks']) == {'private'}
@@ -60,6 +67,8 @@ def main(env_file, allow_synthetic_records):
     def db_snapshot():
         return json.loads(backend_python('''
 import asyncio,json
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from app.db.session import create_database_engine
 async def main():
@@ -69,7 +78,8 @@ async def main():
    identity=(await c.execute(text("SELECT current_database(),current_user"))).one()
    revision=(await c.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
    count=(await c.execute(text("SELECT count(*) FROM recruiters"))).scalar_one()
-   print(json.dumps({'database':identity[0],'role':identity[1],'revision':revision,'recruiters':count}))
+   head=ScriptDirectory.from_config(Config('alembic.ini')).get_current_head()
+   print(json.dumps({'database':identity[0],'role':identity[1],'revision':revision,'head':head,'recruiters':count}))
  finally: await e.dispose()
 asyncio.run(main())
 '''))
@@ -78,8 +88,8 @@ asyncio.run(main())
     before = db_snapshot()
     assert before['database'] == 'talenttrace_docker_demo'
     assert before['role'] == 'talenttrace_demo'
-    assert before['revision'] == '0015_reviewer_confirmation'
-    passed('isolated database identity and explicit migration through 0015')
+    assert before['head'] and before['revision'] == before['head']
+    passed('isolated database identity and explicit migration to the image single head')
 
     backend_python('''
 import os
@@ -89,8 +99,12 @@ assert not Path('/app/.env').exists()
 assert not Path('/app/data/study').exists()
 assert not any([settings.interview_email_enabled,settings.livekit_synthetic_demo_enabled,
  settings.interview_evaluation_enabled,settings.interview_evaluation_durable_enabled,
- settings.transcript_storage_enabled,settings.reviewer_confirmation_enabled])
+ settings.transcript_storage_enabled,settings.reviewer_confirmation_enabled,
+ settings.assemblyai_live_enabled,settings.assemblyai_synthetic_enabled,
+ settings.interview_copilot_enabled,settings.interview_copilot_live_enabled,
+ settings.ollama_enabled,settings.telegram_publishing_enabled,settings.face_workflow_enabled])
 assert not settings.groq_api_key and not settings.livekit_api_key and not settings.interview_smtp_password
+assert not settings.assemblyai_api_key and not settings.telegram_bot_token
 assert 'DISCORD_WEBHOOK_URL' not in os.environ
 assert os.getuid()==10001
 print('safe')
@@ -113,6 +127,7 @@ print('safe')
     code, body, _ = request('/api/v1/health')
     assert code == 200 and json.loads(body)['service'] == 'talenttrace-api'
     assert request('/api/v1/auth/me')[0] == 401
+    assert request('/api/v1/interview-access/status')[0] == 401
     assert request('/interview-schedule')[0] == 200
     for path in ['/docs', '/redoc', '/openapi.json', '/.env', '/data/private', '/debug', '/assets/private.map']:
         assert request(path)[0] == 404
@@ -152,7 +167,16 @@ print('safe')
     assert request('/api/v1/auth/me')[0] == 200
     assert json.loads(request('/api/v1/jobs')[1]) == []
     assert 'no-store' in request('/api/v1/jobs')[2].get('cache-control', '')
-    passed('explicit synthetic provisioning, real login/session, origin protection and owned empty workspace')
+    code, body, _ = request('/api/v1/jobs', {'job_title': 'Synthetic Docker release verification'})
+    assert code == 201
+    saved_job = json.loads(body)
+    assert saved_job['job_reference'].startswith('TT-JOB-')
+    assert saved_job['revision'] == 1
+    providers = json.loads(request('/api/v1/recruiter-chat/providers')[1])['providers']
+    assert providers and not any(p['available'] for p in providers)
+    assert request('/api/v1/recruiter-chat', {'message': 'Create a synthetic test job',
+        'ai_provider': 'groq', 'external_processing_confirmed': True})[0] == 503
+    passed('synthetic login/session, origin protection, saved job creation and disabled-provider rejection')
 
     marker = secrets.token_hex(16)
     marker_hash = hashlib.sha256(marker.encode()).hexdigest()
@@ -166,22 +190,37 @@ print('safe')
     after = db_snapshot()
     assert after == {**before, 'recruiters': before['recruiters'] + 1}
     assert json.loads(request('/api/v1/auth/me')[1])['id'] == account_id
+    jobs = json.loads(request('/api/v1/jobs')[1])
+    assert len(jobs) == 1 and jobs[0] == saved_job
     actual_hash = backend_python("import hashlib;from pathlib import Path;print(hashlib.sha256(Path('/app/data/docker-smoke-marker').read_bytes()).hexdigest())")
     assert actual_hash == marker_hash
     assert request('/api/v1/auth/logout', {})[0] == 200
     assert request('/api/v1/auth/me')[0] == 401
-    passed('all containers recreated; PostgreSQL, session and private application volume persisted; logout verified')
+    foreign_email = 'docker-isolation-' + uuid.uuid4().hex + '@example.test'
+    foreign_password = secrets.token_urlsafe(32)
+    run(compose + ['exec', '-T', 'backend', 'python', '-m', 'app.db.provision_recruiter'],
+        stdin=f'{foreign_email}\n{foreign_password}\n{foreign_password}\n')
+    assert request('/api/v1/auth/login', {'email': foreign_email, 'password': foreign_password})[0] == 200
+    assert json.loads(request('/api/v1/jobs')[1]) == []
+    assert request('/api/v1/jobs/' + saved_job['id'] + '/scores')[0] == 404
+    assert request('/api/v1/auth/logout', {})[0] == 200
+    logs = run(compose + ['logs', '--no-color'])
+    assert not any(value in logs for value in (email, password, foreign_email, foreign_password))
+    passed('all containers recreated; saved job/reference/revision, session and private volume persisted; logout verified')
+    passed('candidate admission denied, providers unavailable, disabled Groq fails safely, second recruiter cannot access saved job')
+    passed('generated synthetic login emails and passwords absent from retained service logs')
     print(f'Completed {len(checks)} grouped checks. No external inference, publication, mail or media was requested.')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--env-file', type=Path, required=True)
+    parser.add_argument('--project', default=PROJECT, help='Explicit disposable project; must match the project already started.')
     parser.add_argument('--allow-synthetic-records', action='store_true',
-                        help='Explicitly provision one fictional recruiter and recreate this project only.')
+                        help='Explicitly provision two fictional recruiters/one job and recreate this project only.')
     args = parser.parse_args()
     try:
-        main(args.env_file.resolve(), args.allow_synthetic_records)
+        main(args.env_file.resolve(), args.allow_synthetic_records, args.project)
     except Exception:
         print('FAIL: verification stopped; no automatic retry or private output emitted.', file=sys.stderr)
         raise SystemExit(1) from None
