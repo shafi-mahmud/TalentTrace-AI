@@ -36,4 +36,3 @@ Never upload OAuth files, environment secrets, private CVs, transcripts, runtime
 - [UI scope and remote-deployment limits](task7_ui_remote_checkpoint_20261027.md). A successful local build does not certify public HTTPS deployment.
 
 N19 candidate-associated deletion and N21 clean-machine/full-feature deployment are incomplete; see the current BID matrix. Historical documents retain their original scope and are superseded only by explicitly newer evidence.
-
