@@ -1,5 +1,7 @@
 # Final consolidated submission audit — 28 October 2026
 
+> Subsequent scoped work: [deadline closure](deadline_closure_20261028.md) records reviewer setup, WAV-selection/inventory fixes and a new same-host Docker proof. These additions do not close the N1/N19/N21 or real F4→F5/F11 acceptance gaps below. Earlier counts and observations retain their original scope.
+
 **Overall: PARTIAL.** Suitable for a bounded synthetic demonstration with disclosed limitations; not a claim of complete BID compliance or production readiness. No new provider trial, database write, deployment or biometric operation was performed for this audit.
 
 ## Verified checkpoint and evidence rules

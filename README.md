@@ -1,13 +1,176 @@
 # TalentTrace AI
 
-> **Trainer/reviewer entry point:** [Start here — current evidence and submission documents](docs/00_START_HERE.md). The four uploaded final documents are linked there; the current audit states remaining acceptance limitations.
+**BJIT reviewer:** [Final documents and evidence](docs/00_START_HERE.md) · [Current audit](docs/final_submission_audit_20261028.md) · [Deadline closure](docs/deadline_closure_20261028.md)
 
-> **Positioning Statement**: A recruitment workspace connecting job-specific CV screening, reviewed interviews and source-linked assessment to support human recruiter review.
+TalentTrace AI is a recruiter workspace for job-specific CV screening, reviewed interviews and source-linked assessment. It supports human review; it does not make autonomous hiring decisions or certify identity, fairness or candidate competence.
 
-## Project Information
-* **Programme**: AI Trainee Developer Programme — Final Evaluation Assignment
-* **BID Reference**: Version 1.0 (Pages 1–34)
-* **Author**: Shafi Mahmud
+**Acceptance is PARTIAL.** Real Groq, LiveKit and AssemblyAI successes have different scopes. Cloning or starting the default containers does **not** enable a complete real-provider recruitment pipeline. See the evidence table below before demonstrating features.
+
+## What is implemented
+
+| Area | Purpose and current evidence |
+| --- | --- |
+| F1 — CV screening | Native PDF/DOCX intake, OCR where configured, trusted imports, must-have eligibility and conservative ranking. Real synthetic Groq/OCR samples passed; complete 20-CV performance/ranking remains partial. |
+| F2 — scoring | Explicitly reviewed weights, deterministic arithmetic, source evidence, ties and persisted revision-specific scores. Uncertain, excluded and failed applications are not silently assigned zero. |
+| F3 — interview media | Recruiter-reviewed booking and private candidate access; real two-party generated LiveKit Cloud media passed. Self-hosted recovery and remote HTTPS deployment remain unverified. |
+| F4 — transcription | Role-scoped AudioWorklet PCM, independent caption consent, optional two-party storage consent, finalization, retrieval and withdrawal. Real AssemblyAI API persistence and offline browser 24/24-turn persistence passed separately. Complete real browser recognized/stored speech remains partial. |
+| F5 — grounded interview analysis | LangGraph Q&A segmentation, requirement association, curated technical-reference retrieval, grounded evaluation and persistence. Current authenticated browser evidence used a clearly labelled deterministic model double; historical real Groq evidence is separate. |
+| F6 — consolidated assessment | Authorized same-application/revision CV and interview evidence, strengths/gaps, comparison and print. Bounded synthetic browser/print evidence passed; no invented combined numeric score. |
+| F11 — Dynamic Interviewer Co-Pilot | Model-free LangGraph turns trusted finalized F4 events into provisional recruiter-only follow-ups. Independent consent, dismissal and withdrawal passed with fake STT in the actual application. Real Cloud F4→F11 remains unverified. |
+
+Also implemented: saved Job References and JD refinement, job-isolated received/new/viewed counts, recruiter booking and separate candidate self-scheduling, reviewed appointment email, publishing previews and trusted CV import. One private Discord post and one approved Google Form import passed; these do not establish automatic synchronization or inbox delivery. Telegram is implemented but not live-verified. Face/sharing/integrity limits are in the [audit](docs/final_submission_audit_20261028.md).
+
+## Architecture and technology choices
+
+```mermaid
+flowchart LR
+  Browser[React / TypeScript recruiter or candidate UI] --> Proxy[nginx same-origin API and WebSocket proxy]
+  Proxy --> API[FastAPI authentication and owned-job services]
+  API --> DB[(PostgreSQL / pgvector)]
+  API --> Files[Private application-file volume]
+  API --> Graphs[LangGraph workflows]
+  Graphs -. explicit configured cloud processing .-> Groq[Groq]
+  Browser -. optional authorized interview .-> LiveKit[LiveKit Cloud media]
+  API -. separately consented captions .-> STT[Local Faster-Whisper or AssemblyAI]
+```
+
+- **React/Vite/TypeScript:** one shared recruiter workspace, separate candidate invitation routes, browser media and accessible native controls.
+- **FastAPI/Pydantic:** typed request/response validation, session authentication, origin/CSRF checks and recruiter/job/revision isolation.
+- **PostgreSQL/SQLAlchemy/Alembic:** saved jobs, scores, booking, delivery reservations, transcript privacy and evaluations. pgvector supports locally embedded policy/reference retrieval.
+- **LangGraph:** explicit state transitions rather than a new general-purpose agent. JD generation grounds requirements in a selected company policy; screening validates extraction and matching before eligibility/scoring; F5 pairs, maps, retrieves, assesses and validates; F11 conservatively follows trusted caption context without an LLM.
+- **Groq:** optional configured JD/CV and evaluation inference. Provider selection is explicit and pinned to an existing conversation; unavailable providers do not silently fall back.
+- **LiveKit / AudioWorklet / STT:** media, role-scoped audio capture and consented recognition remain separate responsibilities. Captions do not require durable transcript storage.
+
+See [implemented architecture](docs/architecture/application_overview.md), [F2](docs/f2_scoring.md), [F5 references](docs/technical_reference_grounding.md) and [F11 rationale](docs/f11_final_acceptance_20261027.md).
+
+## Reviewer quick start — fresh provider-disabled Docker deployment
+
+Prerequisites: Git/private repository access, Docker Engine with Compose v2 (Linux containers), Python 3.12+, an unused loopback port and sufficient RAM/disk. First builds need public dependency/base-image downloads and several GB; they do not download model weights. Host Node/pnpm/backend virtual environments are unnecessary for container startup.
+
+Clone into a **new** directory; never overwrite an existing checkout:
+
+```powershell
+git clone --branch develop --single-branch https://github.com/shafi-mahmud/TalentTrace-AI.git TalentTrace-AI-reviewer
+cd TalentTrace-AI-reviewer
+git status --short
+git rev-parse HEAD
+```
+
+Record the actual commit. The published baseline before this closure was `30468aca4a0ee43d8a315dd5bdd43269711507b9`; later local closure changes require separately approved publication. A clean checkout and expected reviewed revision are prerequisites.
+
+The following PowerShell commands create a new project/configuration. Choose another port if 5188 is occupied. On Linux Mint, use the equivalent shell variables (`Project=tt-reviewer-$(date +%s); EnvFile=data/docker-demo.env`) and the same Docker arguments.
+
+```powershell
+$Project = 'tt-reviewer-' + ([guid]::NewGuid().ToString('N').Substring(0,10))
+$EnvFile = 'data/docker-demo.env'
+docker ps -a --filter "label=com.docker.compose.project=$Project"
+docker volume ls --filter "label=com.docker.compose.project=$Project"
+# Both must be empty before creating this project. Check the chosen port is free.
+python docker/configure.py --port 5188
+docker compose -p $Project --env-file $EnvFile config --quiet
+docker compose -p $Project --env-file $EnvFile build
+docker compose -p $Project --env-file $EnvFile up -d --wait db
+```
+
+This fresh-clone command also works on the published baseline. The closure adds `--output data/<new-profile>.env` for another independently owned profile in an existing checkout; it still refuses overwrites.
+
+Keep the ignored env file private. Do not print resolved Compose configuration or container environments. The helper generates a random password, copies no old settings and refuses an existing output file; Windows file privacy also depends on NTFS permissions.
+
+**Before migration:** verify the new project's volume labels and database identity. Never apply these steps to an office, Groq or preserved database.
+
+```powershell
+docker compose -p $Project --env-file $EnvFile exec -T db psql -U talenttrace_demo -d talenttrace_docker_demo -c "SELECT current_database(),current_user; SELECT count(*) FROM pg_tables WHERE schemaname='public';"
+# Expected: talenttrace_docker_demo / talenttrace_demo and 0 public tables.
+docker compose -p $Project --env-file $EnvFile run --rm --no-deps backend python -m alembic upgrade head
+docker compose -p $Project --env-file $EnvFile run --rm --no-deps backend python -m alembic current
+# Expected single head: 0017_booked_interview_email.
+docker compose -p $Project --env-file $EnvFile up -d --wait --wait-timeout 180
+docker compose -p $Project --env-file $EnvFile exec backend python -m app.db.provision_recruiter
+```
+
+Provision a fictional `@example.test` recruiter and a unique 15–128-character password when prompted; never put passwords on a command line. Open **http://127.0.0.1:5188/**, sign in and expect an empty owned workspace. Stay on that origin; changing to `localhost` changes the cookie/origin contract.
+
+```powershell
+python docker/verify.py --project $Project --env-file $EnvFile
+docker compose -p $Project --env-file $EnvFile ps
+# Later starts preserve the same env file, project and volumes:
+docker compose -p $Project --env-file $EnvFile up -d --wait --wait-timeout 180
+# Stop only this project, preserving its data:
+docker compose -p $Project --env-file $EnvFile stop
+```
+
+Normal startup does not migrate, seed policy or create accounts. The optional verifier flag `--allow-synthetic-records` creates two fictional recruiters/one job and recreates **that disposable project's** containers to test persistence; do not use it on a preserved deployment. Never use global prune, `down --volumes`, or copy an old database URL into reviewer configuration.
+
+### What works without provider credentials?
+
+Baseline: health, authentication, empty Home, owned workspace APIs, private file storage and safe unavailable states. Existing saved data can be read after restart. **AI-generated JD/scores, Cloud media and speech recognition do not become available automatically**; this baseline does not seed a complete demo. Fresh current-host startup is different from a second clean-machine/full-feature N21 PASS.
+
+### Optional real Groq setup
+
+Use a **separate fresh project**, a private Groq key with owner-verified free allowance and a complete pre-existing `BAAI/bge-small-en-v1.5` cache. `docker/configure_groq.py` additionally needs `python-dotenv` in the host Python environment (provided by the backend dependency environment). Validate it with `python -c "import dotenv"` before running the helper. Do not copy Windows virtual environments or download models automatically.
+
+```powershell
+python docker/configure_groq.py --source-env '<private-local-env-file>' --bge-cache '<existing-model-cache>' --output data/reviewer-groq --port 5190
+$G = @('compose','--env-file','data/reviewer-groq/compose.env','-f','compose.yaml','-f','compose.groq.yaml')
+docker @G config --quiet
+docker @G build
+docker @G up -d --wait db
+docker @G exec -T db psql -U talenttrace_demo -d talenttrace_docker_demo -c "SELECT current_database(),current_user; SELECT count(*) FROM pg_tables WHERE schemaname='public';"
+# Only after confirming this new project, expected identity and 0 public tables:
+docker @G run --rm --no-deps backend python -m alembic upgrade head
+docker @G run --rm --no-deps backend python -m app.rag.seed_demo_policy
+```
+
+Save the returned fictional policy document UUID as `COMPANY_POLICY_DOCUMENT_ID` in the new private `data/reviewer-groq/groq.env`; it is database-specific. Then:
+
+```powershell
+docker @G up -d --wait --wait-timeout 180
+docker @G exec backend python -m app.db.provision_recruiter
+```
+
+Use **http://groq-20261026.localhost:5190/** (the helper's configured origin), not 127.0.0.1. Groq is preferred only when available; approve the JD cloud-processing acknowledgement yourself. CV transfer consent remains separate and unchecked. Models/key/quota and local policy embeddings must all be valid. Failed or uncertain operations are not permission to retry indefinitely. [Groq guide](docs/groq_runtime.md).
+
+### Other optional services
+
+| Feature | Additional prerequisites; never enabled merely by cloning |
+| --- | --- |
+| F3 | Private LiveKit Cloud credentials, development synthetic opt-in, valid owned booking/invitation, supported browser and approved free quota. Current local URLs do not serve a remote phone/laptop. |
+| F4 | Existing local Faster-Whisper/CPU dependencies and approved model assets **or** explicitly scoped AssemblyAI live settings/key/free quota; per-role caption consent. Both storage consents are needed before durable capture. Generated speech controls are development-only. |
+| F5/F6 interview evidence | Authorized finalized, consented, retained, non-withdrawn transcript; exact job/revision allowlist, technical references and configured evaluation provider. CV-only F6 does not require fabricated interview evidence. |
+| F11 | Separate feature flags and both assistant consents; trusted finalized F4 events. No own transcript/suggestion persistence or mandatory storage consent. |
+| Email / publishing / Google | Separate reviewed private transport credentials, recipient/destination restrictions and explicit owner action. No real delivery, posting or synchronization runs at startup. |
+| Face workflow | Experimental synthetic-only assets and Linux vault support; disabled on Windows. No real biometric verification or identity certification. |
+
+Do not enable a provider simply to hide an unavailable status. See [.env.example](.env.example) and the scoped guides, never share a real `.env`, invitation bearer, OAuth token or resolved Compose output.
+
+## Privacy, fairness and known mandatory gaps
+
+- Keep CVs, contact information, recordings, transcripts, model assets and runtime databases outside Git. Session/ownership/revision checks and independent caption/storage/assistant consents remain required. No physical-device or private data processing is authorized by these setup instructions.
+- Groq receives explicitly approved JD/policy or CV content; LiveKit transports approved media; AssemblyAI receives consented audio. Provider processing/training policies and quota must be reviewed before use. Local inference is not an automatic cloud fallback.
+- Missing/ambiguous evidence means review/abstention, not lack of skill. ASR and LLM outputs can be wrong. No automated hiring decision, bias-free claim or face/attention-based adverse judgment is justified.
+- **N19 remains incomplete:** guarded deletion handles one exact imported submission in an isolated maintenance lab. Transcript withdrawal is not candidate-wide erasure. Linked interviews, delivery state, shared JSON, transient work, backups and external copies need a coordinated deletion design.
+- **N1 remains partial:** the measured 20-CV run did not score/rank every application; offline arithmetic fixtures are not a provider performance benchmark.
+- **N21 remains partial:** same-host disposable Docker evidence does not prove clean second-machine/full-feature operation. Complete live F4→F5/F11 acceptance and remote HTTPS deployment remain unverified.
+
+**Owner-reported trainer clarification, 28 October 2026:** the project owner reports that the trainer subsequently permitted AI assistance. No independent approval document was supplied or verified; this statement does not invent one or certify originality/compliance.
+
+## Development checks and submission material
+
+Use Node 24 / pnpm 11.25.0 and the pinned frontend lockfile. Backend uses Python 3.12 and `backend/requirements.txt`; keep secrets absent and external providers mocked in tests.
+
+```text
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend test
+pnpm --dir frontend exec tsc -b
+pnpm --dir frontend exec vite build
+```
+
+Focused acceptance results, remaining blockers and new commits are recorded in [deadline closure](docs/deadline_closure_20261028.md). The [four final uploads](docs/00_START_HERE.md#final-submission-documents) are WBS, SRS, HLD and System Design. Uploaded requirements/designs express intent, not proof that every requirement passed. Presentation approval remains separate.
+
+<details>
+<summary>Historical milestones and earlier recorded implementation notes</summary>
+
+The following records retain their original dates and scope. The current evidence index and deadline closure above supersede them only for explicitly verified boundaries.
 
 ## Current office submission checkpoint — 26 October 2026
 
@@ -210,3 +373,5 @@ acceptance claim. It keeps SMTP, LiveKit, captions/storage, F5 inference and rev
 confirmation disabled. No private office environment, model or data is copied.
 The internal network prevents backend/database Internet access. See the setup guide for
 readiness, stop/reset boundaries, tests and limitations before using other features.
+
+</details>

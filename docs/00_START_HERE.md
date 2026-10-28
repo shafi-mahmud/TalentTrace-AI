@@ -2,6 +2,8 @@
 
 Current code and evidence checkpoint: 28 October 2026. This index distinguishes working implementation from incomplete acceptance; it does not certify full BID compliance.
 
+Latest local follow-up: [deadline closure, fixes and verification](deadline_closure_20261028.md) and [complete reviewer startup](../README.md#reviewer-quick-start--fresh-provider-disabled-docker-deployment). Closure commits require separate publication approval. The owner reports that the trainer subsequently permitted AI assistance; no independent approval document was supplied or invented.
+
 ## Final Submission Documents
 
 The owner uploaded these four files to `develop`. Their Git objects were retrieved and format-checked at commit `8cbad4171b412e363ccf6eff945afd9d8f855a1b` on 28 October 2026; the direct links below pin that verified revision. The four files are preserved unchanged under `docs/final docs/` in the integrated tree. The links pin the reviewed upload revision; they do not depend on later branch movement.

@@ -1,5 +1,13 @@
 # Isolated Docker synthetic startup
 
+## Current reviewer entry — 28 October 2026
+
+Use the [complete current README quick start](../README.md#reviewer-quick-start--fresh-provider-disabled-docker-deployment) for fresh project naming, explicit schema-0017 migration, synthetic recruiter provisioning and health verification. The earlier dated evidence below is historical. Latest execution and unresolved N21 limits are in the [deadline closure](deadline_closure_20261028.md).
+
+`python docker/configure.py --output data/reviewer.env --port 5188` can now create a separate private profile without overwriting an earlier `data/docker-demo.env`. Output must be a new `.env` under this checkout's ignored `data/` directory; choose an unused Compose project and port. This does not copy credentials, start Docker or modify an existing database. Unix permissions are 0600; Windows NTFS privacy must be checked locally.
+
+First-time configuration/build/migration/provisioning is explicit. Once configured, the documented `docker compose -p <owned-project> --env-file <private-env> up -d --wait` starts the three services with persistent volumes; it does not enable missing providers/models or perform a migration. Never infer second-machine/full-feature acceptance from a current-host proof.
+
 > **19 October release clarification:** Release checkpoint: office baseline startup evidence below does not establish complete application startup on a clean machine. Live media/STT/evaluation prerequisites remain outside the enabled baseline; current-source baseline rebuild passed at `b3c00db`; full-feature/clean-machine acceptance remains pending. See the [release checkpoint](release_candidate_checkpoint.md).
 
 ## Later release-candidate validation — 19 October 2026
