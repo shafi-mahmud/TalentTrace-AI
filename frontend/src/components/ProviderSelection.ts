@@ -4,7 +4,7 @@ import type {AIProvider} from '../api/recruiterChat.ts';
 export function defaultProvider(options:AIProvider[],value:string,explicitChoice=false,allowDefault=true):string {
  return !value&&!explicitChoice&&allowDefault&&options.some(p=>p.id==='groq'&&p.available)?'groq':'';
 }
-export default function ProviderSelection({value,consent,disabled,onChange,onConsent,scope="jd",allowDefault=true,locked=false}:{scope?:"jd"|"cv";value:string;consent:boolean;disabled:boolean;allowDefault?:boolean;locked?:boolean;onChange:(v:string)=>void;onConsent:(v:boolean)=>void}) {
+export default function ProviderSelection({value,consent,disabled,onChange,onConsent,scope="jd",allowDefault=true,locked=false,showConsent=true}:{showConsent?:boolean;scope?:"jd"|"cv";value:string;consent:boolean;disabled:boolean;allowDefault?:boolean;locked?:boolean;onChange:(v:string)=>void;onConsent:(v:boolean)=>void}) {
  const [options,setOptions]=useState<AIProvider[]>([]),[failed,setFailed]=useState(false);
  const explicitChoice=useRef(false);
  useEffect(()=>{let active=true;void listAIProviders().then(v=>{if(active)setOptions(v);}).catch(()=>{if(active)setFailed(true);});return()=>{active=false;};},[]);
@@ -15,7 +15,7 @@ export default function ProviderSelection({value,consent,disabled,onChange,onCon
    h('option',{value:''},failed?'AI options unavailable':'Choose AI'),...options.map(p=>h('option',{key:p.id,value:p.id,disabled:!p.available},p.label+(p.available?'':' — unavailable'))))),
   locked&&h('small',null,'This conversation keeps its original AI provider. Start a new chat to change it.'),
   h('small',null,scope==='cv'?'Applies to profile extraction and screening.':'JD provider selection is separate from CV screening.')),
-  value==='groq'&&h('label',null,h('input',{type:'checkbox',checked:consent,disabled,onChange:(e:any)=>onConsent(e.target.checked)}),scope==='cv'?'Send CV text and derived qualifications to Groq.':'Send JD conversation and policy context to Groq.'),
+  (scope==='cv'||showConsent)&&value==='groq'&&h('label',null,h('input',{type:'checkbox',checked:consent,disabled,onChange:(e:any)=>onConsent(e.target.checked)}),scope==='cv'?'Send CV text and derived qualifications to Groq.':'Send JD conversation and policy context to Groq.'),
   (failed||options.length>0&&!options.some(p=>p.id==='groq'&&p.available))&&h('p',{role:'status'},'Groq is unavailable. Check provider configuration; no other model was selected automatically.'),
   );
 }

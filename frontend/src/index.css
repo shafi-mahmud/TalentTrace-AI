@@ -650,3 +650,23 @@ body { background: var(--page); color: var(--ink); }
   .home-job-actions .button-row { flex-direction:column; align-items:stretch; }
   .jd-provider { padding:12px 16px; }
 }
+
+/* Focused JD workspace: history scrolls while the composer remains at its base. */
+.jd-page { max-width: 850px; margin-inline: auto; }
+.jd-page .chat-card { display:flex; flex-direction:column; height:auto; min-height:0; }
+.jd-page .chat-card .chat-history { flex:none; height:65vh; height:65dvh; min-height:280px; max-height:none; overflow-y:auto; overscroll-behavior:contain; }
+.jd-page .chat-card.is-empty .chat-history { flex:none; overflow-y:auto; }
+.jd-page .chat-composer { flex-shrink:0; border-top:1px solid var(--line); }
+.jd-page .chat-composer-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.jd-page .chat-composer-toolbar .jd-provider { margin:0 0 0 auto; font-size:13px; max-width:65%; }
+.jd-page .chat-composer-toolbar summary { font-size:13px; }
+.jd-page .chat-composer-toolbar .provider-options { margin:0; }
+.jd-page .cloud-acknowledgement { padding:10px; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; }
+.jd-page .cloud-acknowledgement p { font-size:14px; margin:0 0 10px; }
+@media(max-width:600px) {
+ .jd-page .chat-card .chat-history { height:65dvh; }
+ .jd-page .chat-composer-toolbar { align-items:flex-end; flex-wrap:wrap; }
+ .jd-page .chat-composer-toolbar .jd-provider { max-width:100%; }
+}
+
+.jd-page :is(.cloud-acknowledgement,.chat-history):focus-visible { outline:3px solid #4e9e93; outline-offset:3px; }

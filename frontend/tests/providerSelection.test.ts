@@ -65,3 +65,10 @@ test('provider options collapse while Groq disclosure and unchecked consent stay
  assert.match(html,/JD AI · Groq/);assert.ok(html.indexOf('Send JD conversation')>html.indexOf('</details>'));
  assert.doesNotMatch(html,/checked=""/);assert.match(html,/aria-label="JD AI"/);
 });
+
+
+test('compact JD selector can defer acknowledgement but CV consent cannot be hidden',()=>{
+ const props={value:'groq',consent:false,disabled:false,showConsent:false,onChange(){},onConsent(){}};
+ assert.doesNotMatch(renderToStaticMarkup(h(ProviderSelection,props)),/type="checkbox"/);
+ assert.match(renderToStaticMarkup(h(ProviderSelection,{...props,scope:'cv'})),/Send CV text and derived qualifications/);
+});

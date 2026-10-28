@@ -43,7 +43,7 @@ function harness(send:(text:string,c?:string)=>Promise<RecruiterChatResponse>,re
  }});
  const props={drafts,initialConversationId,onConversationLoaded(){},onDraftGenerated:(d:WorkingCriteriaDraft)=>{drafts[d.draftId]=d;},onCriteriaChange(){},onCriteriaReviewed(){},onContinueToCv:(value:string)=>continued.push(value),onNewChat(){}};
  function render(){index=0;return exports.default(props);}
- async function submit(text:string){let tree=render();const provider=all(tree,n=>n.type===ProviderSelection)[0];provider.props.onChange('groq');provider.props.onConsent(true);tree=render();all(tree,n=>n.type==='textarea')[0].props.onChange({target:{value:text}});tree=render();await all(tree,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await tick();return render();}
+ async function submit(text:string,acknowledged=true){let tree=render();const provider=all(tree,n=>n.type===ProviderSelection)[0];if(!provider.props.value)provider.props.onChange('groq');if(acknowledged)provider.props.onConsent(true);tree=render();all(tree,n=>n.type==='textarea')[0].props.onChange({target:{value:text}});tree=render();await all(tree,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await tick();return render();}
  async function flush(){for(const fn of effects.splice(0))fn();await tick();}
  return {render,submit,flush,drafts,continued};
 }
@@ -124,4 +124,31 @@ test('real chat publishing handlers preserve independent receipts and partial su
  assert.match(html,/Discord: published/);assert.match(html,/Telegram: Publication unconfirmed/);
  assert.doesNotMatch(html,/Telegram: published/);
  await review.props.onPublish(['discord','telegram']);assert.equal(calls.length,2);
+});
+
+
+test('JD cloud acknowledgement gates first request and is reused only in the open conversation',async()=>{
+ const consents:boolean[]=[];
+ const f=harness(async(...args:any[])=>{consents.push(args[3]);return reply();});
+ let tree=await f.submit('Create a synthetic job',false);
+ assert.equal(consents.length,0);
+ assert.equal(all(tree,n=>n.props?.['aria-label']==='Cloud processing acknowledgement').length,1);
+ assert.equal(all(tree,n=>n.type===ProviderSelection)[0].props.showConsent,false);
+ all(tree,n=>n.type==='button'&&n.props.children==='Cancel')[0].props.onClick();
+ tree=f.render();assert.equal(all(tree,n=>n.props?.['aria-label']==='Cloud processing acknowledgement').length,0);
+ tree=await f.submit('Create a synthetic job',false);
+ all(tree,n=>n.type==='button'&&n.props.children==='Allow Groq and send')[0].props.onClick();await tick();
+ assert.deepEqual(consents,[true]);
+ await f.submit('Add Docker',false);assert.deepEqual(consents,[true,true]);
+ tree=f.render();all(tree,n=>n.type==='button'&&n.props.children==='New chat')[0].props.onClick();
+ tree=await f.submit('Another fictional role',false);assert.equal(consents.length,2);
+ assert.equal(all(tree,n=>n.props?.['aria-label']==='Cloud processing acknowledgement').length,1);
+});
+
+
+test('restored conversation requires fresh JD acknowledgement before external inference',async()=>{
+ let calls=0;const f=harness(async()=>{calls++;return reply();},async()=>({id:conversation,ai_provider:'groq',turns:[{message:'Saved instruction',reply:reply()}]}),conversation);
+ f.render();await f.flush();const tree=await f.submit('Refine saved draft',false);
+ assert.equal(calls,0);assert.equal(all(tree,n=>n.props?.['aria-label']==='Cloud processing acknowledgement').length,1);
+ assert.equal(all(tree,n=>n.type==='div'&&n.props.role==='log')[0].props.tabIndex,0);
 });

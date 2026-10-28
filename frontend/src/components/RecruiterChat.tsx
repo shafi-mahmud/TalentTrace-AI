@@ -28,11 +28,14 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   const {input, messages, error, sending, conversationId} = state;
   const [aiProvider,setAIProvider]=useState("");
   const [externalConfirmed,setExternalConfirmed]=useState(false);
+  const [cloudReview,setCloudReview]=useState(false);
   const [publicationIndex,setPublicationIndex]=useState<number|null>(null);
   const [publishingBusy, setPublishingBusy] = useState(false);
   const pending = useRef(false);
   const attempt = useRef<SendAttempt | null>(null);
   const history = useRef<HTMLDivElement>(null);
+  const cloudAcknowledgement = useRef<HTMLDivElement>(null);
+  useEffect(()=>{if(cloudReview)cloudAcknowledgement.current?.focus();},[cloudReview]);
   const composer = useRef<HTMLTextAreaElement>(null);
   const publishing = useRef(new Set<number>());
   const [conversations, setConversations] = useState<{id: string; expires_at: string}[]>([]);
@@ -47,7 +50,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   }, [conversationId]);
   async function restore(id: string) {
     if (!id || pending.current || restoring || attempt.current?.uncertain) return;
-    setAIProvider("");setExternalConfirmed(false);
+    setAIProvider("");setExternalConfirmed(false);setCloudReview(false);
     setRestoring(true);setRestoreFailed(false);
     try {
       const saved = await loadConversation(id);
@@ -60,13 +63,13 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
   }
   useEffect(()=>{if(initialConversationId)void restore(initialConversationId);},[initialConversationId]);
 
-  async function sendAttempt(current: SendAttempt) {
+  async function sendAttempt(current: SendAttempt, confirmed=externalConfirmed) {
     if (pending.current || restoring || restoreFailed || publishingBusy) return;
     pending.current = true;
     attempt.current = current;
     dispatch({type: "send_started", messageId: current.messageId, text: current.text});
     try {
-      const reply = await sendRecruiterMessage(current.text, current.conversationId, aiProvider, externalConfirmed);
+      const reply = await sendRecruiterMessage(current.text, current.conversationId, aiProvider, confirmed);
       attempt.current = null;
       dispatch({type: "send_succeeded", messageId: current.messageId, submittedText: current.text,
         reply: {...replyToChatMessage(reply), sourceInstruction: current.text}, conversationId: reply.conversation_id});
@@ -125,8 +128,8 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     } else container.scrollTop = container.scrollHeight;
   }, [messages, sending]);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit(event?: FormEvent<HTMLFormElement>, confirmed=externalConfirmed) {
+    event?.preventDefault();
     if (pending.current || restoring || restoreFailed) return;
     const message = input.trim();
     if(isPublishingCommand(message)) {
@@ -135,13 +138,15 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
       }
       setPublicationIndex(messages.indexOf(latestDraft));dispatch({type:"input_changed",value:""});return;
     }
-    if(!aiProvider||(aiProvider==='groq'&&!externalConfirmed)) {
+    if(!aiProvider) {
       dispatch({type:"input_error",message:"Select an AI option and confirm external processing if needed."});return;
     }
     if (!isValidRecruiterMessage(message)) {
       dispatch({type: "input_error", message: "Enter job instructions of up to 4000 characters without unsafe control characters."});
       return;
     }
+    if(aiProvider==='groq'&&!confirmed){setCloudReview(true);return;}
+    setCloudReview(false);
     const previous = attempt.current;
     if (previous?.uncertain && !previous.conversationId) {
       dispatch({type: "input_error", message: "The previous request may have completed. Start a new chat to continue; starting over may create another draft."});
@@ -152,7 +157,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
       return;
     }
     await sendAttempt({messageId: previous?.messageId ?? crypto.randomUUID(), text: message,
-      conversationId: previous?.conversationId ?? conversationId, uncertain: false});
+      conversationId: previous?.conversationId ?? conversationId, uncertain: false}, confirmed);
   }
 
   function retryMessage(messageId: string) {
@@ -166,7 +171,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
     const unresolved = attempt.current;
     if (unresolved?.uncertain && !window.confirm("The server may have accepted the previous request. Starting a new chat and sending it again could create another draft. Continue?")) return;
     attempt.current = null;
-    setAIProvider("");setExternalConfirmed(false);
+    setAIProvider("");setExternalConfirmed(false);setCloudReview(false);
     setRestoreFailed(false);
     dispatch({type: "new_chat", preserveInput: Boolean(unresolved)});
     onNewChat();
@@ -184,7 +189,7 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
         <button type="button" className="button button-secondary" disabled={sending || restoring || publishingBusy} onClick={startNewChat}>New chat</button>
       </div>
     </div>
-    <div ref={history} className="chat-history" role="log" aria-label="Recruiter conversation" aria-live="polite">
+    <div ref={history} className="chat-history" tabIndex={0} role="log" aria-label="Recruiter conversation" aria-live="polite">
       {messages.length ? messages.map((message, index) => {
         const draft = message.draftId ? drafts[message.draftId] : undefined;
         const outdated=!!message.jobDescriptionResult && message!==latestDraft;
@@ -198,7 +203,6 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
       {sending && <p role="status">Checking the requirements you shared…</p>}
     </div>
     {publicationIndex!==null && messages[publicationIndex]===latestDraft && <PublishingReview key={`${latestDraft?.draftId}:${latestDraft?.jobRevision}:${publicationIndex}`} message={messages[publicationIndex]} busy={publishingBusy||sending||restoring||unresolved} onPublish={destinations=>publish(publicationIndex,destinations)} onClose={()=>setPublicationIndex(null)}/>}
-    <ProviderSelection key={conversationId??'new'} value={aiProvider} consent={externalConfirmed} allowDefault={!conversationId&&!restoring} locked={Boolean(conversationId&&aiProvider)} disabled={sending||restoring||publishingBusy||unresolved} onChange={value=>{setAIProvider(value);setExternalConfirmed(false);}} onConsent={setExternalConfirmed}/>
     <form className="chat-composer" onSubmit={submit}>
       {latestDraft?.jobReference && latestDraft.jobRevision && <p className="chat-refinement-context">Refining {latestDraft.jobReference} · Revision {drafts[latestDraft.draftId??'']?.revision??latestDraft.jobRevision}. Describe only what should change in this conversation. Updated criteria must be reviewed and confirmed again.</p>}
       <div className="field">
@@ -209,7 +213,15 @@ export default function RecruiterChat({drafts, onDraftGenerated, onCriteriaChang
         <p className="helper-text" id="chat-help">{latestDraft?'Send a revision, or type publish to review destinations.':'Describe the role and required skills. Follow-up answers stay in this conversation.'}</p>
       </div>
       {error && <div className="error-banner" role="alert">{error}</div>}
+      {cloudReview && <div ref={cloudAcknowledgement} tabIndex={-1} className="cloud-acknowledgement" role="group" aria-label="Cloud processing acknowledgement">
+        <p>Groq will process your JD conversation and company-policy context. Use fictional job information only. Allow this for the current conversation?</p>
+        <button type="button" className="button button-secondary" onClick={()=>{setCloudReview(false);composer.current?.focus();}}>Cancel</button>
+        <button type="button" className="button button-primary" disabled={sending||restoring||publishingBusy} onClick={()=>{setExternalConfirmed(true);setCloudReview(false);void submit(undefined,true);}}>Allow Groq and send</button>
+      </div>}
+      <div className="chat-composer-toolbar">
       <button type="submit" className="button button-primary" disabled={sending || restoring || restoreFailed || publishingBusy}>{restoring ? "Restoring conversation…" : sending ? "Checking details…" : latestDraft?'Send revision':'Send message'}</button>
+        <ProviderSelection key={conversationId??'new'} value={aiProvider} showConsent={false} consent={externalConfirmed} allowDefault={!conversationId&&!restoring} locked={Boolean(conversationId&&aiProvider)} disabled={sending||restoring||publishingBusy||unresolved} onChange={value=>{setAIProvider(value);setExternalConfirmed(false);setCloudReview(false);}} onConsent={setExternalConfirmed}/>
+      </div>
       <p className="form-note">Demo data only. No candidate information or secrets. Review before publishing.</p>
     </form>
   </section>;
