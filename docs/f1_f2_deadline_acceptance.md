@@ -121,3 +121,13 @@ explicit policy for abstentions and all-screened-candidate ordering. Do not assi
 zeros, infer partial credit or claim all-candidate numeric ranking to satisfy the
 deadline. After that policy decision, a separately authorized provider repeatability
 and complete 20-CV run is still required for full F1/F2/N1 acceptance.
+
+## Current-contract offline closure — 28 October 2026
+
+The earlier connected fixture had become stale: it patched the old router-local service factory and omitted the now-required CV provider/transfer headers, yielding HTTP 422 before extraction. The fixture now keeps the real request-level Groq selection/consent gate, with a synthetic non-credential key and deterministic extraction/matching service behind it. No external transport is permitted. No production scoring or ranking policy changed.
+
+The current complete fixture accounts for 20 applications exactly once: 16 eligible, 4 excluded, 5 numeric scores and 11 eligible-unscored due to ambiguous positive-weight evidence. It verifies weighted arithmetic, ties, source evidence, persisted reload, cross-job/owner isolation and stale-revision rejection. These are explicitly defined model-double outputs, not a reproduction of the October 19 Groq run or a claim of improved real scoring coverage.
+
+A deliberate terminal failure in a later explicit fake rescreen returns all 20 outcomes (15 eligible, 4 excluded, 1 failed), no new scoring projection, and leaves the prior complete saved results unchanged. This follows the current router's protection against replacing saved evidence with failed model output. It does not claim that an incomplete first batch is persisted. The recorded real benchmark remains 4 numeric / 11 eligible-unscored / 4 excluded / 1 failure, 449.09 seconds; N1 remains PARTIAL.
+
+The existing short-reset 429 handler still permits at most two explicit-rejection retries within a 60-second total wait budget; timeouts, unknown delivery, unsafe/missing reset data and daily quotas are not retried. Its tests use fake waits/provider responses. The historical 8,000 TPM observation is not today's account/model quota; current free allowances were not queried and no new provider batch ran.

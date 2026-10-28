@@ -18,6 +18,9 @@ from app.schemas.candidate_score import ScoringWeights
 from app.schemas.screening import SemanticMatchingResponse
 from app.services.batch_screening import BatchScreeningService
 from app.services.candidate_scoring import score_candidate
+from app.core.config import settings
+from app.integrations.llm import screening_selection
+from pydantic import SecretStr
 from test_batch_screening import Profiles
 from test_recruiter_records import TABLES, client, login, workspace
 from test_screening_matching import attribute, request
@@ -59,14 +62,15 @@ def profiles():
 
 class Matcher:
     """Explicit semantic outcomes, not a replacement matching algorithm."""
-    def __init__(self):
+    def __init__(self, fail_last=True):
         self.calls = 0
+        self.fail_last = fail_last
 
     async def match(self, criteria, facts):
         self.calls += 1
         activity = next(f for f in facts if f.kind == "work_activity")
         index = int(activity.value.rsplit(" ", 1)[1])
-        if index == 19:
+        if index == 19 and self.fail_last:
             raise RuntimeError("Synthetic terminal provider failure")
         rows = []
         for criterion in criteria:
@@ -80,10 +84,13 @@ class Matcher:
 def test_twenty_applications_auth_graph_scoring_reload_and_revision(monkeypatch, workspace):
     database, users, password = workspace
     monkeypatch.setitem(TABLES, "candidate_scores", CandidateScoreRecord)
-    matcher = Matcher()
+    matcher = Matcher(fail_last=False)
     parsed = Profiles(profiles())
     service = BatchScreeningService(parsed, CandidateScreeningWorkflow(matcher))
-    monkeypatch.setattr(route, "BatchScreeningService", lambda **kwargs: service)
+    # Keep the current request-level provider/consent checks; double only the
+    # extraction/matching service constructed behind that approved boundary.
+    monkeypatch.setattr(settings, "groq_api_key", SecretStr("offline-synthetic-not-a-key"))
+    monkeypatch.setattr(screening_selection, "BatchScreeningService", lambda **kwargs: service)
 
     async def scenario():
         async with client() as owner, client() as foreign:
@@ -101,6 +108,9 @@ def test_twenty_applications_auth_graph_scoring_reload_and_revision(monkeypatch,
             assert (await owner.post(endpoint, headers={"X-TalentTrace-Job-Revision": "1"}, json=snapshot)).status_code == 409
             assert (await foreign.post(endpoint, json=snapshot)).status_code == 404
             assert matcher.calls == 0 and not parsed.calls
+            assert (await owner.post(endpoint, headers={"X-TalentTrace-Job-Revision": "2"}, json=snapshot)).status_code == 422
+            assert matcher.calls == 0 and not parsed.calls
+            owner.headers.update({"X-TalentTrace-AI-Provider":"groq", "X-TalentTrace-External-Processing":"confirmed"})
 
             response = await owner.post(endpoint, headers={"X-TalentTrace-Job-Revision": "2"}, json=snapshot)
             assert response.status_code == 200
@@ -108,18 +118,17 @@ def test_twenty_applications_auth_graph_scoring_reload_and_revision(monkeypatch,
             assert PRIVATE_MARKER not in response.text and "Fictional private contact" not in response.text
             assert body["processed_count"] == len(body["candidates"]) == 20
             assert len({c["upload_id"] for c in body["candidates"]}) == 20
-            assert Counter(c["result"]["screening_decision"] for c in body["candidates"]) == {"eligible": 15, "excluded": 4, None: 1}
+            assert Counter(c["result"]["screening_decision"] for c in body["candidates"]) == {"eligible": 16, "excluded": 4}
             scoring = body["scoring"]
-            assert Counter(c["reason"] for c in scoring["candidates"]) == {None: 4, "uncertain_evidence": 11, "not_eligible": 4, "screening_incomplete": 1}
+            assert Counter(c["reason"] for c in scoring["candidates"]) == {None: 5, "uncertain_evidence": 11, "not_eligible": 4}
             assert [c["score"] for c in scoring["candidates"][:4]] == [100, 100, 55, 25]
-            assert all(c["score"] is None and c["dimensions"] == [] for c in scoring["candidates"][4:])
+            assert all(c["score"] is None and c["dimensions"] == [] for c in scoring["candidates"][4:19])
             for item in body["candidates"][4:15]:
                 experience = next(m for m in item["result"]["matching_result"]["matches"] if m["criterion_id"] == "experience")
                 assert experience["match_status"] == "ambiguous" and experience["evidence"]
                 assert experience["explanation"]  # Initial batch retains the uncertainty evidence.
-            assert [(r["score"], r["rank"], r["tied"]) for r in scoring["ranking"]] == [(100, 1, True), (100, 1, True), (55, 3, False), (25, 4, False)]
-            assert len(body["ranking"]) == 15  # Requirement coverage is not numeric-score ranking.
-            assert body["candidates"][-1]["result"]["status"] == "matching_failed"
+            assert [(r["score"], r["rank"], r["tied"]) for r in scoring["ranking"]] == [(100, 1, True), (100, 1, True), (100, 1, True), (55, 4, False), (25, 5, False)]
+            assert len(body["ranking"]) == 16  # Requirement coverage is not numeric-score ranking.
             assert "Synthetic terminal provider failure" not in response.text
             for candidate, score in zip(body["candidates"][:4], scoring["candidates"][:4]):
                 matches = candidate["result"]["matching_result"]["matches"]
@@ -141,6 +150,12 @@ def test_twenty_applications_auth_graph_scoring_reload_and_revision(monkeypatch,
             repeated = await owner.post(endpoint, headers={"X-TalentTrace-Job-Revision": "2"}, json=snapshot)
             assert repeated.status_code == 200 and repeated.json() == body
             assert len(database[CandidateScoreRecord]) == 20  # Exact replacement, no duplicate outcomes.
+            matcher.fail_last = True
+            failed = await owner.post(endpoint, headers={"X-TalentTrace-Job-Revision": "2"}, json=snapshot)
+            assert failed.status_code == 200 and failed.json().get("scoring") is None
+            assert Counter(c["result"]["screening_decision"] for c in failed.json()["candidates"]) == {"eligible":15,"excluded":4,None:1}
+            assert (await owner.get(read)).json() == scoring  # Failed retry cannot replace saved evidence.
+            assert len(database[CandidateScoreRecord]) == 20
             calls = matcher.calls
             assert (await owner.put(f"/api/v1/jobs/{job_id}/criteria", json={**approval, "revision": 2})).status_code == 200
             assert (await owner.get(read)).status_code == 404
