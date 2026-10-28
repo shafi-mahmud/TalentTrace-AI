@@ -4,7 +4,7 @@ Current code and evidence checkpoint: 28 October 2026. This index distinguishes 
 
 ## Final Submission Documents
 
-The owner uploaded these four files to `develop`. Their Git objects were retrieved and format-checked at commit `8cbad4171b412e363ccf6eff945afd9d8f855a1b` on 28 October 2026; the direct links below pin that verified revision. They are not copied into this local feature branch, and no merge was performed.
+The owner uploaded these four files to `develop`. Their Git objects were retrieved and format-checked at commit `8cbad4171b412e363ccf6eff945afd9d8f855a1b` on 28 October 2026; the direct links below pin that verified revision. The four files are preserved unchanged under `docs/final docs/` in the integrated tree. The links pin the reviewed upload revision; they do not depend on later branch movement.
 
 - [WBS workbook (filename v1.0.0)](https://github.com/shafi-mahmud/TalentTrace-AI/blob/8cbad4171b412e363ccf6eff945afd9d8f855a1b/docs/final%20docs/TalentTrace-AI_wbs_v1.0.0%20%2830231_Md.%20Shafi%20Mahmud%29%20%281%29.xlsx)
 - [High-Level Design (PDF)](https://github.com/shafi-mahmud/TalentTrace-AI/blob/8cbad4171b412e363ccf6eff945afd9d8f855a1b/docs/final%20docs/TalentTrace_AI_HLD_Simple_Final_2026-10-28.drawio.pdf)
