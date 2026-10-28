@@ -17,6 +17,12 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.services.candidate_inventory import Target, InventoryError, file_inventory, inventory
 
 
+def test_current_booked_email_foreign_key_is_in_the_inventory():
+    from app.db.models.recruiter import BookedInterviewEmailAttempt
+    from app.services.candidate_inventory import QUERIES
+    assert BookedInterviewEmailAttempt.__tablename__ in {table for table, _ in QUERIES.values()}
+
+
 @pytest.fixture
 def target():
     return Target(uuid4(), uuid4(), uuid4(), uuid4())
@@ -144,6 +150,10 @@ def test_postgres_inventory_read_only_scope_and_dependencies(postgres, tmp_path,
                 now=datetime.now(timezone.utc)
                 await insert(db,'interview_schedules',dict(id=interview,recruiter_id=target.recruiter_id,job_id=target.job_id,batch_id=target.batch_id,upload_id=target.upload_id,criteria_revision=2,scoring_version='synthetic',scheduled_at=now,timezone='UTC',duration_minutes=60,unscored_confirmed=False,screening_snapshot='{"private":"must-not-leak"}'))
                 await insert(db,'interview_invitations',dict(id=uuid4(),interview_id=interview,token_hash='s'*64,expires_at=now+timedelta(hours=1),revoked=False))
+                await insert(db,'booked_interview_email_attempts',dict(interview_id=interview,status='uncertain',created_at=now))
+                other_interview=uuid4()
+                await insert(db,'interview_schedules',dict(id=other_interview,recruiter_id=target.recruiter_id,job_id=target.job_id,batch_id=target.batch_id,upload_id=other_upload,criteria_revision=2,scoring_version='synthetic',scheduled_at=now,timezone='UTC',duration_minutes=60,unscored_confirmed=False,screening_snapshot='{}'))
+                await insert(db,'booked_interview_email_attempts',dict(interview_id=other_interview,status='accepted',created_at=now))
                 await insert(db,'interview_transcript_sessions',dict(id=capture,interview_id=interview,started_at=now,recruiter_consented_at=now,candidate_consented_at=now,consent_version='synthetic',status='active',persistence_outcome='pending'))
                 await insert(db,'interview_transcript_turns',dict(id=uuid4(),session_id=capture,sequence=1,role='candidate',text='private fictional text',start_ms=0,end_ms=10,created_at=now))
                 await insert(db,'application_views',dict(job_id=target.job_id,batch_id=target.batch_id,upload_id=target.upload_id))
@@ -173,6 +183,8 @@ def test_postgres_inventory_read_only_scope_and_dependencies(postgres, tmp_path,
             assert c['screening_versions']['count']==2
             assert c['interviews_and_screening_snapshots']['count']==1
             assert c['joining_invitations']['count']==1
+            assert c['booked_email_attempts']['count']==1
+            assert c['unmapped_referencing_tables']['count']==0
             assert c['transcript_sessions']['count']==1 and c['transcript_turns']['count']==1
             assert c['acknowledgements']['count']==1
             for name in ('imported_submissions','scheduling_invitations','email_attempts','f5_analyses','f6_confirmations'):

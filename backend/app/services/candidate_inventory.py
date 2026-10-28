@@ -62,6 +62,7 @@ QUERIES = {
     'scheduling_invitations': ('scheduling_invitations', PAIR),
     'joining_invitations': ('interview_invitations', f'interview_id IN ({INTERVIEWS})'),
     'email_attempts': ('interview_email_attempts', f'scheduling_invitation_id IN ({INVITES})'),
+    'booked_email_attempts': ('booked_interview_email_attempts', f'interview_id IN ({INTERVIEWS})'),
     'transcript_sessions': ('interview_transcript_sessions', f'interview_id IN ({INTERVIEWS})'),
     'transcript_turns': ('interview_transcript_turns',
         f'session_id IN (SELECT id FROM interview_transcript_sessions WHERE interview_id IN ({INTERVIEWS}))'),
@@ -98,7 +99,7 @@ async def inventory_in_transaction(session, target: Target, storage_root: Path):
         "SELECT tablename FROM pg_tables WHERE schemaname='public'"))).scalars())
     categories = {}
     for name, (table, predicate) in QUERIES.items():
-        # The supported schema is head 0015. Missing dependencies fail closed
+        # Include current dependencies through 0017. Missing dependencies fail closed
         # rather than silently running a partial join against older schemas.
         needed = {table}
         if 'interview_schedules' in predicate:

@@ -32,6 +32,7 @@ def test_exact_target_digest_and_scope():
     ('cv_files','ambiguous',2),('shared_bulk_operations','ambiguous',1),
     ('unmapped_referencing_tables','unsupported',1),
     ('interviews_and_screening_snapshots','confirmed',1),
+    ('booked_email_attempts','confirmed',1),
     ('scheduling_invitations','confirmed',1),('legacy_cross_job_references','ambiguous',1)])
 def test_incomplete_or_related_data_blocks(name,status,count):
     o=observed();o['categories'][name]={'status':status,'count':count}
