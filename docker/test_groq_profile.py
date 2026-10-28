@@ -26,6 +26,15 @@ class GroqProfileTests(unittest.TestCase):
         (self.cache/'snapshots/offline/model.safetensors').unlink()
         with self.assertRaises(ValueError):self.create()
         self.assertFalse(self.target.exists())
+    def test_explicit_private_telegram_opt_in_is_not_overridden(self):
+        self.create()
+        env=self.target/'groq.env'
+        env.write_text(env.read_text()+'TELEGRAM_PUBLISHING_ENABLED=true\nTELEGRAM_BOT_TOKEN=synthetic-not-a-real-token\nTELEGRAM_CHANNEL_ID=-100000000001\n')
+        result=subprocess.run(['docker','compose','--env-file',str(self.target/'compose.env'),'-f','compose.yaml','-f','compose.groq.yaml','config','--format','json'],cwd=ROOT,capture_output=True,text=True,check=True)
+        backend=json.loads(result.stdout)['services']['backend']
+        self.assertEqual(backend['environment']['TELEGRAM_PUBLISHING_ENABLED'],'true')
+        self.assertEqual(backend['environment']['TELEGRAM_BOT_TOKEN'],'synthetic-not-a-real-token')
+        self.assertEqual(set(backend['networks']),{'private','groq_egress'})
     def test_opt_in_compose_preserves_private_database_and_disabled_services(self):
         self.create()
         args=['docker','compose','--env-file',str(self.target/'compose.env'),'-f','compose.yaml','-f','compose.groq.yaml','config','--format','json']
@@ -36,6 +45,8 @@ class GroqProfileTests(unittest.TestCase):
         self.assertTrue(c['networks']['private']['internal'])
         self.assertEqual(b['environment']['GROQ_API_KEY'],'synthetic-key')
         self.assertNotIn('ASSEMBLYAI_API_KEY',b['environment'])
+        self.assertNotIn('TELEGRAM_PUBLISHING_ENABLED',b['environment'])
+        self.assertNotIn('TELEGRAM_BOT_TOKEN',b['environment'])
         for key in ('LIVEKIT_SYNTHETIC_DEMO_ENABLED','INTERVIEW_COPILOT_ENABLED','TRANSCRIPT_STORAGE_ENABLED','INTERVIEW_EMAIL_ENABLED','FACE_WORKFLOW_ENABLED','ASSEMBLYAI_SYNTHETIC_ENABLED'):
             self.assertEqual(b['environment'][key],'false')
         self.assertTrue(any(v.get('read_only') and v['target'].startswith('/models/') for v in b['volumes']))

@@ -21,3 +21,13 @@ Private preview, destination metadata, single-use send intent, receipt and verif
 The existing **Telegram Bot API adapter**, not MCP, is implemented. Token and channel ID are absent from both runtime and original private configuration. No Telegram lookup/send occurred and no new Telegram server was built.
 
 Owner-only setup: enter TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID directly into the existing ignored private runtime environment; never paste them in chat. Select an owner-approved private test channel and give the bot posting permission. TELEGRAM_PUBLISHING_ENABLED must remain off until that exact destination is reviewed. Note that compose.groq.yaml currently explicitly forces this flag false: enabling it needs a reviewed ignored runtime Compose override, plus separately approved backend recreation; simply adding the env-file key will not override that safeguard. No runtime configuration or deployment was changed in this task. Verify permissions without posting, prepare/review the exact saved draft and obtain explicit destination authorization before one future send. Never auto-retry uncertain delivery.
+
+
+## Configuration follow-up — 28 October 2026
+
+The reviewed Compose fix removes the unconditional Telegram false override.
+An explicit value in the private runtime env_file is now honored; application
+Settings still defaults to false when absent, and credentials/owner-approved
+destination remain required. Four focused configuration tests pass, including
+private opt-in and safe default isolation. This change does not recreate services
+or send a Telegram message; the earlier blocked live-readiness result is historical.

@@ -13,7 +13,7 @@ services:
       HF_HUB_CACHE: /models/hub
       OLLAMA_ENABLED: 'false'
       ASSEMBLYAI_SYNTHETIC_ENABLED: 'false'
-      TELEGRAM_PUBLISHING_ENABLED: 'false'
+      # Telegram remains disabled by default in Settings; explicit private env_file opt-in is honored.
       FACE_SYNTHETIC_DEMO_ENABLED: 'false'
       FACE_WORKFLOW_ENABLED: 'false'
     volumes:
