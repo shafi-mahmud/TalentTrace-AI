@@ -12,7 +12,8 @@ export default function CandidateInterview({initialToken}:{initialToken:string|n
     finally{pending.current=false;setBusy(false);}}
   if(ready)return h(Suspense,{fallback:h("p",{role:"status"},"Loading interview…")},
     h(LiveInterviewPage,{candidate:true,onBack:()=>{window.location.assign("/");}}));
-  return h("main",{className:"app-shell"},h("section",{className:"card"},h("h1",null,"Candidate interview invitation"),
-    h("p",null,"Use only synthetic test data. Accepting claims this one-use link for this browser. No recruiter login is needed."),
-    h("button",{disabled:busy || !token.current,onClick:()=>void accept()},"Accept invitation"),error && h("p",{role:"alert"},error)));
+  return h("main",{className:"app-shell interview-page"},h("section",{className:"card","aria-labelledby":"candidate-invitation-title"},h("h1",{id:"candidate-invitation-title"},"Candidate interview invitation"),
+    h("p",{className:"page-description"},"Accept your invitation to review interview readiness. Joining is a separate step."),
+    h("p",{className:"helper-text"},"Use only synthetic test data. Accepting claims this one-use link for this browser. No recruiter login is needed."),
+    h("div",{className:"interview-controls"},h("button",{type:"button",className:"button button-primary",disabled:busy || !token.current,onClick:()=>void accept()},busy?"Accepting invitation…":"Accept invitation")),error && h("p",{role:"alert"},error)));
 }

@@ -9,6 +9,10 @@ test("candidate invitation page requires acceptance without rendering token or r
   const html=renderToStaticMarkup(createElement(CandidateInterview,{initialToken:raw}));
   assert.ok(html.includes("Accept invitation"));assert.ok(html.includes("No recruiter login is needed"));
   assert.ok(!html.includes(raw));assert.ok(!html.includes("Sign in"));assert.ok(!html.includes("password"));
+  assert.match(html, /class="app-shell interview-page"/);
+  assert.match(html, /aria-labelledby="candidate-invitation-title"/);
+  assert.match(html, /Joining is a separate step/);
+  assert.match(html, /class="button button-primary"/);
 });
 test("invitation fragment is removed from browser history without storage",()=>{
   let removed="";

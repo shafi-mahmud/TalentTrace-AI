@@ -43,7 +43,12 @@ test('Home requests only selected saved job and navigation carries that job',()=
  let opened:any;const props={jobs,activeJobId:job,loading:false,error:'',onReload(){},onCreate(){},onSelect(){},onOpen(j:any,m:any){opened=[j.id,m];}};
  const tree=RecruiterHome(props);assert.equal(all(tree,n=>n.type===ApplicationNotifications).length,1);
  assert.equal(all(tree,n=>n.type===ApplicationNotifications)[0].props.jobId,job);
- all(tree,n=>n.type==='button'&&n.props.children==='Continue to Candidate Screening')[0].props.onClick();assert.deepEqual(opened,[job,'cv']);
+ const cards=all(tree,n=>n.type==='article');
+ for(let i=0;i<cards.length;i++){
+  const action=all(cards[i],n=>n.type==='button'&&n.props.className==='button button-primary')[0];
+  assert.equal(action.props.children,'Review criteria');
+  action.props.onClick();assert.deepEqual(opened,[jobs[i].id,'cv']);
+ }
  assert.equal(all(RecruiterHome({...props,activeJobId:uuid(2)}),n=>n.type===ApplicationNotifications)[0].props.jobId,uuid(2));
  assert.equal(all(RecruiterHome({...props,error:'Unavailable'}),n=>n.type===ApplicationNotifications).length,0);
 });
