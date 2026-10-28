@@ -1,5 +1,7 @@
 # TalentTrace AI
 
+> **Trainer/reviewer entry point:** [Start here — current evidence and submission documents](docs/00_START_HERE.md). Final owner-managed attachments are pending upload/validation; acceptance limitations remain explicit.
+
 > **Positioning Statement**: A recruitment workspace connecting job-specific CV screening, reviewed interviews and source-linked assessment to support human recruiter review.
 
 ## Project Information
